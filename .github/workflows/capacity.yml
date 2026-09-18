@@ -92,6 +92,22 @@
             "if-no-files-found": "warn",
             "include-hidden-files": true
           }
+        },
+        {
+          "name": "Package test firmware",
+          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success'",
+          "run": "mkdir -p test-firmware\ncp openwrt/bin/targets/ramips/mt76x8/*glinet_gl-mt300n-v2*squashfs-sysupgrade.bin test-firmware/\ncp reports/capacity.json reports/SUMMARY.md README.md test-firmware/\n(cd test-firmware && sha256sum *.bin > SHA256SUMS)"
+        },
+        {
+          "name": "Upload test firmware",
+          "if": "success()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "mt300n-v2-TEST-firmware-${{ github.run_number }}",
+            "path": "test-firmware/",
+            "retention-days": 30,
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
