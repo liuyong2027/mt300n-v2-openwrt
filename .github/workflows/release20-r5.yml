@@ -6,7 +6,7 @@
         "release20-r1-20260927"
       ],
       "paths": [
-        "release20-r5-source.zip.b64",
+        "release20-r5-buildfix1-source.zip.b64",
         ".github/workflows/release20-r5.yml"
       ]
     }
@@ -37,7 +37,7 @@
         },
         {
           "name": "Extract reviewed build source bundle",
-          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path\ndata=base64.b64decode(Path('release20-r5-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='83654c04833dc06c22a3dee5287b678c4905e3bf78b469fee3ba64cecc69bca7'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected\n    z.extractall()\nPY"
+          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path\ndata=base64.b64decode(Path('release20-r5-buildfix1-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='ae934963a5c6ace4a2ee5ed4d24980c25107056e72436d265c48376ae0dfcbcd'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected\n    z.extractall()\nPY"
         },
         {
           "name": "Validate recipe",
