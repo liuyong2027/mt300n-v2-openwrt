@@ -1,0 +1,127 @@
+{
+  "name": "Release 20 r7-ui1 test firmware",
+  "on": {
+    "push": {
+      "branches": [
+        "release20-r7-ui1-20261001"
+      ],
+      "paths": [
+        "release20-r7-ui1-source.zip.b64",
+        ".github/workflows/release20-r7-ui1.yml"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "release20-r7-ui1-${{ github.ref }}",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "build": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 330,
+      "defaults": {
+        "run": {
+          "shell": "bash"
+        }
+      },
+      "steps": [
+        {
+          "name": "Checkout build recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Extract reviewed build source bundle",
+          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path, PurePosixPath\ndata=base64.b64decode(Path('release20-r7-ui1-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='b3789ecf3e0e5076787605318a651d39fd0e01fd36ff14128b385f055959fd65'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    names=z.namelist()\n    assert len(names)==len(set(names))\n    for name in names:\n        p=PurePosixPath(name)\n        assert not p.is_absolute() and '..' not in p.parts and chr(92) not in name\n    listed=[]\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected,name\n        listed.append(name)\n    assert set(listed)==set(names)-{'SOURCE-FILES-SHA256SUMS'}\n    z.extractall()\nassert Path('files/etc/mango-release').read_text().strip()=='20-test-r7-ui1'\nPY"
+        },
+        {
+          "name": "Validate recipe",
+          "run": "python3 -m unittest discover -s tests -v\nsh tests/test_switch_perf.sh .\nsh tests/test_probe_logging.sh .\nsh tests/test_watchdog_startup.sh .\nnode tests/test-ui.cjs\nnode tests/test-site-ui.cjs\nnode tests/subscription.cjs\nbash -n scripts/prepare.sh scripts/validate-runtime.sh\nfor f in package/luci-app-mango-proxy/root/usr/libexec/mango-* package/luci-app-mango-proxy/root/usr/libexec/rpcd/mango package/luci-app-mango-proxy/root/etc/init.d/mango_* package/luci-app-mango-proxy/root/etc/uci-defaults/9*-mango-*; do if head -n1 \"$f\" | grep -q lua; then continue; fi; sh -n \"$f\"; done\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/mango/subscription.js\nsh tests/test_cache_refresh.sh .\nsh tests/test_fw_reuse.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy\nsh tests/test_recovery_trace.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy package/luci-app-mango-proxy/root/usr/libexec/mango-failover\nsh tests/test_fw_installed.sh package/luci-app-mango-proxy/root/usr/libexec/mango-fw\nsh tests/test_recovery_policy.sh .\nsh tests/test_uplink.sh .\nsh tests/test_runtime_id.sh .\nsh tests/test_start_failure.sh ."
+        },
+        {
+          "name": "Install build dependencies",
+          "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 nftables qemu-user-static\nmkdir -p reports\ndf -h . | tee reports/disk-before.txt"
+        },
+        {
+          "name": "Validate routing policy and nftables",
+          "run": "bash scripts/validate-runtime.sh 2>&1 | tee policy-tests.log"
+        },
+        {
+          "name": "Prepare pinned sources and configuration",
+          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log"
+        },
+        {
+          "name": "Verify resolved 1 MiB block size",
+          "run": "grep -qx 'CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024' openwrt/.config"
+        },
+        {
+          "name": "Download selected sources",
+          "working-directory": "openwrt",
+          "run": "make download -j4 2>&1 | tee ../download.log"
+        },
+        {
+          "name": "Build selected test profile",
+          "id": "compile",
+          "continue-on-error": true,
+          "working-directory": "openwrt",
+          "run": "make -j2 V=s 2>&1 | tee ../build.log"
+        },
+        {
+          "name": "Validate actual MIPS Xray configuration",
+          "id": "runtime",
+          "if": "steps.compile.outcome == 'success'",
+          "run": "bash scripts/validate-runtime.sh mips 2>&1 | tee runtime-tests.log"
+        },
+        {
+          "name": "Verify firmware version and SquashFS superblock",
+          "if": "success() && steps.compile.outcome == 'success'",
+          "run": "python3 - <<'PY'\nimport json,struct\nfrom pathlib import Path\nroots=list(Path('openwrt/build_dir').glob('target-*/root-ramips'))\nassert len(roots)==1\nassert (roots[0]/'etc/mango-release').read_text().strip()=='20-test-r7-ui1'\nimages=list(Path('openwrt/bin/targets/ramips/mt76x8').glob('*sysupgrade.bin'))\nassert len(images)==1\nb=images[0].read_bytes();matches=[];start=0\nwhile True:\n o=b.find(b'hsqs',start)\n if o<0: break\n start=o+4\n if o+96<=len(b) and struct.unpack_from('<HH',b,o+28)==(4,0):\n  matches.append((o,struct.unpack_from('<I',b,o+12)[0],struct.unpack_from('<H',b,o+20)[0]))\nassert len(matches)==1,matches\nassert matches[0][1:]==(1048576,4),matches\nPath('reports/firmware-format.json').write_text(json.dumps({'version':'20-test-r7-ui1','superblock':matches,'image_bytes':len(b)},indent=2))\nPY"
+        },
+        {
+          "name": "Report capacity",
+          "if": "always()",
+          "env": {
+            "BUILD_OUTCOME": "${{ steps.compile.outcome }}"
+          },
+          "run": "python3 scripts/report.py"
+        },
+        {
+          "name": "Upload diagnostics only",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "release20-r7-ui1-diagnostics-${{ github.run_number }}",
+            "path": "reports/\nprepare.log\ndownload.log\nbuild.log\npolicy-tests.log\nruntime-tests.log",
+            "retention-days": 7,
+            "if-no-files-found": "warn",
+            "include-hidden-files": true
+          }
+        },
+        {
+          "name": "Package test firmware",
+          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success'",
+          "run": "python3 scripts/package-test-firmware.py\ncp reports/firmware-format.json FIXES-20-R7.md FIXES-20-R7-UI1.md test-firmware/\npython3 - <<'PY'\nimport hashlib, json, os\nfrom pathlib import Path\np=Path('test-firmware')\n(p/'BUILD-VERIFICATION.json').write_text(json.dumps({\n    'version':'20-test-r7-ui1', 'source_sha256':'b3789ecf3e0e5076787605318a651d39fd0e01fd36ff14128b385f055959fd65',\n    'commit':os.environ['GITHUB_SHA'], 'run_id':os.environ['GITHUB_RUN_ID'],\n    'profile':'standard', 'linux_regression':'passed',\n    'routing_nftables':'passed', 'mips_xray':'passed',\n    'capacity':'passed', 'firmware_format':'1 MiB SquashFS blocks, XZ',\n    'on_device_validation':'pending for this compiled firmware'\n},indent=2)+'\\n')\n(p/'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}\\n' for f in sorted(p.iterdir()) if f.is_file() and f.name!='SHA256SUMS'))\nPY"
+        },
+        {
+          "name": "Upload test firmware",
+          "if": "success()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "mt300n-v2-release20-r7-ui1-TEST-${{ github.run_number }}",
+            "path": "test-firmware/",
+            "retention-days": 30,
+            "if-no-files-found": "error"
+          }
+        }
+      ],
+      "env": {
+        "MANGO_BUILD_PROFILE": "standard"
+      }
+    }
+  }
+}
