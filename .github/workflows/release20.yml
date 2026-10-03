@@ -1,14 +1,12 @@
 {
-  "name": "Build and publish Release 20",
+  "name": "Release 20 publication held for profile separation",
   "on": {
     "push": {
       "branches": [
         "main"
       ],
       "paths": [
-        "release20-source.zip.b64",
-        ".github/workflows/release20.yml",
-        "release/publish-release.py"
+        ".github/workflows/release20.yml"
       ]
     }
   },
@@ -20,165 +18,13 @@
     "cancel-in-progress": true
   },
   "jobs": {
-    "build": {
+    "hold": {
       "runs-on": "ubuntu-24.04",
-      "timeout-minutes": 330,
-      "defaults": {
-        "run": {
-          "shell": "bash"
-        }
-      },
+      "timeout-minutes": 5,
       "steps": [
         {
-          "name": "Checkout build recipe",
-          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
-          "with": {
-            "persist-credentials": false
-          }
-        },
-        {
-          "name": "Extract reviewed build source bundle",
-          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path, PurePosixPath\ndata=base64.b64decode(Path('release20-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='3e2055c1c6aff126f4d59e629f82fa01c01835675752ac1fd3a5b829c1161184'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    names=z.namelist()\n    assert len(names)==len(set(names))\n    for name in names:\n        p=PurePosixPath(name)\n        assert not p.is_absolute() and '..' not in p.parts and chr(92) not in name\n    listed=[]\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected,name\n        listed.append(name)\n    assert set(listed)==set(names)-{'SOURCE-FILES-SHA256SUMS'}\n    z.extractall()\nassert Path('files/etc/mango-release').read_text().strip()=='20'\nPY"
-        },
-        {
-          "name": "Validate recipe",
-          "run": "python3 -m unittest discover -s tests -v\nsh tests/test_switch_perf.sh .\nsh tests/test_probe_logging.sh .\nsh tests/test_watchdog_startup.sh .\nnode tests/test-ui.cjs\nnode tests/test-site-ui.cjs\nnode tests/subscription.cjs\nnode tests/test-update-progress.cjs\nbash -n scripts/prepare.sh scripts/validate-runtime.sh\nfor f in package/luci-app-mango-proxy/root/usr/libexec/mango-* package/luci-app-mango-proxy/root/usr/libexec/rpcd/mango package/luci-app-mango-proxy/root/etc/init.d/mango_* package/luci-app-mango-proxy/root/etc/uci-defaults/9*-mango-*; do if head -n1 \"$f\" | grep -q lua; then continue; fi; sh -n \"$f\"; done\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/mango/subscription.js\nsh tests/test_cache_refresh.sh .\nsh tests/test_fw_reuse.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy\nsh tests/test_recovery_trace.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy package/luci-app-mango-proxy/root/usr/libexec/mango-failover\nsh tests/test_fw_installed.sh package/luci-app-mango-proxy/root/usr/libexec/mango-fw\nsh tests/test_recovery_policy.sh .\nsh tests/test_uplink.sh .\nsh tests/test_runtime_id.sh .\nsh tests/test_start_failure.sh .\npython3 scripts/loading-diagnostic/test-diagnostic.py\nsh tests/test_lifecycle_budget.sh .\nsh tests/test_apply_rollback.sh .\nsh tests/test_process_wait.sh package/luci-app-mango-proxy/root/usr/libexec/mango-process\nsh tests/test_preflight_phases.sh .\nsh tests/test_preflight_reuse.sh ."
-        },
-        {
-          "name": "Install build dependencies",
-          "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 nftables iproute2 iputils-ping qemu-user-static\nmkdir -p reports\ndf -h . | tee reports/disk-before.txt"
-        },
-        {
-          "name": "Validate routing policy and nftables",
-          "run": "bash scripts/validate-runtime.sh 2>&1 | tee policy-tests.log"
-        },
-        {
-          "name": "Prepare pinned sources and configuration",
-          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 scripts/loading-diagnostic/prepare-diagnostic.py configure --tree openwrt\nmake -C openwrt defconfig 2>&1 | tee diagnostic-defconfig.log\ncp openwrt/.config reports/resolved.config\n(cd openwrt && ./scripts/diffconfig.sh) > reports/diffconfig.txt\npython3 - <<'PY'\nimport importlib.util\nfrom pathlib import Path\np=Path('scripts/loading-diagnostic/prepare-diagnostic.py')\ns=importlib.util.spec_from_file_location('recipe',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nm.check(Path('openwrt/.config').read_text(),m.settings(p.with_name('openwrt-diagnostic.config').read_text()))\nPY"
-        },
-        {
-          "name": "Verify resolved 1 MiB block size",
-          "run": "grep -qx 'CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024' openwrt/.config"
-        },
-        {
-          "name": "Download selected sources",
-          "working-directory": "openwrt",
-          "run": "make download -j4 2>&1 | tee ../download.log"
-        },
-        {
-          "name": "Build formal Release 20",
-          "id": "compile",
-          "continue-on-error": true,
-          "working-directory": "openwrt",
-          "run": "make -j2 V=s 2>&1 | tee ../build.log"
-        },
-        {
-          "name": "Verify actual diagnostic kernel and preserve matching symbols",
-          "id": "kernel_diag",
-          "if": "steps.compile.outcome == 'success'",
-          "run": "python3 - <<'PY'\nimport importlib.util,json\nfrom pathlib import Path\np=Path('scripts/loading-diagnostic/prepare-diagnostic.py');s=importlib.util.spec_from_file_location('recipe',p)\nm=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nlinux=list(Path('openwrt/build_dir').glob('target-*/linux-ramips_mt76x8/linux-6.12.*'))\nroots=list(Path('openwrt/build_dir').glob('target-*/root-ramips'))\nassert len(linux)==len(roots)==1,(linux,roots)\nprint(json.dumps(m.verify(Path('openwrt').resolve(),linux[0],roots[0]),indent=2))\nPY"
-        },
-        {
-          "name": "Validate actual MIPS Xray configuration",
-          "id": "runtime",
-          "if": "steps.compile.outcome == 'success'",
-          "run": "bash scripts/validate-runtime.sh mips 2>&1 | tee runtime-tests.log"
-        },
-        {
-          "name": "Check compiled target BusyBox guard syntax and normalization",
-          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success'",
-          "run": "roots=(openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\nexport MANGO_TARGET_ROOT=\"$(realpath \"${roots[0]}\")\"\nqemu-mipsel-static -L \"$MANGO_TARGET_ROOT\" \"$MANGO_TARGET_ROOT/bin/busybox\" sh -n \"$MANGO_TARGET_ROOT/usr/libexec/mango-recovery-guard\"\nqemu-mipsel-static -L \"$MANGO_TARGET_ROOT\" \"$MANGO_TARGET_ROOT/bin/busybox\" sh -n \"$MANGO_TARGET_ROOT/etc/init.d/mango_proxy\"\nmkdir -p reports/target-busybox\ncat > reports/target-busybox/tr-target <<'EOF'\n#!/bin/sh\nexec qemu-mipsel-static -L \"$MANGO_TARGET_ROOT\" \"$MANGO_TARGET_ROOT/bin/busybox\" tr \"$@\"\nEOF\nchmod +x reports/target-busybox/tr-target\nprintf ' a\\t\\r\\nb \\n' | reports/target-busybox/tr-target -d ' \\t\\r\\n' > reports/target-busybox/actual\nprintf ab > reports/target-busybox/expected\ncmp reports/target-busybox/expected reports/target-busybox/actual\nTEST_REAL_TR=\"$PWD/reports/target-busybox/tr-target\" sh tests/test_recovery_guard.sh . 2>&1 | tee reports/target-busybox-guard.log\npython3 - <<'PY'\nimport json\nfrom pathlib import Path\nreport = {'version': '20', 'mips_busybox_syntax': 'passed: guard and init',\n          'mips_busybox_whitespace_normalization': 'passed',\n          'guard_fixture_with_mips_busybox_tr': 'passed',\n          'execution_scope': 'QEMU target BusyBox syntax/tr; fixture uses host shell and mocked nft; real nft suite is separate',\n          'target_hardware_execution': 'pending'}\nPath('reports/target-busybox-validation.json').write_text(json.dumps(report, indent=2) + '\\n')\nPY"
-        },
-        {
-          "name": "Verify firmware version and SquashFS superblock",
-          "if": "success() && steps.compile.outcome == 'success'",
-          "run": "python3 - <<'PY'\nimport hashlib,json,struct\nfrom pathlib import Path\nroots=list(Path('openwrt/build_dir').glob('target-*/root-ramips'))\nassert len(roots)==1\nassert (roots[0]/'etc/mango-release').read_text().strip()=='20'\nassert hashlib.sha256((roots[0]/'etc/config/mango_proxy').read_bytes()).hexdigest()=='5005b1af96d018469310cb90af5d247b1b343ae6d5ff65710152e4b630aebc66', 'etc/config/mango_proxy'\nassert hashlib.sha256((roots[0]/'etc/init.d/mango_proxy').read_bytes()).hexdigest()=='d3cac33c990d4bc03cdbb46495f7cfd98f6437af08188d816beef038637bbbc6', 'etc/init.d/mango_proxy'\nassert hashlib.sha256((roots[0]/'etc/init.d/mango_watchdog').read_bytes()).hexdigest()=='ce2eb491dd1d2b0c3016dbd47882af2052513da27180b81c7ae3a2e7f29fbd3e', 'etc/init.d/mango_watchdog'\nassert hashlib.sha256((roots[0]/'etc/mango-rules/.keep').read_bytes()).hexdigest()=='01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b', 'etc/mango-rules/.keep'\nassert hashlib.sha256((roots[0]/'etc/uci-defaults/95-mango-proxy').read_bytes()).hexdigest()=='b4ed3392155deb6e679a017cd9d7f820219a67c1ff7809b3bd6c874f1928f2e8', 'etc/uci-defaults/95-mango-proxy'\nassert hashlib.sha256((roots[0]/'etc/uci-defaults/96-mango-wifi-led').read_bytes()).hexdigest()=='1b98239b488c8a2886209bb88fc9fc4d57661b18be226464a435110fa532a545', 'etc/uci-defaults/96-mango-wifi-led'\nassert hashlib.sha256((roots[0]/'etc/uci-defaults/97-mango-language').read_bytes()).hexdigest()=='8f4f412df99da467319748887f84332d75590fb4b6a4498341450f47b4f58030', 'etc/uci-defaults/97-mango-language'\nassert hashlib.sha256((roots[0]/'etc/uci-defaults/98-mango-socks-noauth').read_bytes()).hexdigest()=='81fdf79eebc2007f60fdb9de956061aad8250fe41e044d5bc1d074bb2e89bb81', 'etc/uci-defaults/98-mango-socks-noauth'\nassert hashlib.sha256((roots[0]/'usr/lib/mango/dns.lua').read_bytes()).hexdigest()=='84c249cb6c7afa8fbe006a090c665113b8f3a533715e2cb237208f5c04a715e0', 'usr/lib/mango/dns.lua'\nassert hashlib.sha256((roots[0]/'usr/lib/mango/dnsdir.lua').read_bytes()).hexdigest()=='c787b54ce57cb72a00c17b05405d8b66c3c48eccaf20133dc0830a07dc62e620', 'usr/lib/mango/dnsdir.lua'\nassert hashlib.sha256((roots[0]/'usr/lib/mango/failover.lua').read_bytes()).hexdigest()=='6780c44c9d5d5dfbefd422b6e2aa00588b5d1723e3879373a58243cfac94d8b2', 'usr/lib/mango/failover.lua'\nassert hashlib.sha256((roots[0]/'usr/lib/mango/geoip.lua').read_bytes()).hexdigest()=='c13350710c5d1aaa37ec7fad743c4f756fa5eda84673d1bbd341d357711cb86f', 'usr/lib/mango/geoip.lua'\nassert hashlib.sha256((roots[0]/'usr/lib/mango/gfw.lua').read_bytes()).hexdigest()=='080eaf398781f26bbdb8f81524bb0a1fd1e6fb54857455bbd06c9ff7bddc400c', 'usr/lib/mango/gfw.lua'\nassert hashlib.sha256((roots[0]/'usr/lib/mango/model.lua').read_bytes()).hexdigest()=='d898a82154a33c90c84439edb58b35bbba8aada8efa74d11f8a804f6294ded71', 'usr/lib/mango/model.lua'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-apply-job').read_bytes()).hexdigest()=='5c91f6b87eedeaa0de0833facc33ac045acd509c1674e30050c2ae6739d4d641', 'usr/libexec/mango-apply-job'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-assets').read_bytes()).hexdigest()=='30fc4ba45c24f3dfb5bac66b13007fd211de7ed360f5ddd184a0df5e4f321d7f', 'usr/libexec/mango-assets'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-cache').read_bytes()).hexdigest()=='f7e2c23c32f3387654e5a87f9ef8ffeb12b7aa9c8b0819fcf7deb4ececdd2faf', 'usr/libexec/mango-cache'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-china-state').read_bytes()).hexdigest()=='838f72c42d3465714d76bc32623b100f0c5183d2db795a87f114bfd89f392c9a', 'usr/libexec/mango-china-state'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-cn-cidrs').read_bytes()).hexdigest()=='69c392569da2b47431b16053f18e1dbe4642840107c6b45211109a9a96c300a6', 'usr/libexec/mango-cn-cidrs'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-dns').read_bytes()).hexdigest()=='330befb2a456dd1b825089e84336831e780351f46c3f4d32cf0df04d43461911', 'usr/libexec/mango-dns'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-dns-config').read_bytes()).hexdigest()=='4c459f4fac7222e9a6aba1db8c990ab976dcd986c7d603559268714a80c27841', 'usr/libexec/mango-dns-config'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-dns-dir').read_bytes()).hexdigest()=='a7d4657d1eb42bdab5127645ba9ca6cbbbca9d8fce163f8a64949c58c4f77706', 'usr/libexec/mango-dns-dir'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-dns-ready').read_bytes()).hexdigest()=='f4f07ae3f6a8bda13b574adde10debb87297a54c8e9ac4ff48d2d052cc9331ad', 'usr/libexec/mango-dns-ready'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-download').read_bytes()).hexdigest()=='7130e3a5b384f61065fcfb6413683e01d6360147b6f00429d70165a68982c04d', 'usr/libexec/mango-download'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-failover').read_bytes()).hexdigest()=='d24a863d6c600f22cb40b79c1408584dd2dd784a733b0ad855dfab043b17de86', 'usr/libexec/mango-failover'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-fw').read_bytes()).hexdigest()=='36a32248ae51fc1f47eca84e69e6df635719b0862540f2707064828ad3d1f5d2', 'usr/libexec/mango-fw'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-fw-state').read_bytes()).hexdigest()=='e685f14f978b76ebe59fa52e21a056722c6913d363de9cb7a15e996807b1fa5b', 'usr/libexec/mango-fw-state'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-generate').read_bytes()).hexdigest()=='37c133781c62c89bc5c6f5e868c55a2739203fec95f48113c490a2e40ea0d8de', 'usr/libexec/mango-generate'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-gfw-convert').read_bytes()).hexdigest()=='9418d80c67e2e4713b35f6e888abd2ed3c9c521eaa3c7a64fe036c4dc78befda', 'usr/libexec/mango-gfw-convert'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-lock').read_bytes()).hexdigest()=='c90b92f83f0af61400909b3127f10b6b6961b403ce67a12dd19c5c47ba6a869e', 'usr/libexec/mango-lock'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-node-log').read_bytes()).hexdigest()=='2312d98d7ee8997e358da895d30dea888972296fc8c7fb3577af3bf774a9c8a7', 'usr/libexec/mango-node-log'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-preflight').read_bytes()).hexdigest()=='c276e05356fe4c89fe6a499f11dc5c75ad94b1f2da62984e57d16c7e5e468716', 'usr/libexec/mango-preflight'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-preflight-run').read_bytes()).hexdigest()=='1291f6d01ea9dbad481feb06b997f5ab55b66581d8f4dae4828b421aee5c67c9', 'usr/libexec/mango-preflight-run'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-probe').read_bytes()).hexdigest()=='a2582dd3f23951946269ca5feaa9aeaa1651acf5f395a788be4905e6e6c07c07', 'usr/libexec/mango-probe'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-process').read_bytes()).hexdigest()=='e719a15b2794e60f8bff38dd3c3afa60ff47820d37fba8188c4a63e065e86b3a', 'usr/libexec/mango-process'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-ready').read_bytes()).hexdigest()=='54c1d96bdbf76eed08f8ef6d2ddaec72443e33a6992d8243b5f148e9f6dcad5d', 'usr/libexec/mango-ready'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-recovery-guard').read_bytes()).hexdigest()=='78d6b826209e7acc40e0f18c3678dabf6c5e017bcee6f2a05af5b26be7752877', 'usr/libexec/mango-recovery-guard'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-resolve').read_bytes()).hexdigest()=='e8c98cf828c0ac2673a4f4449260a2dd84a43a96d9bf0e1ca5a06ddb09a699b1', 'usr/libexec/mango-resolve'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-resource-lock').read_bytes()).hexdigest()=='f9c6e1eae9e9cf09869cf976a07997535b6d6904efe438de071bc15a31c631eb', 'usr/libexec/mango-resource-lock'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-rollback').read_bytes()).hexdigest()=='c80a9547a44df1355367763e1e8fdd7049bb57f35cbe37f927985777f07c6d30', 'usr/libexec/mango-rollback'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-runtime-id').read_bytes()).hexdigest()=='8069551baebb8fb07109656e383999ab2258aace561d4db2d07cc210453bea43', 'usr/libexec/mango-runtime-id'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-test-site').read_bytes()).hexdigest()=='3fca6e04ab56eed7d5a687103cc279356e15b45c9d019df9e1dc391cb8205629', 'usr/libexec/mango-test-site'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-update-job').read_bytes()).hexdigest()=='70c4f6e6741757e7e80c19c27c103108f8f3a370c1de27771f685e736feac85a', 'usr/libexec/mango-update-job'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-update-rules').read_bytes()).hexdigest()=='09fd1d1b22c282455318bcb384cc9e276e59c240bbf9eae6d1937480bec06b71', 'usr/libexec/mango-update-rules'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-uplink').read_bytes()).hexdigest()=='69c284211c4c98abef8e91d56d976ecad4379977a3fa4fde752bef9c885ddc28', 'usr/libexec/mango-uplink'\nassert hashlib.sha256((roots[0]/'usr/libexec/mango-watchdog').read_bytes()).hexdigest()=='943aab492a5216595e2f2962c48ef3efd9265334f0d585cad6f0d05accc853ce', 'usr/libexec/mango-watchdog'\nassert hashlib.sha256((roots[0]/'usr/libexec/rpcd/mango').read_bytes()).hexdigest()=='2c9483671039b10268fec7cd94f195becb790ce8447bd53f2ef7ad925318d44c', 'usr/libexec/rpcd/mango'\nassert hashlib.sha256((roots[0]/'usr/share/luci/menu.d/luci-app-mango-proxy.json').read_bytes()).hexdigest()=='000db0537da50110bdfaee319f6f3abcdc7aef646c57e79010f12829af0ac5c9', 'usr/share/luci/menu.d/luci-app-mango-proxy.json'\nassert hashlib.sha256((roots[0]/'usr/share/rpcd/acl.d/luci-app-mango-proxy.json').read_bytes()).hexdigest()=='0c150c89e7dd33cca087bde5e7178b7f6920465d1b2ccae13947c49315b0366e', 'usr/share/rpcd/acl.d/luci-app-mango-proxy.json'\nassert hashlib.sha256((roots[0]/'usr/share/xray/GEOSITE-LICENSE').read_bytes()).hexdigest()=='b9d84a22870d3f21c91a4c6e410c9cc51d00902f5233ad0c84011479244bf7d2', 'usr/share/xray/GEOSITE-LICENSE'\nassert hashlib.sha256((roots[0]/'usr/share/xray/RULES-LICENSE.txt').read_bytes()).hexdigest()=='50dcfddf4ed319443e6d7e9e5ba351d9adcc2263ec2ac6f72d50f7d20787d974', 'usr/share/xray/RULES-LICENSE.txt'\n\n\n\n\n\n\n\nimages=list(Path('openwrt/bin/targets/ramips/mt76x8').glob('*sysupgrade.bin'))\nassert len(images)==1\nb=images[0].read_bytes();matches=[];start=0\nwhile True:\n o=b.find(b'hsqs',start)\n if o<0: break\n start=o+4\n if o+96<=len(b) and struct.unpack_from('<HH',b,o+28)==(4,0):\n  matches.append((o,struct.unpack_from('<I',b,o+12)[0],struct.unpack_from('<H',b,o+20)[0]))\nassert len(matches)==1,matches\nassert matches[0][1:]==(1048576,4),matches\nPath('reports/firmware-format.json').write_text(json.dumps({'version':'20','superblock':matches,'image_bytes':len(b)},indent=2))\nPY"
-        },
-        {
-          "name": "Report capacity",
-          "if": "always()",
-          "env": {
-            "BUILD_OUTCOME": "${{ steps.compile.outcome }}"
-          },
-          "run": "python3 scripts/report.py"
-        },
-        {
-          "name": "Upload diagnostics only",
-          "if": "always()",
-          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-          "with": {
-            "name": "release20-diagnostics-${{ github.run_number }}",
-            "path": "reports/\nprepare.log\ndownload.log\nbuild.log\npolicy-tests.log\nruntime-tests.log\ndiagnostic-defconfig.log\n!reports/loading-diagnostic-symbols/**",
-            "retention-days": 7,
-            "if-no-files-found": "warn",
-            "include-hidden-files": true
-          }
-        },
-        {
-          "name": "Upload matching diagnostic symbols separately",
-          "if": "always() && steps.kernel_diag.outcome == 'success'",
-          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-          "with": {
-            "name": "release20-symbols-symbols-${{ github.run_number }}",
-            "path": "reports/loading-diagnostic-symbols/",
-            "retention-days": 30,
-            "if-no-files-found": "error",
-            "include-hidden-files": true
-          }
-        },
-        {
-          "name": "Package verified formal release assets",
-          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success' && steps.kernel_diag.outcome == 'success'",
-          "env": {
-            "RELEASE_SOURCE_SHA256": "3e2055c1c6aff126f4d59e629f82fa01c01835675752ac1fd3a5b829c1161184"
-          },
-          "run": "python3 scripts/package-release.py"
-        },
-        {
-          "name": "Upload verified release assets",
-          "if": "success()",
-          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-          "with": {
-            "name": "release20-assets",
-            "path": "release-assets/",
-            "retention-days": 90,
-            "if-no-files-found": "error"
-          }
-        }
-      ],
-      "env": {
-        "MANGO_BUILD_PROFILE": "standard"
-      }
-    },
-    "publish": {
-      "needs": "build",
-      "runs-on": "ubuntu-24.04",
-      "timeout-minutes": 15,
-      "permissions": {
-        "contents": "write"
-      },
-      "steps": [
-        {
-          "name": "Checkout publication script",
-          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
-          "with": {
-            "persist-credentials": false
-          }
-        },
-        {
-          "name": "Download this run verified assets",
-          "uses": "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
-          "with": {
-            "name": "release20-assets",
-            "path": "release-assets"
-          }
-        },
-        {
-          "name": "Verify, upload and publish Release 20",
-          "env": {
-            "GH_TOKEN": "${{ github.token }}"
-          },
-          "run": "python3 release/publish-release.py"
+          "name": "Hold publication",
+          "run": "printf '%s\\n' 'Publication is on hold while production and diagnostic profiles are separated and verified. No firmware is published by this workflow.'"
         }
       ]
     }
