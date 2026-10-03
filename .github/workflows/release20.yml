@@ -17,7 +17,7 @@
   },
   "concurrency": {
     "group": "release20-formal",
-    "cancel-in-progress": false
+    "cancel-in-progress": true
   },
   "jobs": {
     "build": {
@@ -38,7 +38,7 @@
         },
         {
           "name": "Extract reviewed build source bundle",
-          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path, PurePosixPath\ndata=base64.b64decode(Path('release20-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='3c46d8762d82e3850cd310853aaf0e9e0bfae30938b3dfa4d1d98e7e568aa546'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    names=z.namelist()\n    assert len(names)==len(set(names))\n    for name in names:\n        p=PurePosixPath(name)\n        assert not p.is_absolute() and '..' not in p.parts and chr(92) not in name\n    listed=[]\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected,name\n        listed.append(name)\n    assert set(listed)==set(names)-{'SOURCE-FILES-SHA256SUMS'}\n    z.extractall()\nassert Path('files/etc/mango-release').read_text().strip()=='20'\nPY"
+          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path, PurePosixPath\ndata=base64.b64decode(Path('release20-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='3e2055c1c6aff126f4d59e629f82fa01c01835675752ac1fd3a5b829c1161184'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    names=z.namelist()\n    assert len(names)==len(set(names))\n    for name in names:\n        p=PurePosixPath(name)\n        assert not p.is_absolute() and '..' not in p.parts and chr(92) not in name\n    listed=[]\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected,name\n        listed.append(name)\n    assert set(listed)==set(names)-{'SOURCE-FILES-SHA256SUMS'}\n    z.extractall()\nassert Path('files/etc/mango-release').read_text().strip()=='20'\nPY"
         },
         {
           "name": "Validate recipe",
@@ -130,7 +130,7 @@
           "name": "Package verified formal release assets",
           "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success' && steps.kernel_diag.outcome == 'success'",
           "env": {
-            "RELEASE_SOURCE_SHA256": "3c46d8762d82e3850cd310853aaf0e9e0bfae30938b3dfa4d1d98e7e568aa546"
+            "RELEASE_SOURCE_SHA256": "3e2055c1c6aff126f4d59e629f82fa01c01835675752ac1fd3a5b829c1161184"
           },
           "run": "python3 scripts/package-release.py"
         },
