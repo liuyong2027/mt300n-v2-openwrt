@@ -14,17 +14,10 @@ function secretValid(section, value) {
 return view.extend({
 	render: function() {
 		var m = new form.Map('cudy_l2tp', 'L2TP/IPsec VPN 服务端',
-			'从外部网络连接回路由器，可访问局域网和 USB 共享。使用 IPsec 共享密钥和账号密码；启用后允许 VPN 客户端访问局域网及通过路由器上网。当前配置支持一个账号、同时一台客户端。外网连接需要公网地址或上级路由器转发 UDP 500/4500。');
+			'从外部网络连接回路由器，可访问局域网和 USB 共享。使用 IPsec 共享密钥和账号密码；启用后允许 VPN 客户端访问局域网及通过路由器上网。支持多个账号、多人同时连接；最多配置 32 个账号，实际容量取决于带宽和路由器负载。外网连接需要公网地址或上级路由器转发 UDP 500/4500。');
 		var s = m.section(form.NamedSection, 'main', 'server');
 		var o = s.option(form.Flag, 'enabled', '启用服务');
 		o.rmempty = false;
-		o = s.option(form.Value, 'username', 'VPN 用户名');
-		o.rmempty = false;
-		o.validate = function(section, value) {
-			return !value || /^[A-Za-z0-9_.@-]{1,64}$/.test(value) || '用户名仅限字母、数字及 _ . @ -';
-		};
-		o = s.option(form.Value, 'password', 'VPN 密码');
-		o.password = true; o.rmempty = false; o.validate = secretValid;
 		o = s.option(form.Value, 'psk', 'IPsec 共享密钥');
 		o.password = true; o.rmempty = false; o.validate = secretValid;
 		o = s.option(form.Value, 'subnet', 'VPN 地址段', '前三段，例如 192.168.89；必须与局域网及上级网络不同。');
@@ -36,6 +29,18 @@ return view.extend({
 		};
 		o = s.option(form.Value, 'dns', '客户端 DNS');
 		o.datatype = 'ip4addr'; o.rmempty = false;
+		s = m.section(form.TypedSection, 'user', 'VPN 账号', '启用服务前至少添加一个账号；每个用户名必须唯一。');
+		s.anonymous = true; s.addremove = true;
+		o = s.option(form.Flag, 'enabled', '允许此账号连接');
+		o.default = '1'; o.rmempty = false;
+		o = s.option(form.Value, 'username', 'VPN 用户名');
+		o.rmempty = false;
+		o.validate = function(section, value) {
+			return /^[A-Za-z0-9_.@-]{1,64}$/.test(value || '') || '用户名仅限字母、数字及 _ . @ -';
+		};
+		o = s.option(form.Value, 'password', 'VPN 密码');
+		o.password = true; o.rmempty = false;
+		o.validate = function(section, value) { return /^[A-Za-z0-9_@.,:+!%=-]{12,128}$/.test(value || '') || '请填写 12–128 位密码，可使用字母、数字及 _ @ . , : + ! % = -'; };
 		this.map = m;
 		return m.render();
 	},

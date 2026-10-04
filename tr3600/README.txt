@@ -13,8 +13,11 @@ Wireless client/routed repeater configuration uses the normal LuCI UI.
 L2TP/IPsec VPN server: Services / L2TP/IPsec VPN. Disabled by default.
 Set your own username, password and IPsec PSK (12-128 supported characters),
 choose a VPN /24 subnet different from LAN/upstream networks, then enable.
-One account / one concurrent client; authenticated client can access LAN
-and use the router as an Internet gateway. Public IPv4 reachability is
+Multiple accounts and concurrent clients, with a separate PPP interface
+for each session; up to 32 configured accounts and a .10-.99 IPv4 pool.
+This is a configuration limit, not a guarantee of 32-client performance.
+Authenticated clients can access LAN and use the router as an Internet
+gateway. Public IPv4 reachability is
 required; behind another router forward UDP 500/4500, and native ESP if
 NAT traversal is not used. Plaintext L2TP/UDP 1701 is blocked by nftables.
 Client must support L2TP/IPsec PSK with MS-CHAPv2 authentication.

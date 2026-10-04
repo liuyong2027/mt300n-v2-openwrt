@@ -22,7 +22,7 @@ for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt79
              'PACKAGE_kmod-usb-storage-uas', 'PACKAGE_kmod-fs-ext4',
              'PACKAGE_kmod-fs-exfat', 'PACKAGE_kmod-fs-vfat',
              'PACKAGE_kmod-fs-ntfs3', 'PACKAGE_luci-proto-relay', 'PACKAGE_relayd',
-             'PACKAGE_luci-app-cudy-l2tp', 'PACKAGE_xl2tpd', 'PACKAGE_ppp',
+             'PACKAGE_luci-app-cudy-l2tp', 'PACKAGE_cudy-l2tp-ifname', 'PACKAGE_xl2tpd', 'PACKAGE_ppp',
              'PACKAGE_strongswan-charon', 'PACKAGE_strongswan-swanctl',
              'PACKAGE_strongswan-mod-openssl', 'PACKAGE_strongswan-mod-kernel-netlink',
              'PACKAGE_strongswan-mod-socket-default', 'PACKAGE_strongswan-mod-random',
@@ -53,7 +53,7 @@ assert (extracted/'lib/upgrade/cudy-tr3600.sh').read_bytes() == (kit/'tr3600/cud
 def arm64(p):
     b = p.read_bytes()
     assert b[:6] == b'\x7fELF\x02\x01' and struct.unpack_from('<H', b, 18)[0] == 183, p
-for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd', 'usr/sbin/xl2tpd', 'usr/sbin/pppd', 'usr/sbin/swanctl', 'usr/lib/ipsec/charon'):
+for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd', 'usr/sbin/xl2tpd', 'usr/sbin/pppd', 'usr/sbin/swanctl', 'usr/lib/ipsec/charon', 'usr/lib/cudy-l2tp-ifname.so'):
     arm64(extracted/name)
 vpn_root = kit/'tr3600/luci-app-cudy-l2tp/root'
 for source in vpn_root.rglob('*'):

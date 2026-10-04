@@ -8,8 +8,16 @@ local function fail() io.stderr:write('Invalid L2TP/IPsec configuration\n'); os.
 local function secret(s)
 	return type(s) == 'string' and #s >= 12 and #s <= 128 and not s:find('[^%w_@%.,:+!%%=%-]')
 end
-if type(c.username) ~= 'string' or #c.username < 1 or #c.username > 64 or c.username:find('[^%w_%.@%-]') or
-	not secret(c.password) or not secret(c.psk) then fail() end
+if not secret(c.psk) then fail() end
+local users, names = {}, {}
+uci:foreach('cudy_l2tp', 'user', function(u)
+	if u.enabled == '0' then return end
+	if type(u.username) ~= 'string' or #u.username < 1 or #u.username > 64 or u.username:find('[^%w_%.@%-]') or
+		not secret(u.password) or names[u.username] then fail() end
+	names[u.username] = true
+	users[#users+1] = u
+end)
+if #users == 0 or #users > 32 then fail() end
 local function ipv4(s)
 	if type(s) ~= 'string' then return end
 	local a,b,d,e = s:match('^(%d+)%.(%d+)%.(%d+)%.(%d+)$')
@@ -87,10 +95,14 @@ secrets {
     }
 }
 ]])
-put('chap-secrets', string.format('"%s" cudy-l2tp "%s" %s.0/24\n',c.username,c.password,subnet))
+local chap = {}
+for _,u in ipairs(users) do
+	chap[#chap+1] = string.format('"%s" cudy-l2tp "%s" %s.0/24\n',u.username,u.password,subnet)
+end
+put('chap-secrets', table.concat(chap))
 put('ppp.options', [[auth
 name cudy-l2tp
-ifname l2tpvpn
+plugin /usr/lib/cudy-l2tp-ifname.so
 chap-secrets /var/run/cudy-l2tp/chap-secrets
 require-mschap-v2
 refuse-pap
@@ -114,5 +126,4 @@ require chap = yes
 name = cudy-l2tp
 pppoptfile = /var/run/cudy-l2tp/ppp.options
 length bit = yes
-]]..'local ip = '..subnet..'.1\nip range = '..subnet..'.10-'..subnet..'.19\n')
-
+]]..'local ip = '..subnet..'.1\nip range = '..subnet..'.10-'..subnet..'.99\n')

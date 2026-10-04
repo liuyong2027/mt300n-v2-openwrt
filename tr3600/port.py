@@ -39,7 +39,7 @@ def adapt():
     prepare = ROOT/'scripts/prepare.sh'
     replace_once(prepare, 'cd openwrt\n', 'cd openwrt\ngit apply --check "$kit/tr3600/support.patch"\ngit apply "$kit/tr3600/support.patch"\ngit apply --check "$kit/tr3600/hardware-fixes.patch"\ngit apply "$kit/tr3600/hardware-fixes.patch"\ncp "$kit/tr3600/999-ubi-add-configurable-rootdev.patch" target/linux/mediatek/patches-6.12/\npython3 "$kit/tr3600/upgrade-integration.py" "$PWD"\n')
     replace_once(prepare, '$kit/config/mt300n-v2.config', '$kit/tr3600/tr3600.config')
-    replace_once(prepare, 'cp -R "$kit/package/mango-tcpcheck" package/', 'cp -R "$kit/package/mango-tcpcheck" package/\ncp -R "$kit/tr3600/luci-app-cudy-l2tp" package/\nchmod +x package/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp package/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp package/luci-app-cudy-l2tp/root/usr/libexec/cudy-l2tp-config')
+    replace_once(prepare, 'cp -R "$kit/package/mango-tcpcheck" package/', 'cp -R "$kit/package/mango-tcpcheck" package/\ncp -R "$kit/tr3600/luci-app-cudy-l2tp" package/\ncp -R "$kit/tr3600/cudy-l2tp-ifname" package/\nchmod +x package/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp package/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp package/luci-app-cudy-l2tp/root/usr/libexec/cudy-l2tp-config')
     replace_once(prepare, 'CONFIG_TARGET_ramips_mt76x8_DEVICE_glinet_gl-mt300n-v2=y', 'CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1=y')
     # Preserve LAN 192.168.8.1. Leave wireless disabled until the owner configures
     # country/password in LuCI; do not copy the Mango's open 2.4 GHz AP defaults.

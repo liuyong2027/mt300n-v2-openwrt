@@ -1,8 +1,5 @@
 config server 'main'
 	option enabled '0'
-	option username ''
-	option password ''
 	option psk ''
 	option subnet '192.168.89'
 	option dns '192.168.8.1'
-

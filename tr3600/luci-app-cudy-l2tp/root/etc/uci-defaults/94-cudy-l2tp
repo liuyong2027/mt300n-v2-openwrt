@@ -22,7 +22,7 @@ set firewall.cudy_l2tp_esp.target='ACCEPT'
 set firewall.cudy_l2tp_esp.enabled='0'
 set firewall.cudy_l2tp_zone=zone
 set firewall.cudy_l2tp_zone.name='cudy_vpn'
-add_list firewall.cudy_l2tp_zone.device='l2tpvpn'
+add_list firewall.cudy_l2tp_zone.device='l2tp+'
 set firewall.cudy_l2tp_zone.input='ACCEPT'
 set firewall.cudy_l2tp_zone.output='ACCEPT'
 set firewall.cudy_l2tp_zone.forward='REJECT'
@@ -42,4 +42,3 @@ EOF
 chmod 600 /etc/config/cudy_l2tp
 /etc/init.d/cudy_l2tp enable
 exit 0
-

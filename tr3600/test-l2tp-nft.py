@@ -9,7 +9,7 @@ def command(*args):
 
 command('ip','link','set','lo','up')
 rules = (Path(__file__).resolve().parent/'luci-app-cudy-l2tp/root/usr/share/nftables.d/chain-pre/input/90-cudy-l2tp.nft').read_text()
-rules = 'table inet test_vpn { chain input { type filter hook input priority 0; policy accept;\n'+rules+'\n} }\n'
+rules = 'table inet test_vpn {\nchain input {\ntype filter hook input priority 0; policy accept;\n'+rules+'\n}\n}\n'
 subprocess.run(['nft','-c','-f','-'],input=rules,text=True,check=True)
 subprocess.run(['nft','-f','-'],input=rules,text=True,check=True)
 receiver=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
