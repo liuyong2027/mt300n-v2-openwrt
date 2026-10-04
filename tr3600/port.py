@@ -68,6 +68,7 @@ exit 0
                   'openwrt_commit': 'f0a60eee2fe051741c643ea6118718aae1ef17fb',
                   'device_patch_commit': '046aec0dccd90f5a156cb8e9725c121c81955dd3',
                   'device': 'cudy,tr3600-v1', 'kernel_profile': 'OpenWrt Filogic defaults',
+                  'requested_features': ['USB file sharing (Samba4)', 'Wi-Fi client/AP repeater', 'IPv4 relayd pseudo bridge'],
                   'hardware_validation': 'pending', 'wireless_first_boot': 'disabled; configure country and password in LuCI'}
     (ROOT/'reports').mkdir(exist_ok=True)
     (ROOT/'reports/tr3600-source.json').write_text(json.dumps(provenance, indent=2)+'\n')

@@ -16,7 +16,12 @@ assets.mkdir(exist_ok=False)
 config = (tree/'.config').read_text().splitlines()
 for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt7990-firmware',
              'PACKAGE_mt7987-2p5g-phy-firmware', 'PACKAGE_kmod-hwmon-pwmfan',
-             'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN'):
+             'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN',
+             'PACKAGE_luci-app-samba4', 'PACKAGE_samba4-server',
+             'PACKAGE_block-mount', 'PACKAGE_kmod-usb-storage',
+             'PACKAGE_kmod-usb-storage-uas', 'PACKAGE_kmod-fs-ext4',
+             'PACKAGE_kmod-fs-exfat', 'PACKAGE_kmod-fs-vfat',
+             'PACKAGE_kmod-fs-ntfs3', 'PACKAGE_luci-proto-relay', 'PACKAGE_relayd'):
     assert 'CONFIG_'+name+'=y' in config, name
 assert 'CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024' in config
 images = list((tree/'bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1-squashfs-sysupgrade.bin'))
@@ -43,7 +48,7 @@ assert (extracted/'lib/upgrade/cudy-tr3600.sh').read_bytes() == (kit/'tr3600/cud
 def arm64(p):
     b = p.read_bytes()
     assert b[:6] == b'\x7fELF\x02\x01' and struct.unpack_from('<H', b, 18)[0] == 183, p
-for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck'):
+for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd'):
     arm64(extracted/name)
 ui_source = (kit/'package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()
 assert hashlib.sha256(ui_source).hexdigest() == expected['ui_source_sha256']
@@ -68,6 +73,7 @@ proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test1'
          'squashfs_block_bytes': 1048576, 'squashfs_compression': 'xz',
          'actual_arm64_xray': runtime, 'rootfs_original_hashes': 'passed',
          'ui_jsmin_comparison': 'passed', 'dual_boot_kernel_parameters': 'present',
+         'usb_sharing_and_repeater_packages': 'selected; smbd and relayd ARM64 binaries verified',
          'hardware_validation': 'pending; no router flashed'}
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)
