@@ -37,7 +37,7 @@
         },
         {
           "name": "Extract reviewed build source bundle",
-          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path, PurePosixPath\ndata=base64.b64decode(Path('release20-test-failover2-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='3dc6b3347d9fca66c05da1176dddc522821b5e637e657cb34c262312ddcc18c9'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    names=z.namelist()\n    assert len(names)==len(set(names))\n    for name in names:\n        p=PurePosixPath(name)\n        assert not p.is_absolute() and '..' not in p.parts and chr(92) not in name\n    listed=[]\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected,name\n        listed.append(name)\n    assert set(listed)==set(names)-{'SOURCE-FILES-SHA256SUMS'}\n    z.extractall()\nassert Path('files/etc/mango-release').read_text().strip()=='20-test-failover2'\nPY"
+          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path, PurePosixPath\ndata=base64.b64decode(Path('release20-test-failover2-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='3130343af4689759523f06123cfd66af7481b91ad707373569fb486abf427b85'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    names=z.namelist()\n    assert len(names)==len(set(names))\n    for name in names:\n        p=PurePosixPath(name)\n        assert not p.is_absolute() and '..' not in p.parts and chr(92) not in name\n    listed=[]\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected,name\n        listed.append(name)\n    assert set(listed)==set(names)-{'SOURCE-FILES-SHA256SUMS'}\n    z.extractall()\nassert Path('files/etc/mango-release').read_text().strip()=='20-test-failover2'\nPY"
         },
         {
           "name": "Install build dependencies",
@@ -129,7 +129,7 @@
           "name": "Package verified profile assets",
           "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success' && steps.kernel_diag.outcome == 'success'",
           "env": {
-            "RELEASE_SOURCE_SHA256": "3dc6b3347d9fca66c05da1176dddc522821b5e637e657cb34c262312ddcc18c9"
+            "RELEASE_SOURCE_SHA256": "3130343af4689759523f06123cfd66af7481b91ad707373569fb486abf427b85"
           },
           "run": "python3 scripts/package-release.py"
         },
