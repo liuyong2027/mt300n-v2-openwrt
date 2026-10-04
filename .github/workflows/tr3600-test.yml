@@ -102,9 +102,9 @@
           }
         },
         {
-          "name": "Preserve ARM64 root for failed content checks",
+          "name": "Preserve failed-check ARM64 root and packed verification inputs",
           "if": "failure() && steps.compile.outcome == 'success'",
-          "run": "roots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\ntar -C \"${roots[0]}\" -cJf reports/arm64-diagnostic-root.tar.xz .\n"
+          "run": "roots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\ntar -C \"${roots[0]}\" -cJf reports/arm64-diagnostic-root.tar.xz .\npython3 tr3600/preserve-verification.py\n"
         },
         {
           "name": "Upload build diagnostics",
@@ -112,7 +112,7 @@
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
             "name": "tr3600-diagnostics-${{ github.run_number }}",
-            "path": "reports/*.json\nreports/*.config\nreports/*.txt\nprepare.log\ndownload.log\nbuild.log\npolicy-tests.log\nruntime-tests.log\nreports/*.log\nreports/arm64-diagnostic-root.tar.xz",
+            "path": "reports/*.json\nreports/*.config\nreports/*.txt\nprepare.log\ndownload.log\nbuild.log\npolicy-tests.log\nruntime-tests.log\nreports/*.log\nreports/arm64-diagnostic-root.tar.xz\nreports/packed-verification-inputs.tar.xz",
             "retention-days": 14,
             "if-no-files-found": "warn",
             "include-hidden-files": true

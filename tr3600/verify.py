@@ -2,6 +2,7 @@
 """Verify the image container, extracted filesystem, architecture and metadata."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -43,7 +44,10 @@ assert struct.unpack_from('<I', root, 12)[0] == 1048576
 assert struct.unpack_from('<H', root, 20)[0] == 4
 (reports/'image-root.squashfs').write_bytes(root)
 extracted = reports/'extracted-image-rootfs'
-subprocess.run([str(tree/'staging_dir/host/bin/unsquashfs4'), '-no-progress', '-d', str(extracted), str(reports/'image-root.squashfs')], check=True)
+# SquashFS includes /dev/console and root-only files: preserve all entries.
+subprocess.run(['sudo', str(tree/'staging_dir/host/bin/unsquashfs4'), '-no-progress', '-d', str(extracted), str(reports/'image-root.squashfs')], check=True)
+# Keep the recorded modes, while allowing this runner to read private files.
+subprocess.run(['sudo', 'chown', '-hR', f'{os.getuid()}:{os.getgid()}', str(extracted)], check=True)
 expected = json.loads((kit/'VALIDATION-20.json').read_text())
 for name, digest in expected['source_rootfs_sha256'].items():
     assert hashlib.sha256((extracted/name).read_bytes()).hexdigest() == digest, name
