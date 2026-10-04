@@ -33,7 +33,7 @@ assert struct.unpack_from('<I', root, 12)[0] == 1048576
 assert struct.unpack_from('<H', root, 20)[0] == 4
 (reports/'image-root.squashfs').write_bytes(root)
 extracted = reports/'extracted-image-rootfs'
-subprocess.run([str(tree/'staging_dir/host/bin/unsquashfs'), '-no-progress', '-d', str(extracted), str(reports/'image-root.squashfs')], check=True)
+subprocess.run([str(tree/'staging_dir/host/bin/unsquashfs4'), '-no-progress', '-d', str(extracted), str(reports/'image-root.squashfs')], check=True)
 expected = json.loads((kit/'VALIDATION-20.json').read_text())
 for name, digest in expected['source_rootfs_sha256'].items():
     assert hashlib.sha256((extracted/name).read_bytes()).hexdigest() == digest, name
