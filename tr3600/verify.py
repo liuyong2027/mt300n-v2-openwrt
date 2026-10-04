@@ -23,7 +23,7 @@ for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt79
              'PACKAGE_kmod-fs-exfat', 'PACKAGE_kmod-fs-vfat',
              'PACKAGE_kmod-fs-ntfs3', 'PACKAGE_luci-proto-relay', 'PACKAGE_relayd',
              'PACKAGE_luci-app-cudy-l2tp', 'PACKAGE_cudy-l2tp-ifname', 'PACKAGE_xl2tpd', 'PACKAGE_ppp',
-             'PACKAGE_strongswan-charon', 'PACKAGE_strongswan-swanctl',
+             'PACKAGE_strongswan', 'PACKAGE_strongswan-charon', 'PACKAGE_strongswan-swanctl',
              'PACKAGE_strongswan-mod-openssl', 'PACKAGE_strongswan-mod-kernel-netlink',
              'PACKAGE_strongswan-mod-socket-default', 'PACKAGE_strongswan-mod-random',
              'PACKAGE_kmod-nft-xfrm', 'PACKAGE_kmod-crypto-sha256'):
