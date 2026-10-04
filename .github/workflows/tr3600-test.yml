@@ -80,15 +80,15 @@
         },
         {
           "name": "Validate actual ARM64 Xray configuration",
-          "run": "bash scripts/validate-runtime.sh arm64 2>&1 | tee runtime-tests.log"
+          "run": "set -Eeuo pipefail\nbash scripts/validate-runtime.sh arm64 2>&1 | tee runtime-tests.log"
         },
         {
           "name": "Check actual ARM64 BusyBox syntax and installed content",
-          "run": "roots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nfor path in usr/libexec/mango-recovery-guard etc/init.d/mango_proxy lib/upgrade/cudy-tr3600.sh etc/init.d/cudy_l2tp etc/uci-defaults/94-cudy-l2tp; do\n  qemu-aarch64-static -L \"$root\" \"$root/bin/busybox\" sh -n \"$root/$path\"\ndone\npython3 tr3600/test-ppp-ifname.py \"$root\"\npython3 scripts/audit-installed-content.py \"$root\" > reports/installed-content-audit.json\n"
+          "run": "set -Eeuo pipefail\nexec > >(tee reports/arm64-content-check.log) 2>&1\nset -x\nroots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nfor path in usr/libexec/mango-recovery-guard etc/init.d/mango_proxy lib/upgrade/cudy-tr3600.sh etc/init.d/cudy_l2tp etc/uci-defaults/94-cudy-l2tp; do\n  qemu-aarch64-static -L \"$root\" \"$root/bin/busybox\" sh -n \"$root/$path\"\ndone\npython3 tr3600/test-ppp-ifname.py \"$root\"\npython3 scripts/audit-installed-content.py \"$root\" > reports/installed-content-audit.json\n"
         },
         {
           "name": "Verify packed TR3600 image and prepare checked assets",
-          "run": "python3 tr3600/verify.py"
+          "run": "set -Eeuo pipefail\npython3 tr3600/verify.py 2>&1 | tee reports/final-image-check.log"
         },
         {
           "name": "Upload verified TR3600 test firmware",
@@ -101,12 +101,17 @@
           }
         },
         {
+          "name": "Preserve ARM64 root for failed content checks",
+          "if": "failure() && steps.compile.outcome == 'success'",
+          "run": "roots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\ntar -C \"${roots[0]}\" -cJf reports/arm64-diagnostic-root.tar.xz .\n"
+        },
+        {
           "name": "Upload build diagnostics",
           "if": "always()",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
             "name": "tr3600-diagnostics-${{ github.run_number }}",
-            "path": "reports/*.json\nreports/*.config\nreports/*.txt\nprepare.log\ndownload.log\nbuild.log\npolicy-tests.log\nruntime-tests.log",
+            "path": "reports/*.json\nreports/*.config\nreports/*.txt\nprepare.log\ndownload.log\nbuild.log\npolicy-tests.log\nruntime-tests.log\nreports/*.log\nreports/arm64-diagnostic-root.tar.xz",
             "retention-days": 14,
             "if-no-files-found": "warn",
             "include-hidden-files": true
