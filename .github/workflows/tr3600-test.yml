@@ -65,7 +65,7 @@
         },
         {
           "name": "Prepare locked OpenWrt sources with TR3600 support",
-          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log\nfor pkg in kmod-mt7990-firmware mt7987-2p5g-phy-firmware kmod-hwmon-pwmfan kmod-usb3 uboot-envtools luci-app-samba4 samba4-server block-mount kmod-usb-storage kmod-usb-storage-uas kmod-fs-ext4 kmod-fs-exfat kmod-fs-vfat kmod-fs-ntfs3 relayd luci-proto-relay luci-app-cudy-l2tp cudy-l2tp-ifname xl2tpd ppp strongswan-charon strongswan-swanctl strongswan-mod-openssl strongswan-mod-kernel-netlink strongswan-mod-socket-default strongswan-mod-random kmod-nft-xfrm kmod-crypto-sha256; do grep -qx \"CONFIG_PACKAGE_${pkg}=y\" openwrt/.config; done\ngrep -qx CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1=y openwrt/.config\ngrep -qx CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024 openwrt/.config"
+          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 tr3600/check-required.py"
         },
         {
           "name": "Download selected sources",
