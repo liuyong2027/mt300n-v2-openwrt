@@ -13,7 +13,8 @@
     "workflow_dispatch": {}
   },
   "permissions": {
-    "contents": "read"
+    "contents": "read",
+    "actions": "read"
   },
   "concurrency": {
     "group": "tr3600-${{ github.ref }}",
@@ -115,6 +116,42 @@
             "retention-days": 14,
             "if-no-files-found": "warn",
             "include-hidden-files": true
+          }
+        }
+      ],
+      "needs": "arm64-plugin-regression"
+    },
+    "arm64-plugin-regression": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 15,
+      "steps": [
+        {
+          "name": "Checkout current verification script",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Download previous successful ARM64 compilation for regression",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "gh run download 37193996628 --repo liuyong2027/mt300n-v2-openwrt --name tr3600-diagnostics-9 --dir previous-diagnostics\nmkdir -p previous-arm64-root reports\ntar -xJf previous-diagnostics/reports/arm64-diagnostic-root.tar.xz -C previous-arm64-root\nsudo apt-get update\nsudo apt-get install -y qemu-user-static\n"
+        },
+        {
+          "name": "Verify actual ARM64 concurrent PPP plugin with explicit stderr logging",
+          "run": "set -Eeuo pipefail\npython3 tr3600/test-ppp-ifname.py \"$(realpath previous-arm64-root)\" 2>&1 | tee reports/previous-arm64-plugin-check.log"
+        },
+        {
+          "name": "Preserve focused regression log",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-arm64-plugin-regression-${{ github.run_number }}",
+            "path": "reports/previous-arm64-plugin-check.log",
+            "retention-days": 14,
+            "if-no-files-found": "warn"
           }
         }
       ]
