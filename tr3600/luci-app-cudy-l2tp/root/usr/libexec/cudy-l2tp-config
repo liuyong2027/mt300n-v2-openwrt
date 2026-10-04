@@ -1,0 +1,118 @@
+#!/usr/bin/lua
+-- Generate service-owned runtime configuration; never replace other VPN secrets.
+local uci = require('uci').cursor()
+local out = arg[1] or '/var/run/cudy-l2tp'
+local c = uci:get_all('cudy_l2tp', 'main') or {}
+if c.enabled ~= '1' then os.exit(2) end
+local function fail() io.stderr:write('Invalid L2TP/IPsec configuration\n'); os.exit(1) end
+local function secret(s)
+	return type(s) == 'string' and #s >= 12 and #s <= 128 and not s:find('[^%w_@%.,:+!%%=%-]')
+end
+if type(c.username) ~= 'string' or #c.username < 1 or #c.username > 64 or c.username:find('[^%w_%.@%-]') or
+	not secret(c.password) or not secret(c.psk) then fail() end
+local function ipv4(s)
+	if type(s) ~= 'string' then return end
+	local a,b,d,e = s:match('^(%d+)%.(%d+)%.(%d+)%.(%d+)$')
+	if not a then return end
+	a,b,d,e = tonumber(a),tonumber(b),tonumber(d),tonumber(e)
+	if a > 255 or b > 255 or d > 255 or e > 255 then return end
+	return ((a*256+b)*256+d)*256+e, a,b,d,e
+end
+local base,a,b,d = ipv4((c.subnet or '')..'.0')
+if not base or not (a == 10 or (a == 172 and b >= 16 and b <= 31) or (a == 192 and b == 168)) or not ipv4(c.dns) then fail() end
+-- Reject overlap with configured static IPv4 interfaces, including broader masks.
+uci:foreach('network', 'interface', function(n)
+	local addresses = type(n.ipaddr) == 'table' and n.ipaddr or {n.ipaddr}
+	for _,address in ipairs(addresses) do
+		local ip, bits = address:match('^([^/]+)/(%d+)$')
+		ip = ip or address
+		local value = ipv4(ip)
+		if value then
+			bits = tonumber(bits)
+			if not bits then
+				local mask = ipv4(n.netmask or '255.255.255.0')
+				if mask then
+					bits = 0
+					while mask > 0 do bits = bits+1; mask = (mask*2)%4294967296 end
+				else bits = 24 end
+			end
+			if bits < 0 or bits > 32 then fail() end
+			local size = 2^(32-bits)
+			local lo = math.floor(value/size)*size
+			if lo <= base+255 and base <= lo+size-1 then fail() end
+		end
+	end
+end)
+local subnet = string.format('%d.%d.%d',a,b,d)
+local function put(name, content)
+	local f = assert(io.open(out..'/'..name, 'w'))
+	f:write(content); f:close()
+end
+put('strongswan.conf', [[charon {
+    load_modular = yes
+    install_routes = no
+    plugins {
+        include /etc/strongswan.d/charon/*.conf
+    }
+    start-scripts {
+        load-l2tp = /usr/sbin/swanctl --load-all --noprompt --file /var/run/cudy-l2tp/swanctl.conf
+    }
+}
+]])
+put('swanctl.conf', [[connections {
+    cudy-l2tp {
+        version = 1
+        local_addrs = %any
+        remote_addrs = %any
+        proposals = aes256-sha256-modp2048,aes128-sha256-modp2048,aes256-sha1-modp2048,aes128-sha1-modp2048,aes256-sha1-modp1024,aes128-sha1-modp1024
+        rekey_time = 0s
+        dpd_delay = 30s
+        local { auth = psk }
+        remote { auth = psk }
+        children {
+            l2tp {
+                mode = transport
+                local_ts = dynamic[udp/1701]
+                remote_ts = dynamic[udp]
+                esp_proposals = aes256-sha256,aes128-sha256,aes256-sha1,aes128-sha1
+                rekey_time = 0s
+                dpd_action = clear
+            }
+        }
+    }
+}
+secrets {
+    ike-l2tp {
+        secret = "]]..c.psk..[["
+    }
+}
+]])
+put('chap-secrets', string.format('"%s" cudy-l2tp "%s" %s.0/24\n',c.username,c.password,subnet))
+put('ppp.options', [[auth
+name cudy-l2tp
+ifname l2tpvpn
+chap-secrets /var/run/cudy-l2tp/chap-secrets
+require-mschap-v2
+refuse-pap
+refuse-chap
+refuse-mschap
+refuse-eap
+noccp
+nodefaultroute
+noipdefault
+mtu 1400
+mru 1400
+lcp-echo-interval 30
+lcp-echo-failure 4
+]]..'ms-dns '..c.dns..'\n')
+put('xl2tpd.conf', [[ [global]
+port = 1701
+[lns default]
+require authentication = yes
+refuse pap = yes
+require chap = yes
+name = cudy-l2tp
+pppoptfile = /var/run/cudy-l2tp/ppp.options
+length bit = yes
+]]..'local ip = '..subnet..'.1\nip range = '..subnet..'.10-'..subnet..'.19\n')
+

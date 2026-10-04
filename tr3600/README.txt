@@ -10,6 +10,15 @@ User-requested USB file sharing and Wi-Fi repeater support are included:
 Samba4 + LuCI Network Shares, block-mount, USB mass storage/UAS, ext4,
 exFAT, FAT and NTFS3; relayd + LuCI relay protocol for IPv4 pseudo bridging.
 Wireless client/routed repeater configuration uses the normal LuCI UI.
+L2TP/IPsec VPN server: Services / L2TP/IPsec VPN. Disabled by default.
+Set your own username, password and IPsec PSK (12-128 supported characters),
+choose a VPN /24 subnet different from LAN/upstream networks, then enable.
+One account / one concurrent client; authenticated client can access LAN
+and use the router as an Internet gateway. Public IPv4 reachability is
+required; behind another router forward UDP 500/4500, and native ESP if
+NAT traversal is not used. Plaintext L2TP/UDP 1701 is blocked by nftables.
+Client must support L2TP/IPsec PSK with MS-CHAPv2 authentication.
+VPN secrets are private runtime files, not prefilled in this image.
 
 Only TR3600 hardware v1 (MT7987B / 512 MiB RAM / 256 MiB NAND).
 Build and emulation checks do not prove actual router acceptance.
@@ -42,6 +51,8 @@ ZIP above. Matching upstream sources keep their original licenses.
 
 After flashing, verify fan operation, LAN/WAN, 2.4/5 GHz, USB3, proxy
 connectivity and failover on the actual router before relying on this build.
+Also verify L2TP/IPsec from a separate external network with a compatible
+client; build checks do not establish actual VPN interoperability.
 USB sharing: configure the disk under System / Mount Points, then set the
 directory and access permissions under Services / Network Shares. No disk
 is reformatted and no unauthenticated share is created by this build.

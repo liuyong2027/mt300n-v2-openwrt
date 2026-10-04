@@ -21,7 +21,12 @@ for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt79
              'PACKAGE_block-mount', 'PACKAGE_kmod-usb-storage',
              'PACKAGE_kmod-usb-storage-uas', 'PACKAGE_kmod-fs-ext4',
              'PACKAGE_kmod-fs-exfat', 'PACKAGE_kmod-fs-vfat',
-             'PACKAGE_kmod-fs-ntfs3', 'PACKAGE_luci-proto-relay', 'PACKAGE_relayd'):
+             'PACKAGE_kmod-fs-ntfs3', 'PACKAGE_luci-proto-relay', 'PACKAGE_relayd',
+             'PACKAGE_luci-app-cudy-l2tp', 'PACKAGE_xl2tpd', 'PACKAGE_ppp',
+             'PACKAGE_strongswan-charon', 'PACKAGE_strongswan-swanctl',
+             'PACKAGE_strongswan-mod-openssl', 'PACKAGE_strongswan-mod-kernel-netlink',
+             'PACKAGE_strongswan-mod-socket-default', 'PACKAGE_strongswan-mod-random',
+             'PACKAGE_kmod-nft-xfrm', 'PACKAGE_kmod-crypto-sha256'):
     assert 'CONFIG_'+name+'=y' in config, name
 assert 'CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024' in config
 images = list((tree/'bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1-squashfs-sysupgrade.bin'))
@@ -48,8 +53,15 @@ assert (extracted/'lib/upgrade/cudy-tr3600.sh').read_bytes() == (kit/'tr3600/cud
 def arm64(p):
     b = p.read_bytes()
     assert b[:6] == b'\x7fELF\x02\x01' and struct.unpack_from('<H', b, 18)[0] == 183, p
-for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd'):
+for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd', 'usr/sbin/xl2tpd', 'usr/sbin/pppd', 'usr/sbin/swanctl', 'usr/lib/ipsec/charon'):
     arm64(extracted/name)
+vpn_root = kit/'tr3600/luci-app-cudy-l2tp/root'
+for source in vpn_root.rglob('*'):
+    if source.is_file():
+        assert (extracted/source.relative_to(vpn_root)).read_bytes() == source.read_bytes(), source
+vpn_js = kit/'tr3600/luci-app-cudy-l2tp/htdocs/luci-static/resources/view/cudy-l2tp.js'
+vpn_minified = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=vpn_js.read_bytes(), stdout=subprocess.PIPE, check=True).stdout
+assert (extracted/'www/luci-static/resources/view/cudy-l2tp.js').read_bytes() == vpn_minified
 ui_source = (kit/'package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()
 assert hashlib.sha256(ui_source).hexdigest() == expected['ui_source_sha256']
 ui_expected = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=ui_source, stdout=subprocess.PIPE, check=True).stdout
@@ -74,6 +86,7 @@ proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test1'
          'actual_arm64_xray': runtime, 'rootfs_original_hashes': 'passed',
          'ui_jsmin_comparison': 'passed', 'dual_boot_kernel_parameters': 'present',
          'usb_sharing_and_repeater_packages': 'selected; smbd and relayd ARM64 binaries verified',
+         'l2tp_ipsec_server': 'selected; ARM64 daemons, exact configuration and LuCI page verified; disabled by default',
          'hardware_validation': 'pending; no router flashed'}
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)
