@@ -1,0 +1,163 @@
+{
+  "name": "20-test-failover2 production test firmware",
+  "on": {
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        "release20-test-failover2-source.zip.b64",
+        ".github/workflows/release20-test-failover2.yml"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "release20-test-failover2-${{ github.ref }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "build": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 330,
+      "defaults": {
+        "run": {
+          "shell": "bash"
+        }
+      },
+      "steps": [
+        {
+          "name": "Checkout build recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Extract reviewed build source bundle",
+          "run": "python3 - <<'PY'\nimport base64, hashlib, io, zipfile\nfrom pathlib import Path, PurePosixPath\ndata=base64.b64decode(Path('release20-test-failover2-source.zip.b64').read_text().strip(),validate=True)\nassert hashlib.sha256(data).hexdigest()=='3dc6b3347d9fca66c05da1176dddc522821b5e637e657cb34c262312ddcc18c9'\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n    assert z.testzip() is None\n    names=z.namelist()\n    assert len(names)==len(set(names))\n    for name in names:\n        p=PurePosixPath(name)\n        assert not p.is_absolute() and '..' not in p.parts and chr(92) not in name\n    listed=[]\n    for row in z.read('SOURCE-FILES-SHA256SUMS').decode().splitlines():\n        expected,name=row.split('  ',1)\n        assert hashlib.sha256(z.read(name)).hexdigest()==expected,name\n        listed.append(name)\n    assert set(listed)==set(names)-{'SOURCE-FILES-SHA256SUMS'}\n    z.extractall()\nassert Path('files/etc/mango-release').read_text().strip()=='20-test-failover2'\nPY"
+        },
+        {
+          "name": "Install build dependencies",
+          "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 nftables iproute2 iputils-ping qemu-user-static\nmkdir -p reports\ndf -h . | tee reports/disk-before.txt"
+        },
+        {
+          "name": "Validate recipe",
+          "run": "python3 -m unittest discover -s tests -v\nsh tests/test_switch_perf.sh .\nsh tests/test_probe_logging.sh .\nsh tests/test_watchdog_startup.sh .\nnode tests/test-ui.cjs\nnode tests/test-site-ui.cjs\nnode tests/subscription.cjs\nnode tests/test-update-progress.cjs\nbash -n scripts/prepare.sh scripts/validate-runtime.sh\nfor f in package/luci-app-mango-proxy/root/usr/libexec/mango-* package/luci-app-mango-proxy/root/usr/libexec/rpcd/mango package/luci-app-mango-proxy/root/etc/init.d/mango_* package/luci-app-mango-proxy/root/etc/uci-defaults/9*-mango-*; do if head -n1 \"$f\" | grep -q lua; then continue; fi; sh -n \"$f\"; done\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/mango/subscription.js\nsh tests/test_cache_refresh.sh .\nsh tests/test_fw_reuse.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy\nsh tests/test_recovery_trace.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy package/luci-app-mango-proxy/root/usr/libexec/mango-failover\nsh tests/test_fw_installed.sh package/luci-app-mango-proxy/root/usr/libexec/mango-fw\nsh tests/test_recovery_policy.sh .\nsh tests/test_uplink.sh .\nsh tests/test_runtime_id.sh .\nsh tests/test_start_failure.sh .\npython3 scripts/loading-diagnostic/test-diagnostic.py\nsh tests/test_lifecycle_budget.sh .\nsh tests/test_apply_rollback.sh .\nsh tests/test_process_wait.sh package/luci-app-mango-proxy/root/usr/libexec/mango-process\nsh tests/test_preflight_phases.sh .\nsh tests/test_preflight_reuse.sh .\npython3 scripts/audit-installed-content.py files\npython3 scripts/audit-installed-content.py package/luci-app-mango-proxy/root\nsh tests/test_intermittent_watchdog.sh .\nsh tests/test_socks_lifecycle.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy"
+        },
+        {
+          "name": "Validate routing policy and nftables",
+          "run": "bash scripts/validate-runtime.sh 2>&1 | tee policy-tests.log"
+        },
+        {
+          "name": "Prepare pinned sources and configuration",
+          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 scripts/kernel-profile.py configure --tree openwrt --profile \"$MANGO_KERNEL_PROFILE\"\nmake -C openwrt defconfig 2>&1 | tee diagnostic-defconfig.log\ncp openwrt/.config reports/resolved.config\n(cd openwrt && ./scripts/diffconfig.sh) > reports/diffconfig.txt"
+        },
+        {
+          "name": "Verify resolved 1 MiB block size",
+          "run": "grep -qx 'CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024' openwrt/.config"
+        },
+        {
+          "name": "Download selected sources",
+          "working-directory": "openwrt",
+          "run": "make download -j4 2>&1 | tee ../download.log"
+        },
+        {
+          "name": "Build isolated kernel profile",
+          "id": "compile",
+          "continue-on-error": true,
+          "working-directory": "openwrt",
+          "run": "make -j2 V=s 2>&1 | tee ../build.log"
+        },
+        {
+          "name": "Verify resolved kernel, matching symbols and installed content",
+          "id": "kernel_diag",
+          "if": "steps.compile.outcome == 'success'",
+          "run": "linux=(openwrt/build_dir/target-*/linux-ramips_mt76x8/linux-6.12.*)\nroots=(openwrt/build_dir/target-*/root-ramips)\ntest \"${#linux[@]}\" = 1\ntest \"${#roots[@]}\" = 1\npython3 scripts/kernel-profile.py verify --tree openwrt --profile \"$MANGO_KERNEL_PROFILE\" --linux \"${linux[0]}\" --rootfs \"${roots[0]}\"\npython3 scripts/audit-installed-content.py \"${roots[0]}\" > reports/installed-content-audit.json"
+        },
+        {
+          "name": "Validate actual MIPS Xray configuration",
+          "id": "runtime",
+          "if": "steps.compile.outcome == 'success'",
+          "run": "bash scripts/validate-runtime.sh mips 2>&1 | tee runtime-tests.log"
+        },
+        {
+          "name": "Check compiled target BusyBox guard syntax and normalization",
+          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success'",
+          "run": "roots=(openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\nexport MANGO_TARGET_ROOT=\"$(realpath \"${roots[0]}\")\"\nqemu-mipsel-static -L \"$MANGO_TARGET_ROOT\" \"$MANGO_TARGET_ROOT/bin/busybox\" sh -n \"$MANGO_TARGET_ROOT/usr/libexec/mango-recovery-guard\"\nqemu-mipsel-static -L \"$MANGO_TARGET_ROOT\" \"$MANGO_TARGET_ROOT/bin/busybox\" sh -n \"$MANGO_TARGET_ROOT/etc/init.d/mango_proxy\"\nmkdir -p reports/target-busybox\ncat > reports/target-busybox/tr-target <<'EOF'\n#!/bin/sh\nexec qemu-mipsel-static -L \"$MANGO_TARGET_ROOT\" \"$MANGO_TARGET_ROOT/bin/busybox\" tr \"$@\"\nEOF\nchmod +x reports/target-busybox/tr-target\nprintf ' a\\t\\r\\nb \\n' | reports/target-busybox/tr-target -d ' \\t\\r\\n' > reports/target-busybox/actual\nprintf ab > reports/target-busybox/expected\ncmp reports/target-busybox/expected reports/target-busybox/actual\nTEST_REAL_TR=\"$PWD/reports/target-busybox/tr-target\" sh tests/test_recovery_guard.sh . 2>&1 | tee reports/target-busybox-guard.log\npython3 - <<'PY'\nimport json\nfrom pathlib import Path\nreport = {'version': '20-test-failover2', 'mips_busybox_syntax': 'passed: guard and init',\n          'mips_busybox_whitespace_normalization': 'passed',\n          'guard_fixture_with_mips_busybox_tr': 'passed',\n          'execution_scope': 'QEMU target BusyBox syntax/tr; fixture uses host shell and mocked nft; real nft suite is separate',\n          'target_hardware_execution': 'pending'}\nPath('reports/target-busybox-validation.json').write_text(json.dumps(report, indent=2) + '\\n')\nPY"
+        },
+        {
+          "name": "Verify firmware version and SquashFS superblock",
+          "if": "success() && steps.compile.outcome == 'success'",
+          "run": "python3 - <<'PY'\nimport hashlib,json,struct,subprocess\nfrom pathlib import Path\nroots=list(Path('openwrt/build_dir').glob('target-*/root-ramips'))\nassert len(roots)==1\nassert (roots[0]/'etc/mango-release').read_text().strip()=='20-test-failover2'\nexpected=json.loads(Path('VALIDATION-20.json').read_text())\nfor name,digest in expected['source_rootfs_sha256'].items():\n    assert hashlib.sha256((roots[0]/name).read_bytes()).hexdigest()==digest,name\nui_source=Path('package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()\nassert hashlib.sha256(ui_source).hexdigest()==expected['ui_source_sha256'], 'UI source digest mismatch'\n# LuCI installs JavaScript after CONFIG_LUCI_JSMIN processing.\njsmin=Path('openwrt/staging_dir/hostpkg/bin/jsmin')\nassert 'CONFIG_LUCI_JSMIN=y' in Path('openwrt/.config').read_text().splitlines(), 'Expected LuCI JavaScript minification'\nui_expected=subprocess.run([str(jsmin.resolve())],input=ui_source,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True).stdout\nui_installed=(roots[0]/'www/luci-static/resources/view/mango-proxy.js').read_bytes()\nassert ui_installed==ui_expected, 'Installed UI differs from build jsmin output'\nui_proof={'source_sha256':hashlib.sha256(ui_source).hexdigest(),'installed_sha256':hashlib.sha256(ui_installed).hexdigest(),'transform':'CONFIG_LUCI_JSMIN: staging_dir/hostpkg/bin/jsmin'}\nimages=list(Path('openwrt/bin/targets/ramips/mt76x8').glob('*sysupgrade.bin'))\nassert len(images)==1\nb=images[0].read_bytes();matches=[];start=0\nwhile True:\n o=b.find(b'hsqs',start)\n if o<0: break\n start=o+4\n if o+96<=len(b) and struct.unpack_from('<HH',b,o+28)==(4,0):\n  matches.append((o,struct.unpack_from('<I',b,o+12)[0],struct.unpack_from('<H',b,o+20)[0]))\nassert len(matches)==1,matches\nassert matches[0][1:]==(1048576,4),matches\nPath('reports/firmware-format.json').write_text(json.dumps({'version':'20-test-failover2','superblock':matches,'image_bytes':len(b),'ui':ui_proof},indent=2))\nPY"
+        },
+        {
+          "name": "Report capacity",
+          "if": "always()",
+          "env": {
+            "BUILD_OUTCOME": "${{ steps.compile.outcome }}"
+          },
+          "run": "python3 scripts/report.py"
+        },
+        {
+          "name": "Upload diagnostics only",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "20-test-failover2-${{ matrix.kernel_profile }}-diagnostics-${{ github.run_number }}",
+            "path": "reports/\nprepare.log\ndownload.log\nbuild.log\npolicy-tests.log\nruntime-tests.log\ndiagnostic-defconfig.log\n!reports/kernel-symbols/**",
+            "retention-days": 7,
+            "if-no-files-found": "warn",
+            "include-hidden-files": true
+          }
+        },
+        {
+          "name": "Upload matching diagnostic symbols separately",
+          "if": "always() && steps.kernel_diag.outcome == 'success'",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "20-test-failover2-${{ matrix.kernel_profile }}-symbols-symbols-${{ github.run_number }}",
+            "path": "reports/kernel-symbols/",
+            "retention-days": 30,
+            "if-no-files-found": "error",
+            "include-hidden-files": true
+          }
+        },
+        {
+          "name": "Package verified profile assets",
+          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success' && steps.kernel_diag.outcome == 'success'",
+          "env": {
+            "RELEASE_SOURCE_SHA256": "3dc6b3347d9fca66c05da1176dddc522821b5e637e657cb34c262312ddcc18c9"
+          },
+          "run": "python3 scripts/package-release.py"
+        },
+        {
+          "name": "Upload verified release assets",
+          "if": "success()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "20-test-failover2-${{ matrix.kernel_profile }}-assets",
+            "path": "release-assets/",
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
+        }
+      ],
+      "env": {
+        "MANGO_BUILD_PROFILE": "standard",
+        "MANGO_KERNEL_PROFILE": "${{ matrix.kernel_profile }}"
+      },
+      "name": "Build ${{ matrix.kernel_profile }}",
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "kernel_profile": [
+            "production"
+          ]
+        }
+      }
+    }
+  }
+}
