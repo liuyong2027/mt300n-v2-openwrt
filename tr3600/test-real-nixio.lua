@@ -24,9 +24,10 @@ local function redirected(path)
     return path
 end
 local proxy={}
-for _,name in ipairs({'access','writefile','chmod','remove'}) do
+for _,name in ipairs({'access','writefile','remove'}) do
     proxy[name]=function(path,...) return fs[name](redirected(path),...) end
 end
+proxy.chmod=function(path,mode) return fs.chmod(redirected(path),mode) end
 proxy.rename=function(a,b) return fs.rename(redirected(a),redirected(b)) end
 proxy.readfile=function(path)
     if path=='/tmp/sysinfo/board_name' then return 'cudy,tr3600-v1\n' end
@@ -48,3 +49,4 @@ arg,os.exit=old_arg,old_exit
 package.loaded['nixio.fs']=fs
 assert(ok,err); assert(exit_code==0)
 assert(json.parse(fs.readfile(base..'/wifi.json')).test=='no credentials')
+
