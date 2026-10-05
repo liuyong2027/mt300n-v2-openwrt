@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Set defaults only when OpenWrt generates a new TR3600 5 GHz radio."""
 from pathlib import Path
+import hashlib
 import sys
 
 def patch(tree):
-    path = Path(tree)/'package/kernel/mac80211/files/lib/wifi/mac80211.uc'
-    source = path.read_text(encoding='utf-8')
+    path = Path(tree)/'package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc'
+    data = path.read_bytes()
+    blob = b'blob ' + str(len(data)).encode('ascii') + bytes([0]) + data
+    assert hashlib.sha1(blob).hexdigest() == 'd61786fa65023521d16fdf6bc499c2d26ee2d275', 'Unexpected locked OpenWrt wireless generator'
+    source = data.decode('utf-8')
     replacements = [
         ('const bands_order =', 'const cudy_tr3600 = trim(readfile("/tmp/sysinfo/board_name") || "") == "cudy,tr3600-v1";\n\nconst bands_order ='),
         ('\t\tif (!phy.path)\n', '\t\t// Existing radios are skipped below; never rewrite saved wireless settings.\n\t\tif (cudy_tr3600 && band_name == "5G" && band.he) {\n\t\t\tchannel = 36;\n\t\t\thtmode = "HE80";\n\t\t}\n\n\t\tif (!phy.path)\n'),

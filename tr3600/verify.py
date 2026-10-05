@@ -100,7 +100,7 @@ assert (extracted/'sbin/sysupgrade').read_bytes() == (tree/'package/base-files/f
 assert 'cudy-led-upgrade suspend' in (extracted/'sbin/sysupgrade').read_text()
 assert (extracted/'usr/libexec/mango-probe').stat().st_mode & 0o111
 wireless_defaults = extracted/'lib/wifi/mac80211.uc'
-assert wireless_defaults.read_bytes() == (tree/'package/kernel/mac80211/files/lib/wifi/mac80211.uc').read_bytes()
+assert wireless_defaults.read_bytes() == (tree/'package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc').read_bytes()
 subprocess.run(['python3', str(kit/'tr3600/check-removed.py'), str(extracted), str(tree/'.config')], check=True)
 assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-test2'
 ui_source = (kit/'package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()
