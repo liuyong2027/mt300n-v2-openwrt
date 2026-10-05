@@ -50,7 +50,7 @@
         },
         {
           "name": "Validate L2TP server configuration and encrypted input",
-          "run": "python3 tr3600/test-l2tp-config.py\nnode --check tr3600/luci-app-cudy-l2tp/htdocs/luci-static/resources/view/cudy-l2tp.js\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp\nsudo unshare --net python3 tr3600/test-l2tp-nft.py"
+          "run": "sh tr3600/test-network.sh\npython3 tr3600/test-l2tp-config.py\nnode --check tr3600/luci-app-cudy-l2tp/htdocs/luci-static/resources/view/cudy-l2tp.js\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp\nsudo unshare --net python3 tr3600/test-l2tp-nft.py"
         },
         {
           "name": "Validate recipe",
@@ -85,7 +85,7 @@
         },
         {
           "name": "Check actual ARM64 BusyBox syntax and installed content",
-          "run": "set -Eeuo pipefail\nexec > >(tee reports/arm64-content-check.log) 2>&1\nset -x\nroots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nfor path in usr/libexec/mango-recovery-guard etc/init.d/mango_proxy lib/upgrade/cudy-tr3600.sh etc/init.d/cudy_l2tp etc/uci-defaults/94-cudy-l2tp; do\n  qemu-aarch64-static -L \"$root\" \"$root/bin/busybox\" sh -n \"$root/$path\"\ndone\npython3 tr3600/test-ppp-ifname.py \"$root\"\npython3 scripts/audit-installed-content.py \"$root\" > reports/installed-content-audit.json\n"
+          "run": "set -Eeuo pipefail\nexec > >(tee reports/arm64-content-check.log) 2>&1\nset -x\nroots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nfor path in usr/libexec/mango-recovery-guard etc/init.d/mango_proxy lib/upgrade/cudy-tr3600.sh etc/init.d/cudy_l2tp etc/uci-defaults/94-cudy-l2tp etc/hotplug.d/iface/95-cudy-tr3600-eee; do\n  qemu-aarch64-static -L \"$root\" \"$root/bin/busybox\" sh -n \"$root/$path\"\ndone\npython3 tr3600/test-ppp-ifname.py \"$root\"\npython3 scripts/audit-installed-content.py \"$root\" > reports/installed-content-audit.json\n"
         },
         {
           "name": "Verify packed TR3600 image and prepare checked assets",

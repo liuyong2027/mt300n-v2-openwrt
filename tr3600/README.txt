@@ -65,3 +65,15 @@ configure a local AP. Keep the local LAN on a different subnet. For IPv4
 pseudo bridging, configure relayd through Network / Interfaces instead.
 These are OpenWrt equivalents; the Cudy App, cloud management, Cudy Mesh
 and vendor UI are not included.
+
+Next firmware network defaults (2026-10-05):
+The WAN eth0 EEE / Tx LPI workaround is included with ethtool and runs
+on WAN ifup only for cudy,tr3600-v1. Existing Wi-Fi configuration is kept.
+When generating a new 5 GHz radio, use channel 36, HE80 / 80 MHz and a
+separate default SSID Cudy-TR3600-5G. Set country and a secure password
+before enabling a fresh AP; no owner's wireless password is embedded.
+The running user's router was repaired in place: gateway packet loss
+fell from 40% to 0%; reported 5 GHz direct throughput was 284/50.7 Mbps,
+and after returning to proxy mode 359/55 Mbps, with normal page opening.
+These are user-reported measurements. A new image still requires the
+complete build and packed-image verification before delivery.

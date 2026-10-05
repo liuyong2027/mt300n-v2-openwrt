@@ -17,7 +17,7 @@ assets.mkdir(exist_ok=False)
 config = (tree/'.config').read_text().splitlines()
 for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt7990-firmware',
              'PACKAGE_mt7987-2p5g-phy-firmware', 'PACKAGE_kmod-hwmon-pwmfan',
-             'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN',
+             'PACKAGE_ethtool', 'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN',
              'PACKAGE_luci-app-samba4', 'PACKAGE_samba4-server',
              'PACKAGE_block-mount', 'PACKAGE_kmod-usb-storage',
              'PACKAGE_kmod-usb-storage-uas', 'PACKAGE_kmod-fs-ext4',
@@ -59,6 +59,15 @@ def arm64(p):
     assert b[:6] == b'\x7fELF\x02\x01' and struct.unpack_from('<H', b, 18)[0] == 183, p
 for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd', 'usr/sbin/xl2tpd', 'usr/sbin/pppd', 'usr/sbin/swanctl', 'usr/lib/ipsec/charon', 'usr/lib/cudy-l2tp-ifname.so'):
     arm64(extracted/name)
+network_root = kit/'tr3600/network-root'
+for source in network_root.rglob('*'):
+    if source.is_file():
+        installed = extracted/source.relative_to(network_root)
+        assert installed.read_bytes() == source.read_bytes(), source
+        assert installed.stat().st_mode & 0o111, installed
+arm64(extracted/'usr/sbin/ethtool')
+wireless_defaults = extracted/'lib/wifi/mac80211.uc'
+assert wireless_defaults.read_bytes() == (tree/'package/kernel/mac80211/files/lib/wifi/mac80211.uc').read_bytes()
 vpn_root = kit/'tr3600/luci-app-cudy-l2tp/root'
 for source in vpn_root.rglob('*'):
     if source.is_file():

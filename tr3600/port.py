@@ -37,7 +37,7 @@ def extract():
 def adapt():
     # Keep the same OpenWrt revision, locked feeds, R3 patch and proxy sources.
     prepare = ROOT/'scripts/prepare.sh'
-    replace_once(prepare, 'cd openwrt\n', 'cd openwrt\ngit apply --check "$kit/tr3600/support.patch"\ngit apply "$kit/tr3600/support.patch"\ngit apply --check "$kit/tr3600/hardware-fixes.patch"\ngit apply "$kit/tr3600/hardware-fixes.patch"\ncp "$kit/tr3600/999-ubi-add-configurable-rootdev.patch" target/linux/mediatek/patches-6.12/\npython3 "$kit/tr3600/upgrade-integration.py" "$PWD"\n')
+    replace_once(prepare, 'cd openwrt\n', 'cd openwrt\ngit apply --check "$kit/tr3600/support.patch"\ngit apply "$kit/tr3600/support.patch"\ngit apply --check "$kit/tr3600/hardware-fixes.patch"\ngit apply "$kit/tr3600/hardware-fixes.patch"\ncp "$kit/tr3600/999-ubi-add-configurable-rootdev.patch" target/linux/mediatek/patches-6.12/\npython3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/network-defaults.py" "$PWD"\n')
     replace_once(prepare, '$kit/config/mt300n-v2.config', '$kit/tr3600/tr3600.config')
     replace_once(prepare, 'cp -R "$kit/package/mango-tcpcheck" package/', 'cp -R "$kit/package/mango-tcpcheck" package/\ncp -R "$kit/tr3600/luci-app-cudy-l2tp" package/\ncp -R "$kit/tr3600/cudy-l2tp-ifname" package/\nchmod +x package/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp package/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp package/luci-app-cudy-l2tp/root/usr/libexec/cudy-l2tp-config')
     replace_once(prepare, 'CONFIG_TARGET_ramips_mt76x8_DEVICE_glinet_gl-mt300n-v2=y', 'CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1=y')
@@ -63,6 +63,9 @@ exit 0
     destination = ROOT/'files/lib/upgrade/cudy-tr3600.sh'
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(ROOT/'files/lib-upgrade-cudy.tmp', destination)
+    network_root = ROOT/'tr3600/network-root'
+    shutil.copytree(network_root, ROOT/'files', dirs_exist_ok=True)
+    (ROOT/'files/etc/hotplug.d/iface/95-cudy-tr3600-eee').chmod(0o755)
     (ROOT/'files/etc/fw_env.config').write_text('/dev/ubi0_0 0 0x80000 0x80000 1\n')
     provenance = {'application_commit': '1f6169759396a31d2e3beec35d300c1fe4f2eaec',
                   'original_bundle_sha256': BUNDLE_HASH,
