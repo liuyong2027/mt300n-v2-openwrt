@@ -17,7 +17,9 @@ assets.mkdir(exist_ok=False)
 config = (tree/'.config').read_text().splitlines()
 for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt7990-firmware',
              'PACKAGE_mt7987-2p5g-phy-firmware', 'PACKAGE_kmod-hwmon-pwmfan',
-             'PACKAGE_ethtool', 'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN',
+             'PACKAGE_ethtool', 'PACKAGE_luci-app-cudy-wifi', 'PACKAGE_usteer', 'PACKAGE_wpad-mbedtls',
+             'PACKAGE_luci-lib-nixio', 'PACKAGE_luci-lib-jsonc',
+             'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN',
              'PACKAGE_luci-app-samba4', 'PACKAGE_samba4-server',
              'PACKAGE_block-mount', 'PACKAGE_kmod-usb-storage',
              'PACKAGE_kmod-usb-storage-uas', 'PACKAGE_kmod-fs-ext4',
@@ -64,8 +66,22 @@ for source in network_root.rglob('*'):
     if source.is_file():
         installed = extracted/source.relative_to(network_root)
         assert installed.read_bytes() == source.read_bytes(), source
-        assert installed.stat().st_mode & 0o111, installed
+        if source.read_bytes().startswith(b'#!'):
+            assert installed.stat().st_mode & 0o111, installed
 arm64(extracted/'usr/sbin/ethtool')
+arm64(extracted/'sbin/usteerd')
+arm64(extracted/'usr/sbin/wpad')
+assert 'CONFIG_PACKAGE_wpad-basic-mbedtls=y' not in config
+wifi_root = kit/'tr3600/luci-app-cudy-wifi/root'
+for source in wifi_root.rglob('*'):
+    if source.is_file():
+        installed = extracted/source.relative_to(wifi_root)
+        assert installed.read_bytes() == source.read_bytes(), source
+        if source.read_bytes().startswith(b'#!'):
+            assert installed.stat().st_mode & 0o111, installed
+wifi_js = kit/'tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js'
+wifi_minified = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=wifi_js.read_bytes(), stdout=subprocess.PIPE, check=True).stdout
+assert (extracted/'www/luci-static/resources/view/cudy-wifi.js').read_bytes() == wifi_minified
 wireless_defaults = extracted/'lib/wifi/mac80211.uc'
 assert wireless_defaults.read_bytes() == (tree/'package/kernel/mac80211/files/lib/wifi/mac80211.uc').read_bytes()
 vpn_root = kit/'tr3600/luci-app-cudy-l2tp/root'
@@ -99,6 +115,7 @@ proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test1'
          'actual_arm64_xray': runtime, 'rootfs_original_hashes': 'passed',
          'ui_jsmin_comparison': 'passed', 'dual_boot_kernel_parameters': 'present',
          'usb_sharing_and_repeater_packages': 'selected; smbd and relayd ARM64 binaries verified',
+         'unified_wifi': 'selected; full ARM64 wpad/usteer, exact helper/configuration and LuCI page verified; disabled by default',
          'l2tp_ipsec_server': 'selected; ARM64 daemons, exact configuration and LuCI page verified; disabled by default',
          'hardware_validation': 'pending; no router flashed'}
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')

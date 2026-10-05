@@ -1,0 +1,1 @@
+{"admin/network/cudy-wifi":{"title":"双频合一","order":16,"action":{"type":"view","path":"cudy-wifi"},"depends":{"acl":["luci-app-cudy-wifi"],"uci":{"cudy_wifi":true}}}}

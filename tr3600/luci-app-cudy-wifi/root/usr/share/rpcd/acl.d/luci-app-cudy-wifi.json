@@ -1,0 +1,1 @@
+{"luci-app-cudy-wifi":{"description":"Configure Cudy unified dual-band Wi-Fi","read":{"uci":["cudy_wifi","wireless"]},"write":{"uci":["cudy_wifi"],"file":{"/usr/libexec/cudy-wifi-apply":["exec"]}}}}

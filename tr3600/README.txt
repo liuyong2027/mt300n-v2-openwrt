@@ -77,3 +77,12 @@ fell from 40% to 0%; reported 5 GHz direct throughput was 284/50.7 Mbps,
 and after returning to proxy mode 359/55 Mbps, with normal page opening.
 These are user-reported measurements. A new image still requires the
 complete build and packed-image verification before delivery.
+Optional unified Wi-Fi: Network / 双频合一. Disabled by default. Select
+two enabled LAN APs, a shared SSID/security/password, and optionally enable
+local usteer band steering with full wpad and 802.11k/v. Leaving the shared
+password blank reuses the selected 5 GHz password. Disabling unification
+restores the original AP options and steering configuration from a private
+backup retained on keep-settings upgrades. Guest/repeater interfaces are
+excluded. Steering requests supported clients to use 5 GHz with adequate
+signal; it does not guarantee that every client chooses the best band.
+See tr3600/WIFI-UNIFICATION.md for behavior and validation limits.

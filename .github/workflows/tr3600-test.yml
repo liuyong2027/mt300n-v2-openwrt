@@ -49,8 +49,8 @@
           "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 nftables iproute2 iputils-ping qemu-user-static\nmkdir -p reports\ndf -h . | tee reports/disk-before.txt"
         },
         {
-          "name": "Validate L2TP server configuration and encrypted input",
-          "run": "sh tr3600/test-network.sh\npython3 tr3600/test-l2tp-config.py\nnode --check tr3600/luci-app-cudy-l2tp/htdocs/luci-static/resources/view/cudy-l2tp.js\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp\nsudo unshare --net python3 tr3600/test-l2tp-nft.py"
+          "name": "Validate Wi-Fi unification, VPN configuration and encrypted input",
+          "run": "lua5.1 tr3600/test-wifi.lua\nnode --check tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js\nnode tr3600/test-wifi-ui.cjs\nluac5.1 -p tr3600/luci-app-cudy-wifi/root/usr/libexec/cudy-wifi-config\nsh -n tr3600/luci-app-cudy-wifi/root/usr/libexec/cudy-wifi-apply tr3600/luci-app-cudy-wifi/root/etc/init.d/cudy_wifi tr3600/luci-app-cudy-wifi/root/etc/uci-defaults/93-cudy-wifi\nsh tr3600/test-network.sh\npython3 tr3600/test-l2tp-config.py\nnode --check tr3600/luci-app-cudy-l2tp/htdocs/luci-static/resources/view/cudy-l2tp.js\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp\nsh -n tr3600/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp\nsudo unshare --net python3 tr3600/test-l2tp-nft.py"
         },
         {
           "name": "Validate recipe",
@@ -85,7 +85,7 @@
         },
         {
           "name": "Check actual ARM64 BusyBox syntax and installed content",
-          "run": "set -Eeuo pipefail\nexec > >(tee reports/arm64-content-check.log) 2>&1\nset -x\nroots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nfor path in usr/libexec/mango-recovery-guard etc/init.d/mango_proxy lib/upgrade/cudy-tr3600.sh etc/init.d/cudy_l2tp etc/uci-defaults/94-cudy-l2tp etc/hotplug.d/iface/95-cudy-tr3600-eee; do\n  qemu-aarch64-static -L \"$root\" \"$root/bin/busybox\" sh -n \"$root/$path\"\ndone\npython3 tr3600/test-ppp-ifname.py \"$root\"\npython3 scripts/audit-installed-content.py \"$root\" > reports/installed-content-audit.json\n"
+          "run": "set -Eeuo pipefail\nexec > >(tee reports/arm64-content-check.log) 2>&1\nset -x\nroots=(openwrt/build_dir/target-*/root-mediatek)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nfor path in usr/libexec/mango-recovery-guard etc/init.d/mango_proxy lib/upgrade/cudy-tr3600.sh etc/init.d/cudy_l2tp etc/uci-defaults/94-cudy-l2tp etc/hotplug.d/iface/95-cudy-tr3600-eee etc/init.d/cudy_wifi etc/uci-defaults/93-cudy-wifi usr/libexec/cudy-wifi-apply; do\n  qemu-aarch64-static -L \"$root\" \"$root/bin/busybox\" sh -n \"$root/$path\"\ndone\npython3 tr3600/test-ppp-ifname.py \"$root\"\npython3 scripts/audit-installed-content.py \"$root\" > reports/installed-content-audit.json\nqemu-aarch64-static -L \"$root\" \"$root/usr/bin/lua\" tr3600/test-wifi.lua \"$root/usr/lib/lua/cudy/wifi.lua\"\nCUDY_TEST_ROOT=\"$root\" qemu-aarch64-static -L \"$root\" \"$root/usr/bin/lua\" -e 'assert(loadfile(os.getenv(\"CUDY_TEST_ROOT\")..\"/usr/libexec/cudy-wifi-config\"))'\ncat > reports/cudy-test-lua <<'SH'\n#!/bin/sh\nexec qemu-aarch64-static -L \"$CUDY_TEST_ROOT\" \"$CUDY_TEST_ROOT/usr/bin/lua\" \"$@\"\nSH\nchmod +x reports/cudy-test-lua\nCUDY_TEST_ROOT=\"$root\" LUA_CPATH=\"$root/usr/lib/lua/?.so\" CUDY_TEST_LUA=\"$PWD/reports/cudy-test-lua\" sh tr3600/test-wifi-real-uci.sh tr3600/test-wifi-real-uci.lua \"$root/usr/lib/lua/cudy/wifi.lua\"\n"
         },
         {
           "name": "Verify packed TR3600 image and prepare checked assets",

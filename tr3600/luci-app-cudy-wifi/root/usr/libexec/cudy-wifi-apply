@@ -1,0 +1,4 @@
+#!/bin/sh
+umask 077
+case "$1" in apply|boot) ;; *) exit 1 ;; esac
+exec flock -x /var/lock/cudy-wifi.lock /usr/libexec/cudy-wifi-config "$1"
