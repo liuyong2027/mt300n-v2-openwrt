@@ -1,0 +1,1 @@
+{"admin/services/cudy-usb":{"title":"USB 文件共享","order":35,"action":{"type":"view","path":"cudy-usb"},"depends":{"acl":["luci-app-cudy-usb"]}}}

@@ -1,0 +1,8 @@
+#!/bin/sh
+umask 077
+case "$1" in
+	guard|status) exec /usr/libexec/cudy-usb-main "$@" ;;
+	enable|eject|forget|migrate|reconcile|hotplug)
+		exec flock -x /var/lock/cudy-usb.lock /usr/libexec/cudy-usb-main "$@" ;;
+	*) exit 1 ;;
+esac

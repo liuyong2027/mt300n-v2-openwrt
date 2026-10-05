@@ -1,4 +1,4 @@
-Cudy TR3600 v1 / Mango 20-test-failover1 port, test2 (pre-release)
+Cudy TR3600 v1 / Mango 20-test-failover1 port, test3 USB sharing (pre-release)
 
 This is a test firmware, based on application commit
 1f6169759396a31d2e3beec35d300c1fe4f2eaec, OpenWrt 25.12.5

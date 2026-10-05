@@ -1,0 +1,2 @@
+config settings 'main'
+	option version '1'
