@@ -1,0 +1,6 @@
+#!/bin/sh
+umask 077
+mkdir -p /var/lock /var/run/cudy-led
+exec 9>/var/lock/cudy-led.lock
+flock -n 9 || exit 0
+exec /usr/libexec/cudy-led-control run

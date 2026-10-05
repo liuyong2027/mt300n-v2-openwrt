@@ -41,6 +41,7 @@ def adapt():
     replace_once(prepare, '$kit/config/mt300n-v2.config', '$kit/tr3600/tr3600.config')
     replace_once(prepare, 'cp -R "$kit/package/mango-tcpcheck" package/', 'cp -R "$kit/package/mango-tcpcheck" package/\ncp -R "$kit/tr3600/luci-app-cudy-l2tp" package/\ncp -R "$kit/tr3600/cudy-l2tp-ifname" package/\nchmod +x package/luci-app-cudy-l2tp/root/etc/init.d/cudy_l2tp package/luci-app-cudy-l2tp/root/etc/uci-defaults/94-cudy-l2tp package/luci-app-cudy-l2tp/root/usr/libexec/cudy-l2tp-config')
     replace_once(prepare, 'chmod +x package/luci-app-mango-proxy', 'cp -R "$kit/tr3600/luci-app-cudy-wifi" package/\nchmod +x package/luci-app-cudy-wifi/root/etc/init.d/cudy_wifi package/luci-app-cudy-wifi/root/etc/uci-defaults/93-cudy-wifi package/luci-app-cudy-wifi/root/usr/libexec/cudy-wifi-*\nchmod +x package/luci-app-mango-proxy')
+    replace_once(prepare, 'chmod +x package/luci-app-mango-proxy', 'cp -R "$kit/tr3600/luci-app-cudy-led" package/\nchmod +x package/luci-app-cudy-led/root/usr/libexec/cudy-led-* package/luci-app-cudy-led/root/etc/init.d/cudy_led package/luci-app-cudy-led/root/etc/uci-defaults/92-cudy-led package/luci-app-cudy-led/root/etc/hotplug.d/ntp/95-cudy-led\npython3 "$kit/tr3600/led-integration.py" "$PWD"\nchmod +x package/luci-app-mango-proxy')
     replace_once(prepare, 'CONFIG_TARGET_ramips_mt76x8_DEVICE_glinet_gl-mt300n-v2=y', 'CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1=y')
     # Preserve LAN 192.168.8.1. Leave wireless disabled until the owner configures
     # country/password in LuCI; do not copy the Mango's open 2.4 GHz AP defaults.
@@ -56,7 +57,7 @@ exit 0
     runtime = ROOT/'scripts/validate-runtime.sh'
     replace_once(runtime, 'if [ "${1:-}" = mips ]; then', 'if [ "${1:-}" = arm64 ]; then')
     replace_once(runtime, 'root-ramips', 'root-mediatek')
-    s = runtime.read_text().replace('qemu-mipsel-static', 'qemu-aarch64-static').replace('actual_mips_xray', 'actual_arm64_xray').replace('MIPS', 'ARM64')
+    s = runtime.read_text(encoding='utf-8').replace('qemu-mipsel-static', 'qemu-aarch64-static').replace('actual_mips_xray', 'actual_arm64_xray').replace('MIPS', 'ARM64')
     runtime.write_text(s, encoding='utf-8', newline='\n')
     (ROOT/'files/etc/mango-device').write_text('cudy,tr3600-v1\n')
     (ROOT/'files/etc/mango-kernel-profile').write_text('openwrt-filogic-default\n')
@@ -73,7 +74,7 @@ exit 0
                   'openwrt_commit': 'f0a60eee2fe051741c643ea6118718aae1ef17fb',
                   'device_patch_commit': '046aec0dccd90f5a156cb8e9725c121c81955dd3',
                   'device': 'cudy,tr3600-v1', 'kernel_profile': 'OpenWrt Filogic defaults',
-                  'requested_features': ['USB file sharing (Samba4)', 'Wi-Fi client/AP repeater', 'IPv4 relayd pseudo bridge', 'L2TP/IPsec VPN server (disabled until configured)', 'Optional unified dual-band Wi-Fi with local usteer and private restore backup'],
+                  'requested_features': ['USB file sharing (Samba4)', 'Wi-Fi client/AP repeater', 'IPv4 relayd pseudo bridge', 'L2TP/IPsec VPN server (disabled until configured)', 'Optional unified dual-band Wi-Fi with local usteer and private restore backup', 'White/red network and proxy status LEDs with optional night mode'],
                   'hardware_validation': 'pending', 'wireless_first_boot': 'disabled; configure country and password in LuCI'}
     (ROOT/'reports').mkdir(exist_ok=True)
     (ROOT/'reports/tr3600-source.json').write_text(json.dumps(provenance, indent=2)+'\n')

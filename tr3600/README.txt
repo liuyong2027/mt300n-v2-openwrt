@@ -86,3 +86,10 @@ backup retained on keep-settings upgrades. Guest/repeater interfaces are
 excluded. Steering requests supported clients to use 5 GHz with adequate
 signal; it does not guarantee that every client chooses the best band.
 See tr3600/WIFI-UNIFICATION.md for behavior and validation limits.
+
+Status LEDs: System / 指示灯. Recommended status mode is the new-image default;
+optional 23:00-07:00 night mode is disabled by default. White solid = recent
+connectivity confirmed; white slow = waiting; red solid = local exit offline;
+red slow = repeated upstream/proxy failure. Preserve system boot/upgrade/rescue.
+Only observe proxy probes; LED code never changes nodes, routes or services.
+See tr3600/LED-STATUS.txt. This source addition has not been rebuilt or flashed.

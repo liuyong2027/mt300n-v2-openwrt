@@ -8,6 +8,8 @@ import shutil
 import struct
 import subprocess
 import tarfile
+from importlib.machinery import SourceFileLoader
+led_integration = SourceFileLoader("led_integration", str(Path(__file__).parent/"led-integration.py")).load_module()
 
 kit = Path(__file__).resolve().parents[1]
 tree = kit/'openwrt'
@@ -17,8 +19,8 @@ assets.mkdir(exist_ok=False)
 config = (tree/'.config').read_text().splitlines()
 for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt7990-firmware',
              'PACKAGE_mt7987-2p5g-phy-firmware', 'PACKAGE_kmod-hwmon-pwmfan',
-             'PACKAGE_ethtool', 'PACKAGE_luci-app-cudy-wifi', 'PACKAGE_usteer', 'PACKAGE_wpad-mbedtls',
-             'PACKAGE_luci-lib-nixio', 'PACKAGE_luci-lib-jsonc',
+             'PACKAGE_ethtool', 'PACKAGE_luci-app-cudy-wifi', 'PACKAGE_luci-app-cudy-led', 'PACKAGE_usteer', 'PACKAGE_wpad-mbedtls',
+             'PACKAGE_luci-lib-nixio', 'PACKAGE_luci-lib-jsonc', 'PACKAGE_coreutils-timeout',
              'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN',
              'PACKAGE_luci-app-samba4', 'PACKAGE_samba4-server',
              'PACKAGE_block-mount', 'PACKAGE_kmod-usb-storage',
@@ -52,7 +54,12 @@ subprocess.run(['sudo', str(tree/'staging_dir/host/bin/unsquashfs4'), '-no-progr
 subprocess.run(['sudo', 'chown', '-hR', f'{os.getuid()}:{os.getgid()}', str(extracted)], check=True)
 expected = json.loads((kit/'VALIDATION-20.json').read_text())
 for name, digest in expected['source_rootfs_sha256'].items():
-    assert hashlib.sha256((extracted/name).read_bytes()).hexdigest() == digest, name
+    if name == 'usr/libexec/mango-probe':
+        original = (kit/'package/luci-app-mango-proxy/root'/name).read_bytes()
+        assert hashlib.sha256(original).hexdigest() == digest, name
+        assert (extracted/name).read_bytes() == led_integration.patch_probe(original.decode()).encode(), name
+    else:
+        assert hashlib.sha256((extracted/name).read_bytes()).hexdigest() == digest, name
 assert (extracted/'etc/mango-release').read_text().strip() == '20-test-failover1'
 assert (extracted/'etc/mango-device').read_text().strip() == 'cudy,tr3600-v1'
 assert (extracted/'lib/upgrade/cudy-tr3600.sh').read_bytes() == (kit/'tr3600/cudy-upgrade.sh').read_bytes()
@@ -71,6 +78,7 @@ for source in network_root.rglob('*'):
 arm64(extracted/'usr/sbin/ethtool')
 arm64(extracted/'sbin/usteerd')
 arm64(extracted/'usr/sbin/wpad')
+arm64(extracted/'usr/libexec/timeout-coreutils')
 assert 'CONFIG_PACKAGE_wpad-basic-mbedtls=y' not in config
 wifi_root = kit/'tr3600/luci-app-cudy-wifi/root'
 for source in wifi_root.rglob('*'):
@@ -82,6 +90,19 @@ for source in wifi_root.rglob('*'):
 wifi_js = kit/'tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js'
 wifi_minified = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=wifi_js.read_bytes(), stdout=subprocess.PIPE, check=True).stdout
 assert (extracted/'www/luci-static/resources/view/cudy-wifi.js').read_bytes() == wifi_minified
+led_root = kit/'tr3600/luci-app-cudy-led/root'
+for source in led_root.rglob('*'):
+    if source.is_file():
+        installed = extracted/source.relative_to(led_root)
+        assert installed.read_bytes() == source.read_bytes(), source
+        if source.read_bytes().startswith(b'#!'):
+            assert installed.stat().st_mode & 0o111, installed
+led_js = kit/'tr3600/luci-app-cudy-led/htdocs/luci-static/resources/view/cudy-led.js'
+led_minified = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=led_js.read_bytes(), stdout=subprocess.PIPE, check=True).stdout
+assert (extracted/'www/luci-static/resources/view/cudy-led.js').read_bytes() == led_minified
+assert (extracted/'sbin/sysupgrade').read_bytes() == (tree/'package/base-files/files/sbin/sysupgrade').read_bytes()
+assert 'cudy-led-upgrade suspend' in (extracted/'sbin/sysupgrade').read_text()
+assert (extracted/'usr/libexec/mango-probe').stat().st_mode & 0o111
 wireless_defaults = extracted/'lib/wifi/mac80211.uc'
 assert wireless_defaults.read_bytes() == (tree/'package/kernel/mac80211/files/lib/wifi/mac80211.uc').read_bytes()
 vpn_root = kit/'tr3600/luci-app-cudy-l2tp/root'
@@ -112,9 +133,10 @@ proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test1'
          'image_sha256': hashlib.sha256(image.read_bytes()).hexdigest(),
          'container': 'sysupgrade tar with FIT kernel and SquashFS rootfs',
          'squashfs_block_bytes': 1048576, 'squashfs_compression': 'xz',
-         'actual_arm64_xray': runtime, 'rootfs_original_hashes': 'passed',
+         'actual_arm64_xray': runtime, 'rootfs_original_hashes': 'passed; original probe source and exact additive LED hook verified',
          'ui_jsmin_comparison': 'passed', 'dual_boot_kernel_parameters': 'present',
          'usb_sharing_and_repeater_packages': 'selected; smbd and relayd ARM64 binaries verified',
+         'status_leds': 'selected; exact Lua/scripts/LuCI/probe hook and upgrade handoff verified; status mode default, night off',
          'unified_wifi': 'selected; full ARM64 wpad/usteer, exact helper/configuration and LuCI page verified; disabled by default',
          'l2tp_ipsec_server': 'selected; ARM64 daemons, exact configuration and LuCI page verified; disabled by default',
          'hardware_validation': 'pending; no router flashed'}

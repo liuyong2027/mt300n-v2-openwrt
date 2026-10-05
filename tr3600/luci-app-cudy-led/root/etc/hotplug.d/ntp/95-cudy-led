@@ -1,0 +1,11 @@
+#!/bin/sh
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'cudy,tr3600-v1' ] || exit 0
+case "$ACTION" in step|stratum) ;; *) exit 0;; esac
+case "$stratum" in ''|*[!0-9]*) exit 0;; esac
+umask 077
+mkdir -p /var/run/cudy-led
+if [ "$stratum" -gt 0 ] && [ "$stratum" -lt 16 ]; then
+	touch /var/run/cudy-led/clock-synced
+else
+	rm -f /var/run/cudy-led/clock-synced
+fi
