@@ -18,9 +18,9 @@ function M.blocked()
 end
 function M.config() return engine.config(uci.cursor():get_all('cudy_led','main')) end
 function M.atomic(path,value)
-    fs.mkdir(M.dir); fs.chmod(M.dir,448)
+    fs.mkdir(M.dir); fs.chmod(M.dir,'700')
     local tmp=path..'.'..nixio.getpid()..'.new'
-    if not fs.writefile(tmp,'') or not fs.chmod(tmp,384) then return false end
+    if not fs.writefile(tmp,'') or not fs.chmod(tmp,'600') then return false end
     if not fs.writefile(tmp,json.stringify(value)) then fs.remove(tmp); return false end
     if not fs.rename(tmp,path) then fs.remove(tmp); return false end
     return true

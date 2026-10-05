@@ -16,7 +16,7 @@ local env = {
     end,
     save=function(data)
         local tmp = path..'.tmp'
-        if not fs.writefile(tmp,'') or not fs.chmod(tmp,384) then return false end
+        if not fs.writefile(tmp,'') or not fs.chmod(tmp,'600') then return false end
         if not fs.writefile(tmp,json.stringify(data)) then fs.remove(tmp); return false end
         if not fs.rename(tmp,path) then fs.remove(tmp); return false end
         return true

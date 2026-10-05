@@ -9,7 +9,7 @@ local fs={}
 function fs.readfile(p) return files[p] end
 function fs.access(p) return files[p]~=nil end
 function fs.mkdir(p) return true end
-function fs.chmod(p,mode) assert(mode==384 or mode==448); return true end
+function fs.chmod(p,mode) assert(type(mode)=='string' and (mode=='600' or mode=='700')); return true end
 function fs.writefile(p,v)
     writes[#writes+1]={p,v}
     if p==fail then return false end
