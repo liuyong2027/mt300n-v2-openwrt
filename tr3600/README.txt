@@ -83,7 +83,8 @@ optional 23:00-07:00 night mode is disabled by default. White solid = recent
 connectivity confirmed; white slow = waiting; red solid = local exit offline;
 red slow = repeated upstream/proxy failure. Preserve system boot/upgrade/rescue.
 Only observe proxy probes; LED code never changes nodes, routes or services.
-See tr3600/LED-STATUS.txt. This source addition has not been rebuilt or flashed.
+See tr3600/LED-STATUS.txt and the included build verification report.
+Physical LED, night-mode and upgrade-indication acceptance remain pending.
 
 Test2 upgrade: back up your configuration first. From an existing matching
 TR3600 OpenWrt image, keep settings can retain configured USB mounts/shares
@@ -92,4 +93,5 @@ router are owner configuration, not prefilled per-device defaults. No disk
 UUID, node credentials, Dynu credentials or wireless password is embedded.
 Physical LED, band steering and full new-image upgrade/reboot acceptance
 remain required. Current router WAN was observed at 100Mb/s; firmware
-cannot guarantee a cable/port negotiates gigabit. Test2 is not yet built.
+cannot guarantee a cable/port negotiates gigabit. Only install an image whose
+included build verification report confirms all required checks passed.
