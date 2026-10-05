@@ -5,23 +5,27 @@ task_script=${1:-tr3600/network-root/etc/hotplug.d/iface/95-cudy-tr3600-eee}
 task_dir=$(mktemp -d)
 trap 'rm -f "$task_dir/result"; rmdir "$task_dir"' EXIT
 cat() { printf '%s\n' "$task_board"; }
-uci() { printf '%s\n' "$task_device"; }
+uci() { printf '%s\n' "$task_config_device"; }
 ethtool() { printf '%s\n' "$*" > "$task_dir/result"; }
 logger() { :; }
 check() {
-    ACTION=$1 INTERFACE=$2 task_board=$3 task_device=$4
+    ACTION=$1 INTERFACE=$2 task_board=$3 task_config_device=$4
     rm -f "$task_dir/result"
     ( . "$task_script" )
     if [ "$5" = apply ]; then
-        [ "$(command cat "$task_dir/result")" = '--set-eee eth0 eee off tx-lpi off' ]
+        [ "$(command cat "$task_dir/result")" = "--set-eee $6 eee off tx-lpi off" ]
     else
         [ ! -e "$task_dir/result" ]
     fi
 }
-check ifup wan cudy,tr3600-v1 eth0 apply
+check ifup wan cudy,tr3600-v1 eth0 apply eth0
+check ifup lan cudy,tr3600-v1 br-lan apply eth1
+check ifdown lan cudy,tr3600-v1 br-lan skip
+check ifup lan other,device br-lan skip
+check ifup wwan cudy,tr3600-v1 eth0 skip
 check ifdown wan cudy,tr3600-v1 eth0 skip
 check ifup lan cudy,tr3600-v1 eth0 skip
 check ifup wan other,device eth0 skip
 check ifup wan cudy,tr3600-v1 eth1 skip
 check ifup wan cudy,tr3600-v1 '' skip
-printf 'WAN EEE hook: positive case and five isolation guards passed\n'
+printf 'WAN/LAN EEE hook: two positive cases and eight isolation guards passed\n'

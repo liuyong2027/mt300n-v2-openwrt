@@ -1,4 +1,4 @@
-Cudy TR3600 v1 / Mango 20-test-failover1 port, test1
+Cudy TR3600 v1 / Mango 20-test-failover1 port, test2 (pre-release)
 
 This is a test firmware, based on application commit
 1f6169759396a31d2e3beec35d300c1fe4f2eaec, OpenWrt 25.12.5
@@ -10,18 +10,11 @@ User-requested USB file sharing and Wi-Fi repeater support are included:
 Samba4 + LuCI Network Shares, block-mount, USB mass storage/UAS, ext4,
 exFAT, FAT and NTFS3; relayd + LuCI relay protocol for IPv4 pseudo bridging.
 Wireless client/routed repeater configuration uses the normal LuCI UI.
-L2TP/IPsec VPN server: Services / L2TP/IPsec VPN. Disabled by default.
-Set your own username, password and IPsec PSK (12-128 supported characters),
-choose a VPN /24 subnet different from LAN/upstream networks, then enable.
-Multiple accounts and concurrent clients, with a separate PPP interface
-for each session; up to 32 configured accounts and a .10-.99 IPv4 pool.
-This is a configuration limit, not a guarantee of 32-client performance.
-Authenticated clients can access LAN and use the router as an Internet
-gateway. Public IPv4 reachability is
-required; behind another router forward UDP 500/4500, and native ESP if
-NAT traversal is not used. Plaintext L2TP/UDP 1701 is blocked by nftables.
-Client must support L2TP/IPsec PSK with MS-CHAPv2 authentication.
-VPN secrets are private runtime files, not prefilled in this image.
+L2TP/IPsec server and Dynamic DNS are excluded at the owner request.
+PPP/PPPoE WAN support and ZeroTier remain. This is a test build, not a
+production release. On keep-settings upgrades, retired configurations
+are moved to a root-private backup and only owned VPN firewall sections
+are removed; LAN/WAN, proxy, USB shares and unrelated firewall rules remain.
 
 Only TR3600 hardware v1 (MT7987B / 512 MiB RAM / 256 MiB NAND).
 Build and emulation checks do not prove actual router acceptance.
@@ -54,8 +47,6 @@ ZIP above. Matching upstream sources keep their original licenses.
 
 After flashing, verify fan operation, LAN/WAN, 2.4/5 GHz, USB3, proxy
 connectivity and failover on the actual router before relying on this build.
-Also verify L2TP/IPsec from a separate external network with a compatible
-client; build checks do not establish actual VPN interoperability.
 USB sharing: configure the disk under System / Mount Points, then set the
 directory and access permissions under Services / Network Shares. No disk
 is reformatted and no unauthenticated share is created by this build.
@@ -68,7 +59,7 @@ and vendor UI are not included.
 
 Next firmware network defaults (2026-10-05):
 The WAN eth0 EEE / Tx LPI workaround is included with ethtool and runs
-on WAN ifup only for cudy,tr3600-v1. Existing Wi-Fi configuration is kept.
+on WAN/LAN ifup for cudy,tr3600-v1. Existing Wi-Fi configuration is kept.
 When generating a new 5 GHz radio, use channel 36, HE80 / 80 MHz and a
 separate default SSID Cudy-TR3600-5G. Set country and a secure password
 before enabling a fresh AP; no owner's wireless password is embedded.
@@ -93,3 +84,12 @@ connectivity confirmed; white slow = waiting; red solid = local exit offline;
 red slow = repeated upstream/proxy failure. Preserve system boot/upgrade/rescue.
 Only observe proxy probes; LED code never changes nodes, routes or services.
 See tr3600/LED-STATUS.txt. This source addition has not been rebuilt or flashed.
+
+Test2 upgrade: back up your configuration first. From an existing matching
+TR3600 OpenWrt image, keep settings can retain configured USB mounts/shares
+and owner Wi-Fi/proxy settings. USB/iPhone permissions fixed on the current
+router are owner configuration, not prefilled per-device defaults. No disk
+UUID, node credentials, Dynu credentials or wireless password is embedded.
+Physical LED, band steering and full new-image upgrade/reboot acceptance
+remain required. Current router WAN was observed at 100Mb/s; firmware
+cannot guarantee a cable/port negotiates gigabit. Test2 is not yet built.

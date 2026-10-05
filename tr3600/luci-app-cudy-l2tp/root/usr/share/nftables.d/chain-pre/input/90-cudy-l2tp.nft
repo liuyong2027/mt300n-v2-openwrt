@@ -1,4 +1,0 @@
-# Only IPsec-decrypted IPv4 L2TP reaches the server; reject plaintext first,
-# including established UDP flows and LAN packets.
-meta nfproto ipv4 udp dport 1701 ipsec in reqid != 0 counter accept
-udp dport 1701 counter drop

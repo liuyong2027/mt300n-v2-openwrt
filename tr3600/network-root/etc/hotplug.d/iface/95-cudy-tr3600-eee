@@ -1,13 +1,16 @@
 #!/bin/sh
 # MT7987 / RTL8221B EEE workaround, verified on this TR3600 v1.
-# Restrict to its WAN interface and leave all other devices untouched.
+# Restrict to this board's verified WAN eth0 and LAN eth1 interfaces.
 [ "$ACTION" = ifup ] || exit 0
-[ "$INTERFACE" = wan ] || exit 0
 [ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'cudy,tr3600-v1' ] || exit 0
-[ "$(uci -q get network.wan.device)" = eth0 ] || exit 0
+case "$INTERFACE" in
+    wan) [ "$(uci -q get network.wan.device)" = eth0 ] || exit 0; task_device=eth0;;
+    lan) [ "$(uci -q get network.lan.device)" = br-lan ] || exit 0; task_device=eth1;;
+    *) exit 0;;
+esac
 command -v ethtool >/dev/null 2>&1 || exit 0
-if ethtool --set-eee eth0 eee off tx-lpi off >/dev/null 2>&1; then
-    logger -t cudy-tr3600-eee 'WAN eth0 EEE and Tx LPI disabled'
+if ethtool --set-eee "$task_device" eee off tx-lpi off >/dev/null 2>&1; then
+    logger -t cudy-tr3600-eee "$INTERFACE $task_device EEE and Tx LPI disabled"
 else
-    logger -t cudy-tr3600-eee 'Failed to disable WAN eth0 EEE and Tx LPI'
+    logger -t cudy-tr3600-eee "Failed to disable $INTERFACE $task_device EEE and Tx LPI"
 fi

@@ -26,12 +26,8 @@ for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt79
              'PACKAGE_block-mount', 'PACKAGE_kmod-usb-storage',
              'PACKAGE_kmod-usb-storage-uas', 'PACKAGE_kmod-fs-ext4',
              'PACKAGE_kmod-fs-exfat', 'PACKAGE_kmod-fs-vfat',
-             'PACKAGE_kmod-fs-ntfs3', 'PACKAGE_luci-proto-relay', 'PACKAGE_relayd',
-             'PACKAGE_luci-app-cudy-l2tp', 'PACKAGE_cudy-l2tp-ifname', 'PACKAGE_xl2tpd', 'PACKAGE_ppp',
-             'PACKAGE_strongswan', 'PACKAGE_strongswan-charon', 'PACKAGE_strongswan-swanctl',
-             'PACKAGE_strongswan-mod-openssl', 'PACKAGE_strongswan-mod-kernel-netlink',
-             'PACKAGE_strongswan-mod-socket-default', 'PACKAGE_strongswan-mod-random',
-             'PACKAGE_kmod-nft-xfrm', 'PACKAGE_kmod-crypto-sha256'):
+             'PACKAGE_kmod-fs-ntfs3', 'PACKAGE_luci-proto-relay', 'PACKAGE_relayd'
+):
     assert 'CONFIG_'+name+'=y' in config, name
 assert 'CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024' in config
 images = list((tree/'bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1-squashfs-sysupgrade.bin'))
@@ -66,7 +62,7 @@ assert (extracted/'lib/upgrade/cudy-tr3600.sh').read_bytes() == (kit/'tr3600/cud
 def arm64(p):
     b = p.read_bytes()
     assert b[:6] == b'\x7fELF\x02\x01' and struct.unpack_from('<H', b, 18)[0] == 183, p
-for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd', 'usr/sbin/xl2tpd', 'usr/sbin/pppd', 'usr/sbin/swanctl', 'usr/lib/ipsec/charon', 'usr/lib/cudy-l2tp-ifname.so'):
+for name in ('usr/bin/xray', 'bin/busybox', 'usr/libexec/mango-tcpcheck', 'usr/sbin/smbd', 'usr/sbin/relayd'):
     arm64(extracted/name)
 network_root = kit/'tr3600/network-root'
 for source in network_root.rglob('*'):
@@ -105,13 +101,8 @@ assert 'cudy-led-upgrade suspend' in (extracted/'sbin/sysupgrade').read_text()
 assert (extracted/'usr/libexec/mango-probe').stat().st_mode & 0o111
 wireless_defaults = extracted/'lib/wifi/mac80211.uc'
 assert wireless_defaults.read_bytes() == (tree/'package/kernel/mac80211/files/lib/wifi/mac80211.uc').read_bytes()
-vpn_root = kit/'tr3600/luci-app-cudy-l2tp/root'
-for source in vpn_root.rglob('*'):
-    if source.is_file():
-        assert (extracted/source.relative_to(vpn_root)).read_bytes() == source.read_bytes(), source
-vpn_js = kit/'tr3600/luci-app-cudy-l2tp/htdocs/luci-static/resources/view/cudy-l2tp.js'
-vpn_minified = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=vpn_js.read_bytes(), stdout=subprocess.PIPE, check=True).stdout
-assert (extracted/'www/luci-static/resources/view/cudy-l2tp.js').read_bytes() == vpn_minified
+subprocess.run(['python3', str(kit/'tr3600/check-removed.py'), str(extracted), str(tree/'.config')], check=True)
+assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-test2'
 ui_source = (kit/'package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()
 assert hashlib.sha256(ui_source).hexdigest() == expected['ui_source_sha256']
 ui_expected = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=ui_source, stdout=subprocess.PIPE, check=True).stdout
@@ -128,7 +119,7 @@ assert len(linux) == 1
 symbols = (linux[0]/'System.map').read_text()
 assert '__param_dual_boot' in symbols and '__param_rootfs_volume' in symbols
 shutil.copyfile(linux[0]/'.config', reports/'actual-kernel.config')
-proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test1',
+proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test2',
          'image': image.name, 'image_bytes': image.stat().st_size,
          'image_sha256': hashlib.sha256(image.read_bytes()).hexdigest(),
          'container': 'sysupgrade tar with FIT kernel and SquashFS rootfs',
@@ -138,8 +129,8 @@ proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test1'
          'usb_sharing_and_repeater_packages': 'selected; smbd and relayd ARM64 binaries verified',
          'status_leds': 'selected; exact Lua/scripts/LuCI/probe hook and upgrade handoff verified; status mode default, night off',
          'unified_wifi': 'selected; full ARM64 wpad/usteer, exact helper/configuration and LuCI page verified; disabled by default',
-         'l2tp_ipsec_server': 'selected; ARM64 daemons, exact configuration and LuCI page verified; disabled by default',
-         'hardware_validation': 'pending; no router flashed'}
+         'removed_features': 'L2TP/IPsec server and dynamic DNS packages/pages absent; previous owned firewall/configuration cleanup included',
+         'hardware_validation': 'new image pending; previous test1 installed and reboot/USB/proxy checked'}
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)
 for source in ('tr3600-source.json', 'tr3600-verification.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config'):

@@ -1,1 +1,0 @@
-{"admin/services/cudy-l2tp":{"title":"L2TP/IPsec VPN","order":91,"action":{"type":"view","path":"cudy-l2tp"},"depends":{"acl":["luci-app-cudy-l2tp"],"uci":{"cudy_l2tp":true}}}}

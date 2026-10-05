@@ -1,1 +1,0 @@
-{"luci-app-cudy-l2tp":{"description":"Configure L2TP/IPsec VPN server","read":{"uci":["cudy_l2tp"]},"write":{"uci":["cudy_l2tp"],"file":{"/etc/init.d/cudy_l2tp":["exec"]}}}}
