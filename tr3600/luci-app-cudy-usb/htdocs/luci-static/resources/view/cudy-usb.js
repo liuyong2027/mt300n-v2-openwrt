@@ -78,9 +78,8 @@ return view.extend({
 			E('div',{'class':'cbi-value'},[E('label',{'class':'cbi-value-title'},'访问方式'),access]),button,
 			E('h3',{},'已授权磁盘'),
 			E('table',{'class':'table'},[
-				E('tr',{'class':'tr table-titles'},['共享','UUID','挂载目录','状态','访问方式','操作'].map(function(x){return E('th',{},x);})),
-				rows.length ? rows : E('tr',{},E('td',{'colspan':6},'尚未启用任何磁盘共享'))
-			]),
+				E('tr',{'class':'tr table-titles'},['共享','UUID','挂载目录','状态','访问方式','操作'].map(function(x){return E('th',{},x);}))
+			].concat(rows.length ? rows : [E('tr',{},E('td',{'colspan':6},'尚未启用任何磁盘共享'))])),
 			E('button',{'class':'btn','click':function(){self.refresh().catch(function(err){ui.addNotification(null,E('p',{},err.message),'error');});}},'刷新')
 		]);
 		this.container=E('div',{},root);

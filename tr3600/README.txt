@@ -68,7 +68,7 @@ fell from 40% to 0%; reported 5 GHz direct throughput was 284/50.7 Mbps,
 and after returning to proxy mode 359/55 Mbps, with normal page opening.
 These are user-reported measurements. A new image still requires the
 complete build and packed-image verification before delivery.
-Optional unified Wi-Fi: Network / 双频合一. Disabled by default. Select
+Optional unified Wi-Fi: Network / Wireless / Wi-Fi 双频合一 tab. Disabled by default. Select
 two enabled LAN APs, a shared SSID/security/password, and optionally enable
 local usteer band steering with full wpad and 802.11k/v. Leaving the shared
 password blank reuses the selected 5 GHz password. Disabling unification
