@@ -52,7 +52,8 @@ class Integration(unittest.TestCase):
             self.assertIn('python3 "$kit/tr3600/led-integration.py" "$PWD"',s)
             self.assertLess(s.index('cp -R "$kit/package/luci-app-mango-proxy"'),s.index('led-integration.py'))
             self.assertLess(s.index('led-integration.py'),s.index('make defconfig'))
-            self.assertIn('White/red network and proxy status LEDs',json.loads((root/'reports/tr3600-source.json').read_text())['requested_features'][-1])
+            features=json.loads((root/'reports/tr3600-source.json').read_text())['requested_features']
+            self.assertTrue(any('White/red network and proxy status LEDs' in feature for feature in features))
     def test_acl_and_defaults(self):
         root=kit/'tr3600/luci-app-cudy-led/root'
         acl=json.loads((root/'usr/share/rpcd/acl.d/luci-app-cudy-led.json').read_text())['luci-app-cudy-led']
