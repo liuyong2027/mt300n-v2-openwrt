@@ -62,7 +62,7 @@ exit 0
     s = runtime.read_text(encoding='utf-8').replace('qemu-mipsel-static', 'qemu-aarch64-static').replace('actual_mips_xray', 'actual_arm64_xray').replace('MIPS', 'ARM64')
     runtime.write_text(s, encoding='utf-8', newline='\n')
     (ROOT/'files/etc/mango-device').write_text('cudy,tr3600-v1\n')
-    (ROOT/'files/etc/cudy-release').write_text('tr3600-rc1\n')
+    (ROOT/'files/etc/cudy-release').write_text('tr3600-1.0.0\n')
     (ROOT/'files/etc/mango-kernel-profile').write_text('openwrt-filogic-default\n')
     shutil.copyfile(ROOT/'tr3600/cudy-upgrade.sh', ROOT/'files/lib-upgrade-cudy.tmp')
     destination = ROOT/'files/lib/upgrade/cudy-tr3600.sh'

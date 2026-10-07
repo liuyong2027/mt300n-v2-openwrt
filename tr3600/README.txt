@@ -1,115 +1,80 @@
-Cudy TR3600 v1 / Mango 20-test-failover1 port, RC1 USB/SS integration (release candidate)
+Cudy TR3600 V1.0 - 1.0.0 release build
 
-This is a test firmware, based on application commit
-1f6169759396a31d2e3beec35d300c1fe4f2eaec, OpenWrt 25.12.5
-f0a60eee2fe051741c643ea6118718aae1ef17fb and the original locked feeds.
-The Mango proxy UI, R3 Xray patch, subscription, failover and ZeroTier
-packages are retained. The kernel uses OpenWrt Filogic defaults rather
-than the Mango MT76x8 production kernel flag set.
-User-requested USB file sharing and Wi-Fi repeater support are included:
-Samba4 + LuCI Network Shares, block-mount, USB mass storage/UAS, ext4,
-exFAT, FAT and NTFS3; relayd + LuCI relay protocol for IPv4 pseudo bridging.
-Wireless client/routed repeater configuration uses the normal LuCI UI.
-L2TP/IPsec server and Dynamic DNS are excluded at the owner request.
-PPP/PPPoE WAN support and ZeroTier remain. This is a test build, not a
-production release. On keep-settings upgrades, retired configurations
-are moved to a root-private backup and only owned VPN firewall sections
-are removed; LAN/WAN, proxy, USB shares and unrelated firewall rules remain.
+Only for Cudy TR3600 V1.0 (cudy,tr3600-v1 / R126).
+This is a community custom firmware, not a Cudy vendor firmware release.
+Read RELEASE-NOTES.txt for accepted RC1 tests and the limits of this image.
+Build proof, source commit and image SHA256 are in tr3600-verification.json.
+A successful build does not mean this new image has already been installed.
 
-Only TR3600 hardware v1 (MT7987B / 512 MiB RAM / 256 MiB NAND).
-Build and emulation checks do not prove actual router acceptance.
+Locked sources: application 1f6169759396a31d2e3beec35d300c1fe4f2eaec;
+OpenWrt 25.12.5 f0a60eee2fe051741c643ea6118718aae1ef17fb and locked feeds.
+Mango UI, R3 Xray patch, subscriptions, failover and ZeroTier are retained.
+The upstream application keeps its 20-test-failover1 marker for provenance;
+/etc/cudy-release identifies this device firmware as tr3600-1.0.0.
+OpenWrt Filogic kernel defaults and XZ SquashFS with 1 MiB blocks are retained.
+
+Included:
+- Private ZeroTier SS server under Services / SS 服务端. AES-128-GCM,
+  AES-256-GCM or ChaCha20-Poly1305; TCP/UDP follow existing proxy routing.
+  Default disabled, no prefilled credentials or personal network IDs.
+  First enable requires exactly one eligible private ZeroTier IPv4 /24 and
+  explicit confirmation of the displayed scope. Set a 24-128 byte secret.
+  Existing scope is not changed automatically. Only approved ZeroTier
+  interface/subnet traffic is accepted; no WAN access is enabled.
+  Valid guard checks no longer take the proxy operation lock. Repairs still
+  require locking, rechecking and validation before changing rules.
+- USB: Services / Network Shares / USB 文件共享. Select a partition, share
+  name and read-only/read-write access, then explicitly enable sharing.
+  UUID authorization is remembered; reinsertion restores the share.
+  FAT, exFAT, ext4, NTFS3, USB storage and UAS drivers are included.
+  Guests on LAN receive the selected access to the authorized partition.
+  No automatic formatting, filesystem repair or recursive permission changes.
+  Safely unmount every partition before unplugging. Missing per-share
+  metadata is recreated; duplicate UUIDs and invalid mounts are rejected.
+- Optional dual-band unification in Network / Wireless / Wi-Fi 双频合一.
+  Select two enabled LAN APs and shared SSID/security/password. Optional
+  local usteer suggests 5 GHz to supported clients; clients decide whether
+  to switch. Default disabled; disabling restores backed-up AP settings.
+  New APs remain disabled until the owner sets country and security.
+  New 5 GHz configuration defaults to channel 36/HE80.
+- Client/AP repeater and IPv4 relayd pseudo bridge through normal LuCI.
+  Routed repeater LAN and upstream should use different subnets.
+- Recommended white/red LED status, optional night schedule off by default.
+  White solid: recent success; white slow: waiting; red solid: no local exit;
+  red slow: repeated upstream/proxy failure. Ordinary LAN or unrelated USB
+  events do not reset the exit identity.
+- WAN/LAN EEE and Tx LPI workaround, PPP/PPPoE, Samba4 and full wpad.
+
+L2TP/IPsec server and Dynamic DNS remain excluded. Upgrade migration privately
+backs up retired configuration and removes only project-owned VPN rules.
+Cudy vendor UI, App, cloud management and Mesh are not included.
+
+Upgrade from a matching custom TR3600 OpenWrt image:
+1. Back up settings and retain the previous image locally.
+2. Connect by LAN cable and verify the image against SHA256SUMS.
+3. Upload sysupgrade.bin under LuCI System / Backup / Flash Firmware.
+   Keep settings to retain network, proxy, SS, ZeroTier and USB authorization.
+   Never force an upgrade that reports a device mismatch.
+4. Wait for reboot, then check the version and your proxy/SS/USB/LED functions.
+   A source commit or build never upgrades the running router automatically.
 
 From stock Cudy firmware:
-1. Confirm TR3600 v1 on the label and save the stock configuration.
-2. Obtain official Develop_files_for_TR3600.zip from:
+1. Confirm TR3600 V1.0 and save original settings.
+2. Obtain the official Develop_files_for_TR3600.zip and follow its README:
    https://www.cudy.com/zh-cn/pages/download-center/tr3600-1-0
-3. Read the official README. Flash its Intermediate firmware/
-   cudy_tr3600-v1-sysupgrade_260715.bin through the Cudy web interface.
-4. After it boots, install this TR3600 squashfs-sysupgrade.bin through
-   OpenWrt LuCI, with Keep settings disabled (-n). Do not use forced upgrade.
-5. Connect by Ethernet. Fresh LAN is http://192.168.8.1 . Set the root
-   password and configure Wi-Fi country/security/enable in LuCI.
+3. Follow its Intermediate firmware/ cudy_tr3600-v1-sysupgrade_260715.bin
+   migration procedure before installing this OpenWrt sysupgrade image.
+4. Do not keep vendor/intermediate settings during that migration. Fresh LAN
+   is http://192.168.8.1 . Set the administrator password and Wi-Fi security.
 
-The build includes the official configurable UBI rootfs/boot parameter
-kernel patch and a TR3600-only dual-slot upgrade dispatcher. The helper
-checks active/inactive slot names and writes both inactive volumes before
-changing boot environment. Shared rootfs_data is recreated; this is not a
-guarantee of automatic rollback or retention of vendor configuration.
-Bootloader, Factory and bdinfo partitions are not written by this helper.
-
-Hardware DTS corrections: PWM0@GPIO13 for fan, GPIO6 supply, red GPIO46,
+The TR3600-only dual-slot helper validates slot names, writes both inactive
+volumes and then changes boot variables. Shared rootfs_data is recreated and
+selected configuration restored; automatic rollback is not guaranteed.
+Bootloader, Factory and bdinfo are not written by this helper.
+Hardware corrections retain PWM0/GPIO13 fan, GPIO6 supply, red GPIO46,
 white GPIO48, radio MAC offsets base+0/base+16 and active thermal maps.
-Device support PR: https://github.com/openwrt/openwrt/pull/24596
-Hardware review: https://github.com/openwrt/openwrt/pull/24596#issuecomment-5226298465
-DTS fixes source: https://github.com/hyqhyq3/openwrt-cudy-tr3600/blob/main/cudy-tr3600-v1-fixes.patch
-Vendor dual-image patch and notes originate from the official development
-ZIP above. Matching upstream sources keep their original licenses.
-
-After flashing, verify fan operation, LAN/WAN, 2.4/5 GHz, USB3, proxy
-connectivity and failover on the actual router before relying on this build.
-USB sharing: configure the disk under System / Mount Points, then set the
-directory and access permissions under Services / Network Shares. No disk
-is reformatted and no unauthenticated share is created by this build.
-Repeater: use Network / Wireless to scan and join the upstream Wi-Fi,
-create a DHCP client interface (e.g. wwan) in the WAN firewall zone, and
-configure a local AP. Keep the local LAN on a different subnet. For IPv4
-pseudo bridging, configure relayd through Network / Interfaces instead.
-These are OpenWrt equivalents; the Cudy App, cloud management, Cudy Mesh
-and vendor UI are not included.
-
-Next firmware network defaults (2026-10-05):
-The WAN eth0 EEE / Tx LPI workaround is included with ethtool and runs
-on WAN/LAN ifup for cudy,tr3600-v1. Existing Wi-Fi configuration is kept.
-When generating a new 5 GHz radio, use channel 36, HE80 / 80 MHz and a
-separate default SSID Cudy-TR3600-5G. Set country and a secure password
-before enabling a fresh AP; no owner's wireless password is embedded.
-The running user's router was repaired in place: gateway packet loss
-fell from 40% to 0%; reported 5 GHz direct throughput was 284/50.7 Mbps,
-and after returning to proxy mode 359/55 Mbps, with normal page opening.
-These are user-reported measurements. A new image still requires the
-complete build and packed-image verification before delivery.
-Optional unified Wi-Fi: Network / Wireless / Wi-Fi 双频合一 tab. Disabled by default. Select
-two enabled LAN APs, a shared SSID/security/password, and optionally enable
-local usteer band steering with full wpad and 802.11k/v. Leaving the shared
-password blank reuses the selected 5 GHz password. Disabling unification
-restores the original AP options and steering configuration from a private
-backup retained on keep-settings upgrades. Guest/repeater interfaces are
-excluded. Steering requests supported clients to use 5 GHz with adequate
-signal; it does not guarantee that every client chooses the best band.
-See tr3600/WIFI-UNIFICATION.md for behavior and validation limits.
-
-Status LEDs: System / 指示灯. Recommended status mode is the new-image default;
-optional 23:00-07:00 night mode is disabled by default. White solid = recent
-connectivity confirmed; white slow = waiting; red solid = local exit offline;
-red slow = repeated upstream/proxy failure. Preserve system boot/upgrade/rescue.
-Only observe proxy probes; LED code never changes nodes, routes or services.
-See tr3600/LED-STATUS.txt and the included build verification report.
-Physical LED, night-mode and upgrade-indication acceptance remain pending.
-
-Test2 upgrade: back up your configuration first. From an existing matching
-TR3600 OpenWrt image, keep settings can retain configured USB mounts/shares
-and owner Wi-Fi/proxy settings. USB/iPhone permissions fixed on the current
-router are owner configuration, not prefilled per-device defaults. No disk
-UUID, node credentials, Dynu credentials or wireless password is embedded.
-Physical LED, band steering and full new-image upgrade/reboot acceptance
-remain required. Current router WAN was observed at 100Mb/s; firmware
-cannot guarantee a cable/port negotiates gigabit. Only install an image whose
-included build verification report confirms all required checks passed.
-
-RC1 (2026-10-07): private ZeroTier Shadowsocks server under Services / SS 服务端.
-The same Xray process follows the existing routing, proxy and node failover.
-AES-128-GCM / AES-256-GCM / ChaCha20-Poly1305; TCP and UDP. Disabled by default,
-with no prefilled password or owner network identifiers. On a fresh install,
-join exactly one private ZeroTier network with one private IPv4 /24; the page
-shows its address/subnet before explicit enable. Set a 24–128 byte secret.
-Existing authorized scope and credentials are retained on keep-settings
-upgrades. They are never included in the image or public build reports.
-Changes are preflighted under the shared core operation lock. Old/new endpoint
-guards remain until the new listener is confirmed; failure restores the prior
-private settings and guard. Only approved ZeroTier interface/subnet traffic
-is accepted; no WAN port forward is created. L2TP/DDNS remain removed.
-LED fixes: GFW mode is recognized; only the real default-route exit and proxy
-state affect identity. Ordinary LAN or unrelated USB changes do not reset
-connectivity confirmation. Physical reboot/LAN/USB acceptance is still needed.
-Current SS peer connectivity was user-confirmed; new RC1 full-image acceptance
-is pending. This artifact is not a formal production Release.
+Device sources: https://github.com/openwrt/openwrt/pull/24596
+https://github.com/hyqhyq3/openwrt-cudy-tr3600/blob/main/cudy-tr3600-v1-fixes.patch
+Vendor dual-image support originates from the official development ZIP.
+Upstream and bundled sources retain their original licenses.
+Source documentation: USB-SHARING.md, WIFI-UNIFICATION.md and LED-STATUS.txt.

@@ -1,6 +1,7 @@
 #!/bin/bash
 set -Eeuo pipefail
 root=$(realpath "$1")
+sh tr3600/test-ss-guard-lock.sh tr3600/luci-app-cudy-ss/root/usr/libexec/cudy-ss-zt-guard
 module=tr3600/luci-app-cudy-ss/root/usr/lib/mango/ss-zt.lua
 transaction=tr3600/luci-app-cudy-ss/root/usr/lib/mango/ss-transaction.lua
 export CUDY_TEST_ROOT="$root" LUA_CPATH="$root/usr/lib/lua/?.so" LUA_PATH="$root/usr/lib/lua/?.lua;$root/usr/lib/lua/?/init.lua"
@@ -45,5 +46,5 @@ python3 - <<'PY'
 from pathlib import Path
 import json
 assert len(list(Path('reports/ss-configs').glob('*.json')))==3
-Path('reports/ss-validation.json').write_text(json.dumps({'actual_arm64_settings_and_scope':'passed','actual_arm64_worker_uci_private_backup':'passed; service/nft substituted in lifecycle fixture','actual_arm64_cipher_configs':3,'network_namespace_nft':'separate mandatory test','hardware_upgrade_reboot':'pending'},indent=2))
+Path('reports/ss-validation.json').write_text(json.dumps({'guard_lock_regressions':9,'actual_arm64_settings_and_scope':'passed','actual_arm64_worker_uci_private_backup':'passed; service/nft substituted in lifecycle fixture','actual_arm64_cipher_configs':3,'network_namespace_nft':'separate mandatory test','hardware_upgrade_reboot':'pending'},indent=2))
 PY

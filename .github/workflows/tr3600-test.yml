@@ -1,5 +1,5 @@
 {
-  "name": "Cudy TR3600 v1 - RC1 (private SS, LED fixes, USB consent)",
+  "name": "Cudy TR3600 V1.0 - 1.0.0 release build",
   "on": {
     "push": {
       "branches": [
@@ -17,7 +17,7 @@
     "actions": "read"
   },
   "concurrency": {
-    "group": "tr3600-rc1-${{ github.ref }}",
+    "group": "tr3600-1.0.0-${{ github.ref }}",
     "cancel-in-progress": true
   },
   "jobs": {
@@ -82,7 +82,7 @@
           "run": "make download -j4 2>&1 | tee ../download.log"
         },
         {
-          "name": "Compile Cudy TR3600 v1 RC1 firmware",
+          "name": "Compile Cudy TR3600 v1 1.0.0 firmware",
           "run": "make -j2 V=s 2>&1 | tee ../build.log",
           "id": "compile",
           "working-directory": "openwrt"
@@ -100,10 +100,10 @@
           "run": "set -Eeuo pipefail\npython3 tr3600/verify.py 2>&1 | tee reports/final-image-check.log"
         },
         {
-          "name": "Upload verified TR3600 RC1 firmware",
+          "name": "Upload verified TR3600 1.0.0 firmware",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "cudy-tr3600-v1-mango20-rc1",
+            "name": "cudy-tr3600-v1-1.0.0",
             "path": "tr3600-assets/",
             "retention-days": 90,
             "if-no-files-found": "error"

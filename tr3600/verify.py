@@ -139,7 +139,7 @@ ss_defaults=(extracted/'etc/config/cudy_ss').read_text()
 assert "option enabled '0'" in ss_defaults
 for key in ('password','listen','subnet','network_id','interface'): assert 'option '+key not in ss_defaults
 assert not (extracted/'etc/cudy-ss').exists(), 'Private guard/journal data must only be created on the router'
-assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-rc1'
+assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-1.0.0'
 ui_source = (kit/'package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()
 assert hashlib.sha256(ui_source).hexdigest() == expected['ui_source_sha256']
 ui_expected = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=ui_source, stdout=subprocess.PIPE, check=True).stdout
@@ -147,6 +147,7 @@ assert (extracted/'www/luci-static/resources/view/mango-proxy.js').read_bytes() 
 runtime = json.loads((reports/'runtime-validation.json').read_text())
 ss_runtime=json.loads((reports/'ss-validation.json').read_text())
 assert ss_runtime['actual_arm64_settings_and_scope']=='passed' and ss_runtime['actual_arm64_cipher_configs']==3
+assert ss_runtime['guard_lock_regressions'] == 9
 assert runtime['actual_arm64_xray'] == 'passed' and runtime['configurations'] > 0
 assert runtime['core_sha256'] == hashlib.sha256((extracted/'usr/bin/xray').read_bytes()).hexdigest()
 subprocess.run([str(tree/'staging_dir/host/bin/fwtool'), '-i', str(reports/'image-metadata.json'), str(image)], check=True)
@@ -158,7 +159,7 @@ assert len(linux) == 1
 symbols = (linux[0]/'System.map').read_text()
 assert '__param_dual_boot' in symbols and '__param_rootfs_volume' in symbols
 shutil.copyfile(linux[0]/'.config', reports/'actual-kernel.config')
-proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-rc1', 'source_commit': os.getenv('GITHUB_SHA'),
+proof = {'device': 'cudy,tr3600-v1', 'version': 'tr3600-1.0.0', 'application_version': '20-test-failover1', 'source_commit': os.getenv('GITHUB_SHA'),
          'image': image.name, 'image_bytes': image.stat().st_size,
          'image_sha256': hashlib.sha256(image.read_bytes()).hexdigest(),
          'container': 'sysupgrade tar with FIT kernel and SquashFS rootfs',
@@ -171,11 +172,14 @@ proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-rc1', 
          'ss_server': {'installed':'exact CLI/guard/watcher/transaction/RPC/LuCI; original core backups and narrow hooks verified; default disabled, no owner key/scope/network ID','arm64_checks':ss_runtime},
          'unified_wifi': 'selected; full ARM64 wpad/usteer, exact helper/configuration and LuCI page verified; disabled by default',
          'removed_features': 'L2TP/IPsec server and dynamic DNS packages/pages absent; previous owned firewall/configuration cleanup included',
-         'hardware_validation': 'RC1 keep-settings upgrade/reboot/USB replug pending; previous test3 and current SS peer connectivity user-confirmed'}
+         'hardware_validation': 'RC1 baseline accepted on TR3600 V1.0: upgrade, reboot, SS peer, ZeroTier rejoin, USB consent/reinsert and LAN replug; guard hotfix passed isolated actual ARM64 regression and short live observation. This newly built 1.0.0 image has not yet been installed.',
+         'release_status': '1.0.0 release build; not automatically flashed or published to GitHub Releases',
+         'validation_limits': 'Long-duration guard observation, physical fault/night/upgrade LEDs, current iPhone Files client and writable NTFS were not all covered; see RELEASE-NOTES.txt'}
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)
 for source in ('tr3600-source.json', 'tr3600-verification.json', 'ss-validation.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config'):
     shutil.copyfile(reports/source, assets/source)
 shutil.copyfile(kit/'tr3600/README.txt', assets/'README.txt')
+shutil.copyfile(kit/'tr3600/RELEASE-NOTES.txt', assets/'RELEASE-NOTES.txt')
 (assets/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(assets.iterdir()) if p.is_file()))
 print(json.dumps(proof, indent=2))

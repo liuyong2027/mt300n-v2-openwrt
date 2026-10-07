@@ -1,4 +1,4 @@
-# USB 文件共享（test3，待实机验收）
+# USB 文件共享
 
 LuCI“服务 → 网络共享 → USB 文件共享”标签页提供分区选择、共享名称、局域网访客读写或只读，以及启用、卸载、取消授权。原 Samba 页面保留在“共享设置”标签页；旧 USB 页面地址仍可跳转。
 新盘不会自动共享。首次点击启用后按 UUID 记住授权，同一分区再次插入会恢复；多个分区使用不同共享名称。
@@ -13,6 +13,6 @@ Samba 必须只绑定 lan，模板保留 bind interfaces only=yes；本功能不
 安全卸载先停止共享连接、同步写入，再进行普通 umount；不用强制或 lazy 卸载。失败明确报告并恢复配置。卸载后保留授权但本次插入不再自动挂载，重新插入后恢复。取消授权同样先卸载，成功后不再记住此盘。拔出整块磁盘前须卸载它的所有分区。
 
 测试包含纯 Lua 生命周期/错误回退、真实 ARM64 UCI/nixio 私有备份与元数据目录重建、锁定 Samba init 生成/testparm 校验、LuCI 操作/刷新与 ACL 校验、最终固件精确内容核验。
-新控制器的实机换盘、拔插、Windows/iPhone 读写及忙碌卸载仍需刷写后验收；现有盘已通过的 SMB 测试属于当前旧版配置，不冒充新版验收。
+RC1 实机已验证新 NTFS 盘授权只读、安全卸载、重新插入恢复和取消授权，以及换回原 FAT32 盘后自动恢复和 SMB3.1.1 读写/中文名/改名/删除/ADS。当前 iPhone“文件”客户端、可写 NTFS 和忙碌卸载实际客户端表现未全部覆盖。1.0.0 新镜像安装后仍须确认，详见 RELEASE-NOTES.txt。
 
 挂载机制参考 [OpenWrt](https://openwrt.org/docs/techref/block_mount)，元数据机制参考 [Samba xattr_tdb](https://www.samba.org/samba/docs/current/man-html/vfs_xattr_tdb.8.html)。
