@@ -1,0 +1,4 @@
+#!/bin/sh
+chmod 600 /etc/config/cudy_wifi
+/etc/init.d/cudy_wifi enable
+exit 0

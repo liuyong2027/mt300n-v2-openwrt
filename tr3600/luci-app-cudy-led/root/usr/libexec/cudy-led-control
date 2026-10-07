@@ -1,0 +1,24 @@
+#!/usr/bin/lua
+local runtime=require('cudy.led-runtime')
+local json=require('luci.jsonc')
+local command=arg[1]
+if command=='validate' then
+    local c,message=runtime.config()
+    if not c then io.stderr:write(message..'\n'); os.exit(1) end
+elseif command=='begin' then
+    local token=runtime.begin()
+    if token then io.write(json.stringify(token)) end
+elseif command=='finish' then
+    local token=json.parse(arg[2] or '')
+    if arg[3] ~= '0' and arg[3] ~= '1' then os.exit(1) end
+    runtime.finish(token,arg[3]=='0')
+elseif command=='restore' then
+    os.exit(runtime.restore() and 0 or 1)
+elseif command=='run' then
+    local ok=pcall(runtime.run)
+    if not ok then
+        runtime.restore()
+        io.stderr:write('指示灯服务失败；已尝试恢复原有灯光\n')
+        os.exit(1)
+    end
+else os.exit(1) end

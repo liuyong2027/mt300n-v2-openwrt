@@ -1,0 +1,4 @@
+config server 'main'
+	option enabled '0'
+	option port '8388'
+	option method 'aes-128-gcm'

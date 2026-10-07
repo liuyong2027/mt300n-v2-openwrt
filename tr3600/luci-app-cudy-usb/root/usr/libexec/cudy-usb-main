@@ -1,0 +1,23 @@
+#!/usr/bin/lua
+local json=require('luci.jsonc')
+local engine=require('cudy.usb')
+local u=require('uci').cursor()
+local e=require('cudy.usb-runtime').new(u)
+local ok,result=pcall(function()
+	local fs=require('nixio.fs')
+	assert((fs.readfile('/tmp/sysinfo/board_name') or ''):match('^cudy,tr3600%-v1%s*$'),'仅适用 Cudy TR3600 v1')
+	local action=arg[1]
+	if action=='status' and #arg==1 then return engine.status(u,e) end
+	if action=='enable' and #arg==4 then return engine.enable(u,e,arg[2],arg[3],arg[4]) end
+	if (action=='eject' or action=='forget') and #arg==2 then return engine.eject(u,e,arg[2],action=='forget') end
+	if action=='guard' and #arg==3 then engine.guard(u,e,arg[2],arg[3]); return {message='挂载检查通过'} end
+	if action=='migrate' and #arg==1 then return engine.migrate(u,e) end
+	if action=='reconcile' and #arg==1 then return engine.reconcile(u,e) end
+	if action=='hotplug' and #arg==3 and (arg[2]=='add' or arg[2]=='remove') then
+		if arg[2]=='add' then e.clear_device_ejection(arg[3]) end
+		return engine.reconcile(u,e)
+	end
+	error('操作参数无效',0)
+end)
+if ok then print(json.stringify({ok=true,result=result})) else print(json.stringify({ok=false,message=tostring(result)})) end
+os.exit(ok and 0 or 1)

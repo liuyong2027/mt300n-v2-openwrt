@@ -1,0 +1,160 @@
+#!/usr/bin/lua
+local fs=require('nixio.fs')
+local n=require('nixio')
+local j=require('luci.jsonc')
+local M=dofile('/usr/lib/mango/ss-zt.lua')
+local T=dofile('/usr/lib/mango/ss-transaction.lua')
+local run='/var/run/cudy-ss-ui'
+local journal='/etc/cudy-ss/ui-transaction'
+local stage=run..'/stage.'..n.getpid()
+local configfile='/etc/config/cudy_ss'
+local guardfile='/etc/cudy-ss/guard.nft'
+local function quote(s) return "'"..s:gsub("'","'\\''").."'" end
+local function command(cmd) return os.execute(cmd..' >/dev/null 2>&1')==0 end
+local function capture(cmd)
+    local p=assert(io.popen(cmd)); local s=p:read('*a'); p:close(); return s
+end
+local function write(path,data)
+    local temp=path..'.new.'..n.getpid()
+    if not fs.writefile(temp,data) or not fs.chmod(temp,'600') or not fs.rename(temp,path) then fs.remove(temp); return false end
+    return true
+end
+local function raw() return require('uci').cursor():get_all('cudy_ss','main') end
+local function validated(r)
+    if not r then return end
+    return M.validate(r)
+end
+local function install_guard(c)
+    local text=M.guard(c)
+    if not write(stage..'/guard.nft',text) then return false end
+    return command('nft -c -f '..quote(stage..'/guard.nft')) and
+        command('nft -f '..quote(stage..'/guard.nft')) and write(guardfile,text)
+end
+local function retired_guard(old,candidate)
+    local text=M.bridge(old.raw,candidate)
+    return write(stage..'/retired.nft',text) and command('nft -c -f '..quote(stage..'/retired.nft')) and
+        command('nft -f '..quote(stage..'/retired.nft'))
+end
+local function reload()
+    return command('CUDY_SS_UI_TRANSACTION=1 MANGO_OPERATION_LOCK=1 MANGO_APPLY_WORKER=1 /etc/init.d/mango_proxy reload')
+end
+local function verify(r)
+    local c=validated(r)
+    local networks=j.parse(capture('timeout 3 zerotier-cli -j listnetworks 2>/dev/null')) or {}
+    local wanted=c and M.available(c,networks) or false
+    local config=j.parse(fs.readfile('/var/etc/mango/config.json') or '')
+    local tokens=capture('/usr/libexec/mango-process snapshot')
+    if wanted or tokens~='' then
+        if not M.matches(config,c,wanted) then return false end
+    elseif c then
+        if not M.matches(config,nil,false) then return false end
+    end
+    return command('CUDY_SS_UI_TRANSACTION=1 MANGO_OPERATION_LOCK=1 /usr/libexec/mango-ready') and
+        command('CUDY_SS_UI_TRANSACTION=1 MANGO_OPERATION_LOCK=1 /usr/libexec/cudy-ss-zt ready')
+end
+local function clean_journal()
+    fs.remove(journal..'/old-config'); fs.remove(journal..'/old-guard'); fs.rmdir(journal)
+end
+assert(os.getenv('MANGO_OPERATION_LOCK')=='1' and fs.readlink('/proc/self/fd/9')==fs.realpath('/var/lock/mango-operation.lock'))
+local function restore_journal()
+    if not fs.access(journal) then return true end
+    local data=fs.readfile(journal..'/old-config')
+    if not data then return false end
+    if not write(configfile,data) then return false end
+    if not install_guard(validated(raw())) then return false end
+    return true
+end
+if not fs.access(run) then assert(fs.mkdir(run)) end
+assert(fs.chmod(run,'700'))
+assert(fs.mkdir(stage))
+assert(fs.chmod(stage,'700'))
+-- On boot restore any interrupted candidate before the proxy starts. The old
+-- and new endpoints remain restricted until the next verified reload.
+if arg[1]=='recover' then
+    if not fs.access(journal) then fs.rmdir(stage); os.exit(0) end
+    local ok=restore_journal()
+    if ok and capture('/usr/libexec/mango-process snapshot')~='' then ok=reload() and verify(raw()) end
+    if ok then
+        ok=command('nft destroy table inet cudy_ss_retired')
+        if ok then clean_journal(); fs.remove(run..'/pending.json'); write(run..'/status.json',j.stringify({error='上次应用中断，已恢复原设置。'})) end
+    end
+    fs.remove(stage..'/guard.nft'); fs.rmdir(stage)
+    os.exit(ok and 0 or 1)
+end
+local candidate=j.parse(fs.readfile(run..'/pending.json') or '')
+local prior={}
+local env={
+    snapshot=function()
+        if fs.access(journal) then
+            if not restore_journal() or not reload() or not verify(raw()) then return end
+            clean_journal()
+        end
+        assert(capture('uci -q changes cudy_ss')=='')
+        prior={raw=raw(),bytes=assert(fs.readfile(configfile)),pids=capture('/usr/libexec/mango-process snapshot')}
+        validated(prior.raw)
+        return prior
+    end,
+    stage=function(r)
+        assert(type(r)=='table')
+        -- Revalidate the immutable scope against the current private config.
+        local networks=j.parse(capture('timeout 3 zerotier-cli -j listnetworks 2>/dev/null')) or {}
+        local approved=M.request(prior.raw,{enabled=r.enabled=='1',port=tonumber(r.port),method=r.method,password=r.password or ''},networks)
+        for _,k in ipairs({'enabled','port','method','password','listen','subnet','interface','network_id'}) do assert(approved[k]==r[k]) end
+        if r.enabled=='1' and r.port~=prior.raw.port then
+            local suffix=string.format(':%04X',tonumber(r.port))
+            for _,protocol in ipairs({'tcp','tcp6','udp','udp6'}) do
+                for line in (fs.readfile('/proc/net/'..protocol) or ''):gmatch('[^\n]+') do
+                    local fields={}; for v in line:gmatch('%S+') do fields[#fields+1]=v end
+                    assert(not (fields[2] and fields[2]:sub(-5)==suffix and (fields[4]=='0A' or fields[4]=='07')))
+                end
+            end
+        end
+        local core=assert(j.parse(capture('/usr/libexec/mango-generate.cudy-ss-base json')))
+        M.augment(core,validated(r),r.enabled=='1')
+        assert(write(stage..'/candidate.json',j.stringify(core)))
+        return command('/usr/libexec/mango-preflight '..quote(stage..'/candidate.json'))
+    end,
+    protect=function(old,r)
+        assert(fs.mkdir(journal)); assert(fs.chmod(journal,'700'))
+        assert(write(journal..'/old-config',old.bytes))
+        assert(write(journal..'/old-guard',fs.readfile(guardfile) or M.guard(validated(old.raw))))
+        assert(command('sync'))
+        return retired_guard(old,r)
+    end,
+    commit=function(r)
+        assert(write(stage..'/cudy_ss',prior.bytes))
+        assert(fs.mkdir(stage..'/delta')); assert(fs.chmod(stage..'/delta','700'))
+        local u=require('uci').cursor(stage,stage..'/delta')
+        for _,k in ipairs({'enabled','port','method','password','listen','subnet','interface','network_id'}) do if r[k]~=nil then assert(u:set('cudy_ss','main',k,r[k])) end end
+        assert(u:commit('cudy_ss'))
+        return write(configfile,assert(fs.readfile(stage..'/cudy_ss')))
+    end,
+    guard=function(r) return install_guard(validated(r)) end,
+    reload=reload,
+    verify=verify,
+    finalize=function()
+        local tokens={}; for p in prior.pids:gmatch('%S+') do assert(p:match('^%d+:%d+$')); tokens[#tokens+1]=p end
+        if not command('/usr/libexec/mango-process wait '..table.concat(tokens,' ')) then return false end
+        if not command('nft destroy table inet cudy_ss_retired') then return false end
+        clean_journal(); return not fs.access(journal)
+    end,
+    restore=function(old) return write(configfile,old.bytes) end,
+    rollback_guard=function(old) return install_guard(validated(old.raw)) end,
+    rollback_verify=function(old) return verify(old.raw) end
+}
+local called,ok,message,restored=pcall(T.apply,candidate,env)
+if not called then ok=false; message='worker failed' end
+local error=''
+if not ok then
+    if restored==true then error='应用失败，已恢复原设置；请检查端口和配置后重试。'
+    elseif restored==false then error='应用失败，自动恢复未完成；访问保护仍保留，请检查服务。'
+    elseif fs.access(journal) then error='中断任务的恢复未完成，SS 暂停开放；请检查服务。'
+    else error='配置校验失败，原设置未修改。' end
+end
+if ok or restored==true then command('/etc/init.d/cudy_ss restart') end
+write(run..'/status.json',j.stringify({error=error,result=message,rollback=restored}))
+fs.remove(run..'/pending.json')
+for _,name in ipairs({'candidate.json','guard.nft','retired.nft','cudy_ss','cudy_ss.new'}) do fs.remove(stage..'/'..name) end
+fs.remove(stage..'/delta/cudy_ss'); fs.rmdir(stage..'/delta')
+fs.rmdir(stage)
+os.exit(ok and 0 or 1)

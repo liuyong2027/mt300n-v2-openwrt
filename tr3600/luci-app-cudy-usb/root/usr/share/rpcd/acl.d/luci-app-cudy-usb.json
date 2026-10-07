@@ -1,0 +1,1 @@
+{"luci-app-cudy-usb":{"description":"Authorize USB partitions for LAN guest sharing","read":{"file":{"/usr/libexec/cudy-usb status":["exec"]}},"write":{"file":{"/usr/libexec/cudy-usb enable *":["exec"],"/usr/libexec/cudy-usb eject *":["exec"],"/usr/libexec/cudy-usb forget *":["exec"]}}}}

@@ -1,0 +1,90 @@
+--- a/drivers/mtd/ubi/block.c
++++ b/drivers/mtd/ubi/block.c
+@@ -93,6 +93,12 @@ static DEFINE_IDR(ubiblock_minor_idr);
+ static DEFINE_MUTEX(devices_mutex);
+ static int ubiblock_major;
+ 
++static char rootfs_volume[256] = "rootfs";
++module_param_string(rootfs_volume, rootfs_volume, sizeof(rootfs_volume), 0444);
++
++static bool no_default_rootdev;
++module_param(no_default_rootdev, bool, 0444);
++
+ static int __init ubiblock_set_param(const char *val,
+ 				     const struct kernel_param *kp)
+ {
+@@ -433,8 +439,9 @@ int ubiblock_create(struct ubi_volume_in
+ 		 dev->ubi_num, dev->vol_id, vi->name);
+ 	mutex_unlock(&devices_mutex);
+ 
+-	if (!strcmp(vi->name, "rootfs") &&
++	if (!strcmp(vi->name, rootfs_volume) &&
+ 	    IS_ENABLED(CONFIG_MTD_ROOTFS_ROOT_DEV) &&
++		!no_default_rootdev &&
+ 	    ROOT_DEV == 0) {
+ 		pr_notice("ubiblock: device ubiblock%d_%d (%s) set to be root filesystem\n",
+ 			  dev->ubi_num, dev->vol_id, vi->name);
+@@ -602,7 +609,7 @@ static void ubiblock_create_auto_rootfs(
+ 	int ret, is_ubifs;
+ 	struct ubi_volume_desc *desc;
+ 
+-	if (strcmp(vi->name, "rootfs") &&
++	if (strcmp(vi->name, rootfs_volume) &&
+ 	    strcmp(vi->name, "fit"))
+ 		return;
+ 
+--- a/kernel/Makefile
++++ b/kernel/Makefile
+@@ -11,6 +11,8 @@ obj-y     = fork.o exec_domain.o panic.o
+ 	    kthread.o sys_ni.o nsproxy.o \
+ 	    notifier.o ksysfs.o cred.o reboot.o \
+ 	    async.o range.o smpboot.o ucount.o regset.o ksyms_common.o
++		
++obj-y += boot_param.o
+ 
+ obj-$(CONFIG_USERMODE_DRIVER) += usermode_driver.o
+ obj-$(CONFIG_MULTIUSER) += groups.o
+ 
+--- /dev/null
++++ b/kernel/boot_param.c
+@@ -0,0 +1,40 @@
++#include <linux/kernel.h>
++#include <linux/moduleparam.h>
++
++#define BOOT_PARAM_STR_MAX_LEN			256
++
++bool dual_boot;
++module_param(dual_boot, bool, 0444);
++
++static bool reset_boot_count;
++module_param(reset_boot_count, bool, 0444);
++
++static bool no_split_rootfs_data;
++module_param(no_split_rootfs_data, bool, 0444);
++
++static bool reserve_rootfs_data;
++module_param(reserve_rootfs_data, bool, 0444);
++
++static uint boot_image_slot;
++module_param(boot_image_slot, uint, 0444);
++
++static uint upgrade_image_slot;
++module_param(upgrade_image_slot, uint, 0444);
++
++static char rootfs_data_part[BOOT_PARAM_STR_MAX_LEN];
++module_param_string(rootfs_data_part, rootfs_data_part, BOOT_PARAM_STR_MAX_LEN, 0644);
++
++static char boot_kernel_part[BOOT_PARAM_STR_MAX_LEN];
++module_param_string(boot_kernel_part, boot_kernel_part, BOOT_PARAM_STR_MAX_LEN, 0444);
++
++static char boot_rootfs_part[BOOT_PARAM_STR_MAX_LEN];
++module_param_string(boot_rootfs_part, boot_rootfs_part, BOOT_PARAM_STR_MAX_LEN, 0444);
++
++static char upgrade_kernel_part[BOOT_PARAM_STR_MAX_LEN];
++module_param_string(upgrade_kernel_part, upgrade_kernel_part, BOOT_PARAM_STR_MAX_LEN, 0444);
++
++static char upgrade_rootfs_part[BOOT_PARAM_STR_MAX_LEN];
++module_param_string(upgrade_rootfs_part, upgrade_rootfs_part, BOOT_PARAM_STR_MAX_LEN, 0444);
++
++static char env_part[BOOT_PARAM_STR_MAX_LEN];
++module_param_string(env_part, env_part, BOOT_PARAM_STR_MAX_LEN, 0444);

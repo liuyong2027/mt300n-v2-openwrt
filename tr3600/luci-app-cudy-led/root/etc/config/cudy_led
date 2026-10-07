@@ -1,0 +1,5 @@
+config led 'main'
+	option mode 'status'
+	option night '0'
+	option night_start '23:00'
+	option night_end '07:00'

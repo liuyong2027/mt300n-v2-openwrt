@@ -1,0 +1,29 @@
+#!/usr/bin/lua
+local uci = require('uci').cursor()
+local fs = require('nixio.fs')
+local json = require('luci.jsonc')
+local engine = require('cudy.wifi')
+local path = '/etc/cudy-wifi-backup.json'
+if arg[1] ~= 'apply' and arg[1] ~= 'boot' then os.exit(1) end
+local env = {
+    board=function() return (fs.readfile('/tmp/sysinfo/board_name') or ''):gsub('%s+$','') end,
+    available=function() return fs.access('/sbin/usteerd','x') and fs.access('/etc/init.d/usteer','x') end,
+    load=function()
+        if not fs.access(path) then return end
+        local data = json.parse(fs.readfile(path) or '')
+        if not data then return nil,true end
+        return data
+    end,
+    save=function(data)
+        local tmp = path..'.tmp'
+        if not fs.writefile(tmp,'') or not fs.chmod(tmp,'600') then return false end
+        if not fs.writefile(tmp,json.stringify(data)) then fs.remove(tmp); return false end
+        if not fs.rename(tmp,path) then fs.remove(tmp); return false end
+        return true
+    end,
+    erase=function() return fs.remove(path) end,
+    run=function(command) return os.execute(command..' >/dev/null 2>&1') == 0 end
+}
+local ok,message = engine.apply(uci,env,arg[1] == 'boot')
+if ok then io.stdout:write(message..'\n') else io.stderr:write(message..'\n') end
+os.exit(ok and 0 or 1)

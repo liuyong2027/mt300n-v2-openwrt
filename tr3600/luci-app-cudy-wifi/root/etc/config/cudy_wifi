@@ -1,0 +1,4 @@
+config wifi 'main'
+	option enabled '0'
+	option steering '1'
+	option encryption 'sae-mixed'

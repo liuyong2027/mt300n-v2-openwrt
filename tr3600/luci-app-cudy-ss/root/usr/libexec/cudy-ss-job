@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+umask 077
+run=/var/run/cudy-ss-ui
+mkdir -p "$run" /var/lock
+chmod 700 "$run"
+case "${1:-}" in
+ queue)
+    case "${2:-}" in /var/run/cudy-ss-ui/request.*) ;; *) exit 2;; esac
+    suffix=${2##*/request.}
+    case "$suffix" in ''|*[!0-9]*) exit 2;; esac
+    [ -f "$2/candidate.json" ] && [ ! -L "$2" ] && [ ! -L "$2/candidate.json" ]
+    exec 6>/var/lock/cudy-ss-ui-queue.lock
+    flock -w 2 6
+    [ ! -e "$run/pending.json" ]
+    flock -n /var/lock/cudy-ss-ui-job.lock true
+    mv "$2/candidate.json" "$run/pending.json"
+    printf '%s\n' '{"error":""}' > "$run/status.json"
+    /usr/libexec/cudy-ss-job worker </dev/null >/dev/null 2>&1 6>&- 8>&- 9>&- &
+    ;;
+ worker)
+    exec 7>/var/lock/cudy-ss-ui-job.lock
+    flock -n 7 || exit 0
+    if /usr/libexec/mango-lock /usr/libexec/cudy-ss-worker; then :
+    elif [ -f "$run/pending.json" ]; then
+        if [ -d /etc/cudy-ss/ui-transaction ]; then
+            printf '%s\n' '{"error":"应用中断，访问保护仍保留；请检查服务并恢复原设置。"}' > "$run/status.json"
+        else
+            printf '%s\n' '{"error":"无法完成配置任务，原设置未修改；请稍后重试。"}' > "$run/status.json"
+        fi
+        rm -f "$run/pending.json"
+    fi
+    ;;
+ *) exit 2;;
+esac
