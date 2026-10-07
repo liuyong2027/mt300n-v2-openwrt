@@ -34,10 +34,34 @@ local function hash(command)
     local s=M.capture(command..' | sha256sum'):match('^(%x+)')
     return s and #s==64 and s or nil
 end
+function M.uplink_data()
+    -- Only default exits affect Internet health. LAN carrier changes and unrelated
+    -- USB/network interfaces must not discard successful proxy observations.
+    local routes=M.capture('ip -4 route show table main default'):gsub(' expires %S+','')
+    local out={routes}; local devices={}
+    for dev in routes:gmatch('%f[%w]dev%s+(%S+)') do
+        if not dev:match('^[%w_.:%-]+$') then
+            out[#out+1]='invalid-device'
+        else devices[dev]=true end
+    end
+    local ordered={}; for dev in pairs(devices) do ordered[#ordered+1]=dev end
+    table.sort(ordered)
+    for _,dev in ipairs(ordered) do
+        local link=M.capture('ip -o link show dev '..dev)
+        local addresses=M.capture('ip -o -4 addr show dev '..dev..' scope global')
+        local inet={}; for address in addresses:gmatch('%f[%w]inet%s+(%S+)') do inet[#inet+1]=address end
+        table.sort(inet) -- Lease countdowns and address output order are irrelevant.
+        out[#out+1]=dev..'|'..(link:match('<([^>]*)>') or 'unknown')..'|'..
+            trim(fs.readfile('/sys/class/net/'..dev..'/operstate'))..'|'..
+            trim(fs.readfile('/sys/class/net/'..dev..'/carrier'))..'|'..table.concat(inet,',')
+    end
+    return table.concat(out,'\n')
+end
 function M.identity()
     local runtime=hash('/usr/libexec/mango-runtime-id')
     local config=hash('uci -q export mango_proxy')
-    local uplink=hash('{ ip -4 route show table main default; ip -o -4 addr show; ip -o link show; }')
+    local data=M.uplink_data():gsub("'", "'\\''")
+    local uplink=hash("printf '%s' '"..data.."'")
     if runtime and config and uplink then return runtime..':'..config..':'..uplink end
 end
 function M.snapshot()

@@ -1,0 +1,10 @@
+#!/bin/sh
+# ZeroTier may finish joining after the proxy's boot start. Bounded reapply only
+# when its private, authorized interface is available and SS is not configured.
+while sleep 30; do
+    /usr/libexec/cudy-ss-zt-guard || continue
+    if /usr/libexec/cudy-ss-zt needs-apply; then
+        /usr/libexec/mango-apply-job request >/dev/null 2>&1 || :
+        sleep 240
+    fi
+done

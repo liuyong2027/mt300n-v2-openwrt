@@ -1,0 +1,64 @@
+#!/usr/bin/lua
+local fs=require('nixio.fs')
+local j=require('luci.jsonc')
+local uci=require('uci').cursor()
+local M=dofile('/usr/lib/mango/ss-zt.lua')
+local function capture(command)
+    local p=assert(io.popen(command)); local s=p:read('*a'); p:close(); return s
+end
+local c=M.validate(uci:get_all('cudy_ss','main'))
+local function journal_blocked()
+    return fs.access('/etc/cudy-ss/ui-transaction') and not
+        (os.getenv('CUDY_SS_UI_TRANSACTION')=='1' and os.getenv('MANGO_OPERATION_LOCK')=='1' and
+        fs.readlink('/proc/self/fd/9')==fs.realpath('/var/lock/mango-operation.lock'))
+end
+local function guard_ok()
+    if journal_blocked() then return false end
+    return c and fs.readfile('/etc/cudy-ss/guard.nft')==M.guard(c) and
+        os.execute('nft list table inet cudy_ss_zt >/dev/null 2>&1')==0
+end
+local function network_ok() return M.available(c,j.parse(capture('zerotier-cli -j listnetworks 2>/dev/null'))) end
+local function available() return network_ok() and guard_ok() end
+local action=arg[1]
+if action=='augment' then
+    local base=assert(j.parse(io.read('*a')),'Invalid base JSON')
+    -- SS is omitted while ZeroTier is offline; ordinary proxy generation still works.
+    io.write(j.stringify(M.augment(base,c,available())),'\n')
+elseif action=='guard' then io.write(M.guard(c))
+elseif action=='guard-ok' then os.exit(guard_ok() and 0 or 1)
+elseif action=='available' then os.exit(available() and 0 or 1)
+elseif action=='needs-apply' then
+    local config=j.parse(fs.readfile('/var/etc/mango/config.json') or '')
+    os.exit(M.matches(config,c,c and available() or false) and 1 or 0)
+elseif action=='ready' then
+    local config=j.parse(fs.readfile('/var/etc/mango/config.json') or '')
+    local production={}
+    for pid in capture('pidof xray 2>/dev/null'):gmatch('%d+') do
+        if (fs.readfile('/proc/'..pid..'/cmdline') or ''):gsub('%z',' ')==
+            '/usr/bin/xray run -config /var/etc/mango/config.json ' then production[#production+1]=pid end
+    end
+    if not c or not network_ok() or journal_blocked() then
+        os.exit((#production==0 or M.matches(config,nil,false)) and 0 or 1)
+    end
+    if not guard_ok() or not M.matches(config,c,true) then os.exit(1) end
+    -- Check both sockets belong to the same real production Xray, not another process.
+    local ip=M.ip(c.listen)
+    local address=string.format('%02X%02X%02X%02X:%04X',ip[4],ip[3],ip[2],ip[1],c.port)
+    for _,pid in ipairs(production) do
+        local cmd=(fs.readfile('/proc/'..pid..'/cmdline') or ''):gsub('%z',' ')
+        if cmd=='/usr/bin/xray run -config /var/etc/mango/config.json ' then
+            local owned={}
+            local p=fs.dir('/proc/'..pid..'/fd')
+            if p then for fd in p do local inode=(fs.readlink('/proc/'..pid..'/fd/'..fd) or ''):match('^socket:%[(%d+)%]$'); if inode then owned[inode]=true end end end
+            local seen={}
+            for _,protocol in ipairs({'tcp','udp'}) do
+                for line in (fs.readfile('/proc/'..pid..'/net/'..protocol) or ''):gmatch('[^\n]+') do
+                    local fields={}; for field in line:gmatch('%S+') do fields[#fields+1]=field end
+                    if fields[2]==address and fields[4]==(protocol=='tcp' and '0A' or '07') and owned[fields[10]] then seen[protocol]=true end
+                end
+            end
+            if seen.tcp and seen.udp then os.exit(0) end
+        end
+    end
+    os.exit(1)
+else error('Unknown SS operation') end

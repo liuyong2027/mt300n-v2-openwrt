@@ -43,6 +43,7 @@ def adapt():
     replace_once(prepare, 'chmod +x package/luci-app-mango-proxy', 'cp -R "$kit/tr3600/luci-app-cudy-wifi" package/\nchmod +x package/luci-app-cudy-wifi/root/etc/init.d/cudy_wifi package/luci-app-cudy-wifi/root/etc/uci-defaults/93-cudy-wifi package/luci-app-cudy-wifi/root/usr/libexec/cudy-wifi-*\nchmod +x package/luci-app-mango-proxy')
     replace_once(prepare, 'chmod +x package/luci-app-mango-proxy', 'cp -R "$kit/tr3600/luci-app-cudy-led" package/\nchmod +x package/luci-app-cudy-led/root/usr/libexec/cudy-led-* package/luci-app-cudy-led/root/etc/init.d/cudy_led package/luci-app-cudy-led/root/etc/uci-defaults/92-cudy-led package/luci-app-cudy-led/root/etc/hotplug.d/ntp/95-cudy-led\npython3 "$kit/tr3600/led-integration.py" "$PWD"\nchmod +x package/luci-app-mango-proxy')
     replace_once(prepare, 'chmod +x package/luci-app-mango-proxy', 'cp -R "$kit/tr3600/luci-app-cudy-usb" package/\nchmod +x package/luci-app-cudy-usb/root/usr/libexec/cudy-usb* package/luci-app-cudy-usb/root/etc/init.d/cudy_usb package/luci-app-cudy-usb/root/etc/uci-defaults/94-cudy-usb package/luci-app-cudy-usb/root/etc/hotplug.d/block/99-cudy-usb\npython3 "$kit/tr3600/usb-integration.py" "$PWD"\nchmod +x package/luci-app-mango-proxy')
+    replace_once(prepare, 'chmod +x package/luci-app-mango-proxy', 'cp -R "$kit/tr3600/luci-app-cudy-ss" package/\nchmod +x package/luci-app-cudy-ss/root/usr/libexec/cudy-ss-* package/luci-app-cudy-ss/root/usr/libexec/rpcd/cudy.ss package/luci-app-cudy-ss/root/etc/init.d/cudy_ss package/luci-app-cudy-ss/root/etc/uci-defaults/95-cudy-ss\nchmod 600 package/luci-app-cudy-ss/root/etc/config/cudy_ss\npython3 "$kit/tr3600/ss-integration.py" "$PWD"\nchmod +x package/luci-app-mango-proxy')
     replace_once(prepare, 'CONFIG_TARGET_ramips_mt76x8_DEVICE_glinet_gl-mt300n-v2=y', 'CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1=y')
     # Preserve LAN 192.168.8.1. Leave wireless disabled until the owner configures
     # country/password in LuCI; do not copy the Mango's open 2.4 GHz AP defaults.
@@ -61,7 +62,7 @@ exit 0
     s = runtime.read_text(encoding='utf-8').replace('qemu-mipsel-static', 'qemu-aarch64-static').replace('actual_mips_xray', 'actual_arm64_xray').replace('MIPS', 'ARM64')
     runtime.write_text(s, encoding='utf-8', newline='\n')
     (ROOT/'files/etc/mango-device').write_text('cudy,tr3600-v1\n')
-    (ROOT/'files/etc/cudy-release').write_text('tr3600-test3\n')
+    (ROOT/'files/etc/cudy-release').write_text('tr3600-rc1\n')
     (ROOT/'files/etc/mango-kernel-profile').write_text('openwrt-filogic-default\n')
     shutil.copyfile(ROOT/'tr3600/cudy-upgrade.sh', ROOT/'files/lib-upgrade-cudy.tmp')
     destination = ROOT/'files/lib/upgrade/cudy-tr3600.sh'
@@ -78,7 +79,7 @@ exit 0
                   'openwrt_commit': 'f0a60eee2fe051741c643ea6118718aae1ef17fb',
                   'device_patch_commit': '046aec0dccd90f5a156cb8e9725c121c81955dd3',
                   'device': 'cudy,tr3600-v1', 'kernel_profile': 'OpenWrt Filogic defaults',
-                  'requested_features': ['USB file sharing (Samba4) with LuCI per-partition consent, remembered UUID, metadata repair and safe unmount', 'Wi-Fi client/AP repeater', 'IPv4 relayd pseudo bridge', 'Optional unified dual-band Wi-Fi with local usteer and private restore backup', 'White/red network and proxy status LEDs with optional night mode'],
+                  'requested_features': ['USB file sharing (Samba4) with LuCI per-partition consent, remembered UUID, metadata repair and safe unmount', 'Wi-Fi client/AP repeater', 'IPv4 relayd pseudo bridge', 'Optional unified dual-band Wi-Fi with local usteer and private restore backup', 'White/red network and proxy status LEDs with GFW support and exit-only identity', 'Private ZeroTier SS server with LuCI, authenticated AES/ChaCha20, atomic guarded apply and private rollback'],
                   'excluded_features': ['L2TP/IPsec VPN server', 'Dynamic DNS'], 'hardware_validation': 'new image pending', 'wireless_first_boot': 'disabled; configure country and password in LuCI'}
     (ROOT/'reports').mkdir(exist_ok=True)
     (ROOT/'reports/tr3600-source.json').write_text(json.dumps(provenance, indent=2)+'\n')

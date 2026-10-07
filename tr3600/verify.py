@@ -11,6 +11,7 @@ import tarfile
 from importlib.machinery import SourceFileLoader
 led_integration = SourceFileLoader("led_integration", str(Path(__file__).parent/"led-integration.py")).load_module()
 usb_integration = SourceFileLoader("usb_integration", str(Path(__file__).parent/"usb-integration.py")).load_module()
+ss_integration = SourceFileLoader("ss_integration", str(Path(__file__).parent/"ss-integration.py")).load_module()
 
 kit = Path(__file__).resolve().parents[1]
 tree = kit/'openwrt'
@@ -20,7 +21,7 @@ assets.mkdir(exist_ok=False)
 config = (tree/'.config').read_text().splitlines()
 for name in ('TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1', 'PACKAGE_kmod-mt7990-firmware',
              'PACKAGE_mt7987-2p5g-phy-firmware', 'PACKAGE_kmod-hwmon-pwmfan',
-             'PACKAGE_ethtool', 'PACKAGE_luci-app-cudy-wifi', 'PACKAGE_luci-app-cudy-led', 'PACKAGE_luci-app-cudy-usb', 'PACKAGE_usteer', 'PACKAGE_wpad-mbedtls',
+             'PACKAGE_ethtool', 'PACKAGE_luci-app-cudy-wifi', 'PACKAGE_luci-app-cudy-led', 'PACKAGE_luci-app-cudy-usb', 'PACKAGE_luci-app-cudy-ss', 'PACKAGE_usteer', 'PACKAGE_wpad-mbedtls',
              'PACKAGE_luci-lib-nixio', 'PACKAGE_luci-lib-jsonc', 'PACKAGE_coreutils-timeout',
              'PACKAGE_kmod-usb3', 'PACKAGE_uboot-envtools', 'LUCI_JSMIN',
              'PACKAGE_luci-app-samba4', 'PACKAGE_samba4-server',
@@ -55,6 +56,15 @@ for name, digest in expected['source_rootfs_sha256'].items():
         original = (kit/'package/luci-app-mango-proxy/root'/name).read_bytes()
         assert hashlib.sha256(original).hexdigest() == digest, name
         assert (extracted/name).read_bytes() == led_integration.patch_probe(original.decode()).encode(), name
+    elif name in ss_integration.WRAPPERS:
+        original = (kit/'package/luci-app-mango-proxy/root'/name).read_bytes()
+        assert hashlib.sha256(original).hexdigest() == digest, name
+        assert (extracted/(name+'.cudy-ss-base')).read_bytes()==original, name
+        assert (extracted/name).read_bytes()==ss_integration.WRAPPERS[name].encode(), name
+    elif name=='etc/init.d/mango_proxy':
+        original=(kit/'package/luci-app-mango-proxy/root'/name).read_bytes()
+        assert hashlib.sha256(original).hexdigest()==digest,name
+        assert (extracted/name).read_bytes()==ss_integration.patch_init(original.decode()).encode(),name
     else:
         assert hashlib.sha256((extracted/name).read_bytes()).hexdigest() == digest, name
 assert (extracted/'etc/mango-release').read_text().strip() == '20-test-failover1'
@@ -116,12 +126,27 @@ assert (extracted/'usr/libexec/mango-probe').stat().st_mode & 0o111
 wireless_defaults = extracted/'lib/wifi/mac80211.uc'
 assert wireless_defaults.read_bytes() == (tree/'package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc').read_bytes()
 subprocess.run(['python3', str(kit/'tr3600/check-removed.py'), str(extracted), str(tree/'.config')], check=True)
-assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-test3'
+ss_root=kit/'tr3600/luci-app-cudy-ss/root'
+for source in ss_root.rglob('*'):
+    if source.is_file():
+        installed=extracted/source.relative_to(ss_root)
+        assert installed.read_bytes()==source.read_bytes(),source
+        if source.read_bytes().startswith(b'#!'): assert installed.stat().st_mode & 0o111,installed
+ss_js=kit/'tr3600/luci-app-cudy-ss/htdocs/luci-static/resources/view/cudy-ss.js'
+ss_minified=subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')],input=ss_js.read_bytes(),stdout=subprocess.PIPE,check=True).stdout
+assert (extracted/'www/luci-static/resources/view/cudy-ss.js').read_bytes()==ss_minified
+ss_defaults=(extracted/'etc/config/cudy_ss').read_text()
+assert "option enabled '0'" in ss_defaults
+for key in ('password','listen','subnet','network_id','interface'): assert 'option '+key not in ss_defaults
+assert not (extracted/'etc/cudy-ss').exists(), 'Private guard/journal data must only be created on the router'
+assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-rc1'
 ui_source = (kit/'package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()
 assert hashlib.sha256(ui_source).hexdigest() == expected['ui_source_sha256']
 ui_expected = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=ui_source, stdout=subprocess.PIPE, check=True).stdout
 assert (extracted/'www/luci-static/resources/view/mango-proxy.js').read_bytes() == ui_expected
 runtime = json.loads((reports/'runtime-validation.json').read_text())
+ss_runtime=json.loads((reports/'ss-validation.json').read_text())
+assert ss_runtime['actual_arm64_settings_and_scope']=='passed' and ss_runtime['actual_arm64_cipher_configs']==3
 assert runtime['actual_arm64_xray'] == 'passed' and runtime['configurations'] > 0
 assert runtime['core_sha256'] == hashlib.sha256((extracted/'usr/bin/xray').read_bytes()).hexdigest()
 subprocess.run([str(tree/'staging_dir/host/bin/fwtool'), '-i', str(reports/'image-metadata.json'), str(image)], check=True)
@@ -133,7 +158,7 @@ assert len(linux) == 1
 symbols = (linux[0]/'System.map').read_text()
 assert '__param_dual_boot' in symbols and '__param_rootfs_volume' in symbols
 shutil.copyfile(linux[0]/'.config', reports/'actual-kernel.config')
-proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test3',
+proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-rc1', 'source_commit': os.getenv('GITHUB_SHA'),
          'image': image.name, 'image_bytes': image.stat().st_size,
          'image_sha256': hashlib.sha256(image.read_bytes()).hexdigest(),
          'container': 'sysupgrade tar with FIT kernel and SquashFS rootfs',
@@ -142,13 +167,14 @@ proof = {'device': 'cudy,tr3600-v1', 'version': '20-test-failover1-tr3600-test3'
          'ui_jsmin_comparison': 'passed', 'dual_boot_kernel_parameters': 'present',
          'usb_sharing_and_repeater_packages': 'selected; smbd and relayd ARM64 binaries verified',
          'usb_disk_consent': 'selected; exact LuCI/helpers/menu/ACL, per-share Samba guards and ARM64 metadata VFS modules verified; new disks not shared without consent',
-         'status_leds': 'selected; exact Lua/scripts/LuCI/probe hook and upgrade handoff verified; status mode default, night off',
+         'status_leds': 'selected; GFW and exit-only LAN/USB identity fixes; exact Lua/scripts/LuCI/probe hook and upgrade handoff verified; status mode default, night off',
+         'ss_server': {'installed':'exact CLI/guard/watcher/transaction/RPC/LuCI; original core backups and narrow hooks verified; default disabled, no owner key/scope/network ID','arm64_checks':ss_runtime},
          'unified_wifi': 'selected; full ARM64 wpad/usteer, exact helper/configuration and LuCI page verified; disabled by default',
          'removed_features': 'L2TP/IPsec server and dynamic DNS packages/pages absent; previous owned firewall/configuration cleanup included',
-         'hardware_validation': 'new image pending; previous test1 installed and reboot/USB/proxy checked'}
+         'hardware_validation': 'RC1 keep-settings upgrade/reboot/USB replug pending; previous test3 and current SS peer connectivity user-confirmed'}
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)
-for source in ('tr3600-source.json', 'tr3600-verification.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config'):
+for source in ('tr3600-source.json', 'tr3600-verification.json', 'ss-validation.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config'):
     shutil.copyfile(reports/source, assets/source)
 shutil.copyfile(kit/'tr3600/README.txt', assets/'README.txt')
 (assets/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(assets.iterdir()) if p.is_file()))

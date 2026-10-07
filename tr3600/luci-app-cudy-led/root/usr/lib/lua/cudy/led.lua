@@ -49,7 +49,7 @@ function M.step(m,c,s)
         if m.offline then reset(m,s) end
         m.offline=nil
         if s.uplink == 0 and not s.busy and s.id and s.id ~= '' and
-           (s.mode == 'direct' or s.mode == 'split' or s.mode == 'global') then
+           (s.mode == 'direct' or s.mode == 'split' or s.mode == 'global' or s.mode == 'gfw') then
             local p=s.sample
             if s.mode ~= 'direct' and s.ready == false and s.now-m.since >= 180 then
                 -- A dead core is a local fault, independent of the probe toggle.

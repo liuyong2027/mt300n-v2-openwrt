@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+umask 077
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = cudy,tr3600-v1 ] || exit 0
+mkdir -p /etc/cudy-ss /var/lock
+chmod 700 /etc/cudy-ss
+chmod 600 /etc/config/cudy_ss
+exec 9>/var/lock/mango-operation.lock
+flock -w 90 9
+export MANGO_OPERATION_LOCK=1
+if [ -d /etc/cudy-ss/ui-transaction ]; then
+    /usr/libexec/cudy-ss-worker recover
+fi
+lua - <<'LUA'
+local u=require('uci').cursor();local f=require('nixio.fs')
+local M=dofile('/usr/lib/mango/ss-zt.lua')
+local path='/etc/cudy-ss/guard.nft'
+local c=M.validate(u:get_all('cudy_ss','main'))
+local text=M.guard(c)
+assert(f.writefile(path..'.new',text));assert(f.chmod(path..'.new','600'));assert(f.rename(path..'.new',path))
+local old=u:get_all('firewall','cudy_ss_guard')
+if old then
+    assert(old['.type']=='include' and old.path==path,'Conflicting firewall include; refusing to overwrite')
+end
+assert(u:set('firewall','cudy_ss_guard','include'))
+for k,v in pairs({enabled='1',type='nftables',position='ruleset-pre',path=path}) do assert(u:set('firewall','cudy_ss_guard',k,v)) end
+assert(u:commit('firewall'))
+LUA
+# Source files are installed by the package; preserve only private settings and
+# guard/journal data across upgrades. No personal credentials are in the image.
+/etc/init.d/cudy_ss enable

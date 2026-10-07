@@ -1,4 +1,4 @@
-Cudy TR3600 v1 / Mango 20-test-failover1 port, test3 USB sharing (pre-release)
+Cudy TR3600 v1 / Mango 20-test-failover1 port, RC1 USB/SS integration (release candidate)
 
 This is a test firmware, based on application commit
 1f6169759396a31d2e3beec35d300c1fe4f2eaec, OpenWrt 25.12.5
@@ -95,3 +95,21 @@ Physical LED, band steering and full new-image upgrade/reboot acceptance
 remain required. Current router WAN was observed at 100Mb/s; firmware
 cannot guarantee a cable/port negotiates gigabit. Only install an image whose
 included build verification report confirms all required checks passed.
+
+RC1 (2026-10-07): private ZeroTier Shadowsocks server under Services / SS 服务端.
+The same Xray process follows the existing routing, proxy and node failover.
+AES-128-GCM / AES-256-GCM / ChaCha20-Poly1305; TCP and UDP. Disabled by default,
+with no prefilled password or owner network identifiers. On a fresh install,
+join exactly one private ZeroTier network with one private IPv4 /24; the page
+shows its address/subnet before explicit enable. Set a 24–128 byte secret.
+Existing authorized scope and credentials are retained on keep-settings
+upgrades. They are never included in the image or public build reports.
+Changes are preflighted under the shared core operation lock. Old/new endpoint
+guards remain until the new listener is confirmed; failure restores the prior
+private settings and guard. Only approved ZeroTier interface/subnet traffic
+is accepted; no WAN port forward is created. L2TP/DDNS remain removed.
+LED fixes: GFW mode is recognized; only the real default-route exit and proxy
+state affect identity. Ordinary LAN or unrelated USB changes do not reset
+connectivity confirmation. Physical reboot/LAN/USB acceptance is still needed.
+Current SS peer connectivity was user-confirmed; new RC1 full-image acceptance
+is pending. This artifact is not a formal production Release.

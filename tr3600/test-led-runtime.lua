@@ -88,6 +88,81 @@ test('wrong board never touches LEDs',function()
 end)
 local production_snapshot=R.snapshot
 local production_capture=R.capture
+test('uplink identity ignores LAN and unrelated USB network interface changes',function()
+    init()
+    local lan,usb='UP','absent'
+    local calls={}
+    R.capture=function(command)
+        calls[#calls+1]=command
+        if command=='ip -4 route show table main default' then return 'default via 192.168.0.1 dev eth0 proto static src 192.168.0.101' end
+        if command=='ip -o link show dev eth0' then return '2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP' end
+        if command=='ip -o -4 addr show dev eth0 scope global' then return '2: eth0 inet 192.168.0.101/24 brd 192.168.0.255 scope global eth0 valid_lft 120 preferred_lft 120' end
+        if command:find('eth1',1,true) then return lan end
+        if command:find('usb0',1,true) then return usb end
+        error('unexpected all-interface query: '..command)
+    end
+    files['/sys/class/net/eth0/operstate']='up\n'; files['/sys/class/net/eth0/carrier']='1\n'
+    local before=R.uplink_data(); lan='DOWN'; usb='UP'
+    assert(before==R.uplink_data())
+    for _,command in ipairs(calls) do assert(not command:find('eth1',1,true) and not command:find('usb0',1,true)) end
+    R.capture=production_capture
+end)
+
+test('uplink identity detects WAN link address gateway and selected exit changes',function()
+    init(); local dev,address,gateway='eth0','192.168.0.101/24','192.168.0.1'
+    R.capture=function(command)
+        if command=='ip -4 route show table main default' then return 'default via '..gateway..' dev '..dev end
+        if command=='ip -o link show dev '..dev then return '2: '..dev..': <UP,LOWER_UP> mtu 1500 state UP' end
+        if command=='ip -o -4 addr show dev '..dev..' scope global' then return '2: '..dev..' inet '..address..' scope global' end
+        error('unexpected query: '..command)
+    end
+    files['/sys/class/net/eth0/operstate']='up'; files['/sys/class/net/eth0/carrier']='1'
+    local before=R.uplink_data()
+    files['/sys/class/net/eth0/carrier']='0'; assert(before~=R.uplink_data()); files['/sys/class/net/eth0/carrier']='1'
+    address='192.168.0.102/24'; assert(before~=R.uplink_data()); address='192.168.0.101/24'
+    gateway='192.168.0.2'; assert(before~=R.uplink_data()); gateway='192.168.0.1'
+    dev='pppoe-wan'; address='114.246.103.22/32'; assert(before~=R.uplink_data())
+    R.capture=production_capture
+end)
+
+test('uplink identity ignores address lease timers',function()
+    init(); local lifetime='120'
+    R.capture=function(command)
+        if command=='ip -4 route show table main default' then return 'default dev pppoe-wan' end
+        if command=='ip -o link show dev pppoe-wan' then return '8: pppoe-wan: <POINTOPOINT,UP,LOWER_UP> mtu 1492 state UNKNOWN' end
+        if command=='ip -o -4 addr show dev pppoe-wan scope global' then return '8: pppoe-wan inet 114.246.103.22/32 scope global valid_lft '..lifetime..' preferred_lft '..lifetime end
+        error('unexpected query: '..command)
+    end
+    local before=R.uplink_data(); lifetime='60'; assert(before==R.uplink_data())
+    R.capture=production_capture
+end)
+
+test('uplink identity tracks all default exits and detects missing route',function()
+    init(); local routes='default dev eth0 metric 10\ndefault dev usb0 metric 20'
+    local usb='UP,LOWER_UP'
+    R.capture=function(command)
+        if command=='ip -4 route show table main default' then return routes end
+        if command=='ip -o link show dev eth0' then return '2: eth0: <UP,LOWER_UP>' end
+        if command=='ip -o link show dev usb0' then return '9: usb0: <'..usb..'>' end
+        if command=='ip -o -4 addr show dev eth0 scope global' then return '2: eth0 inet 192.168.0.101/24 scope global' end
+        if command=='ip -o -4 addr show dev usb0 scope global' then return '9: usb0 inet 10.0.0.2/24 scope global' end
+        error('unexpected query: '..command)
+    end
+    local before=R.uplink_data(); usb='UP'; assert(before~=R.uplink_data())
+    routes=''; assert(before~=R.uplink_data())
+    R.capture=production_capture
+end)
+
+test('untrusted exit interface names cannot become shell commands',function()
+    init(); local calls=0
+    R.capture=function(command)
+        calls=calls+1; assert(command=='ip -4 route show table main default')
+        return 'default dev eth0;touch_BAD'
+    end
+    assert(R.uplink_data():find('invalid%-device')); assert(calls==1)
+    R.capture=production_capture
+end)
+
 local state={}
 R.snapshot=function() return state end
 local function observed()
