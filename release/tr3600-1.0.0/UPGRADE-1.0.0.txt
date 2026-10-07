@@ -1,0 +1,14 @@
+Cudy TR3600 V1.0 定制固件 1.0.0 升级说明
+
+1. 确认设备底部标注 TR3600 V1.0。其他硬件版本和 GL-MT300N-V2 不适用。
+2. 保存当前配置备份及旧固件。配置备份含私人凭据，应自行保管。
+3. 在 Windows PowerShell 执行 Get-FileHash -Algorithm SHA256 .\openwrt-mediatek-filogic-cudy_tr3600-v1-squashfs-sysupgrade.bin，结果应为：
+   2531c70f462513ca94124cbfd0c19571921e473d6b84749e1cd4161febe5e8b1
+4. 已使用本项目匹配的 RC1/1.0.0：电脑用网线接 LAN，从 LuCI“系统 → 备份/升级”上传 sysupgrade.bin。本次保留配置升级已在 TR3600 V1.0 验收。
+5. 仍使用 Cudy 原厂固件：先按官方适用的中间固件迁移流程操作；本文件不能直接用于原厂升级。
+6. 不强制刷写，升级时保持供电；启动后确认 /etc/cudy-release 为 tr3600-1.0.0，并强制刷新浏览器页面。
+7. 检查代理、双频 Wi-Fi、LED 与 USB；需用 SS 时明确启用并确认 ZeroTier 授权范围。新装默认关闭且无密码，不会自动套入个人设置。
+
+本版已实机验收升级、重启自动恢复、SS 国内外访问、USB SMB 和用户确认的 iPhone 文件读写。长期稳定、所有物理故障/夜间/升级 LED、可写 NTFS 和客户端忙碌卸载未全部覆盖。
+原厂界面/App/云管理/Mesh 不保留；SS 仅批准的 ZeroTier 私有网络，USB 仅局域网。L2TP/IPsec 和动态 DNS 不包含。
+如已安装 SHA256 相同的 1.0.0，本次公开发布不需要再次刷写。

@@ -1,0 +1,64 @@
+{
+  "name": "Publish verified Cudy TR3600 V1.0 1.0.0",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/tr3600-release-1.0.0"
+      ],
+      "paths": [
+        ".github/workflows/tr3600-publish-1.0.0.yml",
+        "release/tr3600-1.0.0/**"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "write",
+    "actions": "read"
+  },
+  "concurrency": {
+    "group": "tr3600-public-release-1.0.0",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "publish": {
+      "if": "github.repository == 'liuyong2027/mt300n-v2-openwrt' && github.ref == 'refs/heads/codex/tr3600-release-1.0.0'",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "name": "Checkout isolated publication files",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "name": "Prepare exact verified build, source and acceptance assets",
+          "env": {
+            "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"
+          },
+          "run": "python3 release/tr3600-1.0.0/publish.py prepare"
+        },
+        {
+          "name": "Upload, verify every digest and publish stable release",
+          "env": {
+            "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"
+          },
+          "run": "python3 release/tr3600-1.0.0/publish.py publish"
+        },
+        {
+          "name": "Preserve publication receipt",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-1.0.0-publication-receipt",
+            "path": "PUBLICATION-VERIFICATION.json",
+            "if-no-files-found": "warn",
+            "retention-days": 90
+          }
+        }
+      ]
+    }
+  }
+}

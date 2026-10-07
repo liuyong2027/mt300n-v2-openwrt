@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "device": "Cudy TR3600 V1.0",
+  "source_commit": "e298f2b015bc70eac46e0de58204616046cb119f",
+  "build_run": 37619658990,
+  "image_sha256": "2531c70f462513ca94124cbfd0c19571921e473d6b84749e1cd4161febe5e8b1",
+  "accepted_at": "2026-10-07T23:18:17.984888+08:00",
+  "basic_hardware_acceptance": "passed",
+  "keep_settings_upgrade": true,
+  "proxy_domestic_foreign": true,
+  "SS_peer_domestic_foreign_before_and_after_reboot": true,
+  "USB_SMB3_1_1_64KiB_read_write_rename_delete_ADS": true,
+  "dual_band_wifi_restored": true,
+  "white_led_solid_after_successful_probes": true,
+  "independent_reboot_requested_once": true,
+  "unchanged_configuration_files": 11,
+  "installed_static_paths_verified": 90,
+  "limitations": [
+    "Long-duration stability and all fault/night/upgrade LED physical cases",
+    "Writable NTFS and busy-unmount client behavior not all covered"
+  ],
+  "iPhone_Files_read_write_owner_confirmed": true,
+  "evidence_privacy": "Sanitized summary only; no personal configuration, credentials, network ID or private backups"
+}

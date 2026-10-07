@@ -1,0 +1,49 @@
+{
+  "repository": "liuyong2027/mt300n-v2-openwrt",
+  "tag": "tr3600-v1.0.0",
+  "title": "Cudy TR3600 V1.0 — 1.0.0",
+  "commit": "e298f2b015bc70eac46e0de58204616046cb119f",
+  "tree": "f6671cb59993c0588ae1fa80b6823120e3b0c075",
+  "build_run": 37619658990,
+  "artifact_id": 11486809716,
+  "artifact_name": "cudy-tr3600-v1-1.0.0",
+  "artifact_digest": "94b28c208804e9c6adc02ad47c4711cede232157a9d0f099f996aa4938659a81",
+  "assets": {
+    "BUILD-VERIFICATION-1.0.0.json": {
+      "sha256": "fd1970c310b6399fb7d9d0a709d54497aa049e9c4378d70c2a2b000e69ed986f",
+      "bytes": 2689
+    },
+    "HARDWARE-ACCEPTANCE-1.0.0.json": {
+      "sha256": "714dcfb40c66711a7b4cf605f384afdec3559f5ed13cd56926bfb50a6425d434",
+      "bytes": 1066
+    },
+    "IMAGE-METADATA-1.0.0.json": {
+      "sha256": "18478f41e04e0dbb9e67db0cf7ed5b78b2976646a3126a40d212da596266db8a",
+      "bytes": 251
+    },
+    "openwrt-mediatek-filogic-cudy_tr3600-v1-squashfs-sysupgrade.bin": {
+      "sha256": "2531c70f462513ca94124cbfd0c19571921e473d6b84749e1cd4161febe5e8b1",
+      "bytes": 30607635
+    },
+    "RELEASE-1.0.0.txt": {
+      "sha256": "55176b96483ff277ef7f2976b86e02b732c93738c259ecd459b9fe941a06433f",
+      "bytes": 3044
+    },
+    "SOURCE-1.0.0.zip": {
+      "sha256": "76da5a880c06d3d5573fc5561ccedf21fb205dafc1d0faf1ab4317c22f3000d5",
+      "bytes": 6018553
+    },
+    "SOURCE-PROVENANCE-1.0.0.json": {
+      "sha256": "75412a457121cb0433a7ade22482c37ac4bec6c5c9782d5152a9a96e8480e1c0",
+      "bytes": 1076
+    },
+    "UPGRADE-1.0.0.txt": {
+      "sha256": "d78aa2e6c177a5bd3e6b4aebc7926040a4ae72a4c50ba8faae93d767eddb0f20",
+      "bytes": 1518
+    },
+    "SHA256SUMS": {
+      "sha256": "a03e022ecf3aa4767f1300c3617c5d08db134c87b18316fc59bb1ad2e299dceb",
+      "bytes": 769
+    }
+  }
+}
