@@ -8,7 +8,8 @@ function E(tag, attrs = {}, children = []) {
   const flat = (Array.isArray(children) ? children : [children]).filter(x => x != null);
   assert(!flat.some(Array.isArray), 'LuCI DOM children must be flat');
   const node = {
-    tag, attrs, children: flat, value: attrs.value || '', checked: !!attrs.checked, disabled: !!attrs.disabled,
+    // HTML boolean attributes are true whenever present, even checked="false".
+    tag, attrs, children: flat, value: attrs.value || '', checked: attrs.checked != null, disabled: !!attrs.disabled,
     appendChild(x) { this.children.push(x); }, replaceChildren(...xs) { this.children = xs; }
   };
   if (tag === 'select') node.value = flat.find(x => x.tag === 'option')?.attrs.value || '';
@@ -65,6 +66,7 @@ function fixture(overrides = {}) {
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].method, 'status');
   assert(text(root).includes('服务运行中'));
+  assert(f.view.controls.enabled.checked, 'enabled service renders checked');
   assert(text(root).includes('192.168.7.0/24'));
   assert(text(root).includes('<img onerror=alert(1)>'));
   assert(!nodes(root).some(x => x.tag === 'img'), 'backend labels render as text');
@@ -154,6 +156,7 @@ function fixture(overrides = {}) {
   const fresh = fixture({ enabled: false, password_set: false, ready: false });
   const freshRoot = fresh.view.render(await fresh.view.load());
   assert(text(freshRoot).includes('服务已关闭'));
+  assert.equal(fresh.view.controls.enabled.checked, false, 'disabled service must render unchecked with real HTML boolean-attribute semantics');
   assert(fresh.view.controls.client.disabled);
   fresh.view.controls.enabled.checked = true;
   await fresh.view.applySettings();

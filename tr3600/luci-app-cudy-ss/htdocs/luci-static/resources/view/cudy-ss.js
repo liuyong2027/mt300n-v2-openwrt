@@ -163,13 +163,15 @@ return view.extend({
 	render: function(data) {
 		var self = this;
 		this.controls = {
-			enabled: E('input', { 'type': 'checkbox', 'checked': !!data.enabled }),
+			enabled: E('input', { 'type': 'checkbox' }),
 			port: E('input', { 'class': 'cbi-input-text', 'type': 'number', 'min': 1024, 'max': 65535, 'step': 1, 'value': String(data.port || 8388) }),
 			method: E('select', { 'class': 'cbi-input-select' }, methods.map(function(name) { return E('option', { 'value': name }, name); })),
 			password: E('input', { 'class': 'cbi-input-text', 'type': 'password', 'autocomplete': 'new-password', 'maxlength': 128, 'value': '' }),
 			apply: E('button', { 'class': 'btn cbi-button-apply', 'click': function() { return self.applySettings(); } }, '保存并应用'),
 			client: E('button', { 'class': 'btn', 'click': function() { return self.showClient(); } }, '查看客户端配置')
 		};
+		// LuCI uses setAttribute(): checked="false" still checks an HTML checkbox.
+		this.controls.enabled.checked = !!data.enabled;
 		this.controls.method.value = methods.indexOf(data.method) >= 0 ? data.method : methods[0];
 		this.statusNode = E('div', { 'class': 'cbi-section' });
 		this.addressNode = E('span'); this.subnetNode = E('span'); this.networkNode = E('span');
