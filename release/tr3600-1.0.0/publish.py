@@ -136,15 +136,18 @@ def publish():
         assert exact[0]['object']['type'] == 'commit' and exact[0]['object']['sha'] == COMMIT, 'Existing release tag is different; never replace it'
     else:
         api('git/refs', '--method', 'POST', '-f', f'ref=refs/tags/{TAG}', '-f', f'sha={COMMIT}')
-    release = release_by_tag()
+    release = api(f'releases/{SPEC["release_id"]}') if SPEC.get('release_id') else release_by_tag()
+    if release:
+        assert release['tag_name'] == TAG
     if release and not release['draft']:
         verify_uploaded(release)
         assert not release['prerelease']
         print('Already published and all digests match: ' + release['html_url'])
         return
     if release is None:
-        gh('release', 'create', TAG, '--verify-tag', '--draft', '--target', COMMIT, '--title', SPEC['title'], '--notes-file', str(ROOT / 'RELEASE-1.0.0.txt'), '--latest=false')
-        release = release_by_tag()
+        request = Path('create-release-request.json')
+        request.write_text(json.dumps({'tag_name': TAG, 'target_commitish': COMMIT, 'name': SPEC['title'], 'body': (ROOT / 'RELEASE-1.0.0.txt').read_text(encoding='utf-8'), 'draft': True, 'prerelease': False, 'make_latest': 'false'}, ensure_ascii=False), encoding='utf-8')
+        release = api('releases', '--method', 'POST', '--input', str(request))
         assert release and release['draft']
     assert release['name'] == SPEC['title']
     assert release['target_commitish'] == COMMIT or api(f'git/ref/tags/{TAG}')['object']['sha'] == COMMIT
@@ -156,11 +159,10 @@ def publish():
             assert existing[name]['size'] == expected['bytes'] and existing[name].get('digest') == 'sha256:' + expected['sha256'], name
         else:
             gh('release', 'upload', TAG, str(OUT / name))
-    release = release_by_tag()
+    release = api(f'releases/{release["id"]}')
     verify_uploaded(release)
     assert release['draft']
-    gh('release', 'edit', TAG, '--draft=false', '--prerelease=false', '--latest=false')
-    published = release_by_tag()
+    published = api(f'releases/{release["id"]}', '--method', 'PATCH', '-F', 'draft=false', '-F', 'prerelease=false', '-f', 'make_latest=false')
     verify_uploaded(published)
     assert not published['draft'] and not published['prerelease']
     record = {'release_id': published['id'], 'release_url': published['html_url'], 'tag': TAG, 'source_commit': COMMIT,
