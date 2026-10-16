@@ -21,7 +21,13 @@ local m=dofile('tr3600/network-root/usr/lib/lua/cudy/zt-direct.lua')
 local p=io.popen('nft -a list chain inet fw4 input_wan','r')
 local s=p:read('*a');p:close()
 local h=assert(tonumber(s:match('comment "cudy%-zt%-direct%-v1" # handle (%d+)')))
-print(assert(m.transaction({ports={}}, {nftables={{table={family='inet',name='fw4'}},{chain={family='inet',table='fw4',name='input_wan'}},{chain={family='inet',table='fw4',name=m.chain,comment=m.owner}},{rule={family='inet',table='fw4',chain='input_wan',comment=m.owner,handle=h,expr={{jump={target=m.chain}}}}}})))
+local listing={nftables={
+    {table={family='inet',name='fw4'}},
+    {chain={family='inet',table='fw4',name='input_wan'}},
+    {chain={family='inet',table='fw4',name=m.chain,comment=m.owner}},
+    {rule={family='inet',table='fw4',chain='input_wan',comment=m.owner,handle=h,expr={{jump={target=m.chain}}}}},
+}}
+print(assert(m.transaction({ports={}},listing)))
 LUA
 if nft list chain inet fw4 cudy_zt_direct 2>/dev/null; then exit 1; fi
 printf '%s\n' 'ZeroTier nft transaction and owned cleanup passed'

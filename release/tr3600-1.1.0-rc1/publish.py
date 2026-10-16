@@ -48,6 +48,9 @@ def api(path, method='GET', value=None):
     with request('https://api.github.com/repos/' + REPO + '/' + path, method, value) as response:
         return json.load(response)
 
+branch=api('git/ref/heads/codex/tr3600-webfiles-1.1.0-rc1')
+assert branch['object']['sha']==commit, 'Candidate branch advanced; refusing to publish an obsolete build'
+
 try:
     release = api('releases/tags/' + TAG)
     assert release['draft'] and release['target_commitish'] == commit, 'Existing release differs; refusing overwrite'
