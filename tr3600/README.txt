@@ -1,8 +1,8 @@
-Cudy TR3600 V1.0 - 1.1.0-rc1 WebFiles + DDNS test build
+Cudy TR3600 V1.0 - 1.1.0-rc2 WebFiles + DDNS test build
 
 Only for Cudy TR3600 V1.0 (cudy,tr3600-v1 / R126).
 This is a community custom firmware, not a Cudy vendor firmware release.
-Read RELEASE-NOTES.txt for accepted RC1 tests and the limits of this image.
+Read RELEASE-NOTES.txt for prior baseline tests and the limits of this image.
 Build proof, source commit and image SHA256 are in tr3600-verification.json.
 A successful build does not mean this new image has already been installed.
 
@@ -10,7 +10,7 @@ Locked sources: application 1f6169759396a31d2e3beec35d300c1fe4f2eaec;
 OpenWrt 25.12.5 f0a60eee2fe051741c643ea6118718aae1ef17fb and locked feeds.
 Mango UI, R3 Xray patch, subscriptions, failover and ZeroTier are retained.
 The upstream application keeps its 20-test-failover1 marker for provenance;
-/etc/cudy-release identifies this device firmware as tr3600-1.1.0-rc1.
+/etc/cudy-release identifies this device firmware as tr3600-1.1.0-rc2.
 OpenWrt Filogic kernel defaults and XZ SquashFS with 1 MiB blocks are retained.
 
 Included:
@@ -46,7 +46,7 @@ Included:
 - WAN/LAN EEE and Tx LPI workaround, PPP/PPPoE, Samba4 and full wpad.
 
 New in this candidate:
-- Cudy webpage WebFiles 0.6.2-test: LuCI start/stop, up to16 independent users,
+- Cudy webpage WebFiles 0.6.3: LuCI start/stop, up to16 independent users,
   per-user write permission, HTTPS, optional ZeroTier and public gateway.
   Fresh service/read-write/ZeroTier/public access are disabled. No personal
   volume, account, CA, DDNS domain or network ID is preconfigured. LAN port8080.
@@ -116,3 +116,14 @@ The packed-image binary/hash comparisons remain mandatory and unchanged.
 Settings upgrades preserve existing Mango firewall sections, including zone
 policies, NAT scopes and disabled DNS/gateway rules. A fresh mangozt zone keeps
 the owner-selected defaults: input/output/intra-zone forward ACCEPT, IPv4 masq1.
+
+RC2 fixes the WebFiles startup failure found in rc1 hardware acceptance.
+Quantum is built first; its actual SHA256 is linked into the helper. Both
+pre-package and packed-image checks execute the real ARM64 startup binary
+guard. Tampered payloads, unbound helpers and unsuitable ELF files are rejected.
+The0.6.3 helper repair on the existing rc1 router passed native ARM64 checks
+and user-reported phone LAN login/upload/download/rename/delete. This does
+not replace acceptance of the new full rc2 image after flashing.
+Download name: cudy-tr3600-v1-1.1.0-rc2-sysupgrade.bin.
+Existing router accounts, certificates and fixed UDP ports must be included
+in a keep-settings backup; original rc1 now includes their keep lists.

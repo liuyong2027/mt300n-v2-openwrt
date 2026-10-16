@@ -1,52 +1,35 @@
-Cudy TR3600 V1.0 / R126 - 1.1.0-rc1
+Cudy TR3600 V1.0 / R126 — 1.1.0-rc2
 
-Candidate scope: integrate Cudy webpage WebFiles and standard LuCI DDNS.
-PPTP and L2TP/IPsec server are not included. Preserve the1.0.0 base source,
-its locked OpenWrt/feeds, USB consent, proxy/ZeroTier/SS, Wi-Fi and LED gates.
+修复 rc1 实机发现的 WebFiles 启动失败：原管理程序沿用旧 Quantum 校验值，
+与重新编译的程序不一致。现在先编译 Quantum，再把实际 SHA256 绑定进
+WebFiles0.6.3，继续保留严格校验；没有关闭或跳过校验来启动服务。
 
-WebFiles0.6.2 uses the tested0.6.1-boot1 application with clean firmware
-defaults: no personal USB fallback, port8080, disabled/read-only initially.
-Preserve encrypted account.key/accounts and LAN/public/domain TLS slots across
-a keep-settings upgrade. Stop deleting owner DDNS configuration at first boot.
-Quantum is source rebuilt from the pinned v2.0.0-stable commit with the same
-cryptographic128-bit JWT jti correction and unique-token regression test.
-Default minimum webpage password remains6 characters; LuCI HTTP account saves
-remain supported. A30-day local test CA is created on the owner's device.
+构建阶段和最终镜像阶段均实际执行 ARM64 启动校验。加入篡改文件、缺失绑定、
+错误架构和动态 ELF 的拒绝测试。下载的固件文件名直接包含1.1.0-rc2版本号，
+校验清单及镜像报告使用同一个文件名。
 
-Prior hardware evidence belongs to the old1.0.0 firmware plus separately
-installed WebFiles0.6.1. It is not acceptance of this newly built image.
-CI validates source, target programs, package selection, image contents and
-metadata. Flashing and real-client checks of this image remain pending.
-The known WAN short link flaps and FAT32 dirty warning are not claimed fixed.
+已有 rc1 设备单独安装0.6.3修复后，原生 ARM64检查、HTTPS CA/IP校验通过；
+用户确认手机连接 TR3600 Wi-Fi 时，登录及上传、下载、重命名、删除全部正常。
+以上是组件修复的实机证据，不能代替这份新完整 rc2 镜像的刷机、配置保留和
+手机端验收。本次构建不自动刷机，仍作为 GitHub Prerelease 发布。
 
-The build may publish a GitHub Prerelease only after all verification jobs
-pass and uploaded asset hashes match. It never writes to a router.
-Only use a verified matching-device sysupgrade image; keep a backup and the
-previous firmware before testing. See README.txt for custom versus stock paths.
+沿用 WebFiles多账号与读写权限、USB授权共享、标准 LuCI DDNS/Dynu、Xray/Mango、
+ZeroTier、SS、Wi-Fi和LED基线，不新增PPTP或L2TP/IPsec服务端。
+新机 WebFiles关闭、未选择USB卷、只读，LAN默认端口8080；ZeroTier访问和公网
+访问默认关闭。没有预置个人账号、证书、DDNS密码、网络ID或设备身份。
 
+ZeroTier新机默认 UDP9993/48170/20089，配套防火墙规则读取固定端口配置生成。
+保留既有 local.conf、网络身份和防火墙设置；新机mangozt区域入站、出站和
+区域内转发默认接受，IPv4地址伪装开启。只按当前WAN网关限制SSDP响应，
+防火墙重载、WAN变化和服务启停时重新应用本程序规则，不重启Xray。
+短时保活试验不设为常驻，低带宽模式保持关闭；不能保证任何NAT条件都直连。
 
-ZeroTier direct-path fixes from the 2026-10-16 diagnostic are integrated:
-- Pin secondary/tertiary UDP ports on a fresh installation; use the actual
-  configured primary port. Preserve an existing local.conf without rewriting it.
-- Accept only these UDP ports in fw4 input_wan; SSDP replies only from the
-  current WAN default gateway, UDP source1900 to high ports. No private gateway,
-  personal network ID, node identity or public mapping port is baked in.
-- Reconcile this helper's owned nft chain after firewall reload, WAN changes,
-  and ZeroTier start/stop. No proxy restart, timer loop or global firewall flush.
-- Preserve /etc/zerotier-stable-ports.json in subsequent settings upgrades.
-  IMPORTANT for the FIRST upgrade from older firmware: the old firmware selects
-  backup paths. Before flashing, add /etc/zerotier-stable-ports.json and
-  /etc/cudy-webfiles/ to its /etc/sysupgrade.conf, and verify they are in the
-  backup archive. This build does not modify or flash the running router.
-- Keep existing owner firewall rules. Low-bandwidth mode is not enabled.
-  The optional small-ping trial on6.1 was not made permanent. This firmware
-  does not claim to remove remote signature-verification delays or ensure
-  DIRECT under all NAT/firewall conditions. New-image hardware testing pending.
+升级保留清单包含 /etc/cudy-webfiles/ 和 /etc/zerotier-stable-ports.json。
+从已安装这份清单的 rc1保留配置升级，账号、证书和固定端口文件应被带入；
+升级前仍须核实实际备份成员。更旧固件需先在旧系统补充保留路径并备份。
+不保留配置刷机或恢复出厂会清除个人设置，按新机重新配置。
 
-
-Packaging revision r2 preserves the exact Go -s/-w executable bytes instead of
-running OpenWrt rstrip/sstrip again after the manifest hashes are calculated.
-The packed-image binary/hash comparisons remain mandatory and unchanged.
-Settings upgrades preserve existing Mango firewall sections, including zone
-policies, NAT scopes and disabled DNS/gateway rules. A fresh mangozt zone keeps
-the owner-selected defaults: input/output/intra-zone forward ACCEPT, IPv4 masq1.
+仅用于匹配的TR3600 V1.0/R126定制OpenWrt。当前sysupgrade不是原厂通用刷机包，
+原厂迁移见README。刷机前结束USB传输、备份设置并校验SHA256SUMS。
+已知WAN短断、FAT32未正常卸载提示和远端弱性能节点延迟未宣称修复。
+长期观察、完整rc2的手机ZeroTier/公网路径、升级与物理故障恢复仍需实测。

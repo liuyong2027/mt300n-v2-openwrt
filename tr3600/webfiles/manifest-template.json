@@ -39,7 +39,8 @@
     "External upstream TCP port 443 with implicit or explicit default HTTPS authority; internal listener remains high-port",
     "Start file service at S99 after synchronous Cudy USB reconciliation at S97",
     "Firmware defaults have no preselected personal USB volume",
-    "Persistent WebFiles encryption key, accounts and TLS included in sysupgrade keep list"
+    "Persistent WebFiles encryption key, accounts and TLS included in sysupgrade keep list",
+    "Helper SHA256 bound to the actual source-built Quantum; real ARM64 startup guard executed before and after packing"
   ],
   "persistentStorage": {
     "directory": "/etc/cudy-webfiles",
@@ -121,7 +122,7 @@
       65535
     ]
   },
-  "integrationRevision": "firmware2-hashfix",
+  "integrationRevision": "firmware2",
   "bootStartPriority": 99,
-  "firmwareVersion": "tr3600-1.1.0-rc1"
+  "firmwareVersion": "tr3600-1.1.0-rc2"
 }
