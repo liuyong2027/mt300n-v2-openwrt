@@ -1,0 +1,91 @@
+{
+  "name": "TR3600 WebFiles runtime hash binding regression and repair",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/tr3600-webfiles-runtime-hash-fix"
+      ],
+      "paths": [
+        "tr3600/webfiles/**",
+        "tr3600/cudy-webfiles/Makefile",
+        ".github/workflows/tr3600-webfiles-hashfix.yml",
+        "release/tr3600-webfiles-hashfix/**"
+      ]
+    },
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "tr3600-webfiles-hashfix-${{ github.ref }}",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "verify": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 25,
+      "steps": [
+        {
+          "name": "Checkout reviewed hash-binding fix",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use pinned Go compiler",
+          "uses": "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+          "with": {
+            "go-version": "1.27.2",
+            "cache": false
+          }
+        },
+        {
+          "name": "Build repair against byte-verified packed rc1 Quantum and exercise ARM64 guard",
+          "env": {
+            "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"
+          },
+          "run": "set -Eeuo pipefail\nsudo apt-get update\nsudo apt-get install -y qemu-user-static squashfs-tools\nmkdir -p reference hotfix\ngh release download tr3600-v1.1.0-rc1 --repo liuyong2027/mt300n-v2-openwrt --pattern cudy-tr3600-v1-1.1.0-rc1-sysupgrade.bin --dir reference\necho '56ab6eda573eb5e873b679a2d8c5992a8a7a549b958f5b18798e20f2fb18e7f5  reference/cudy-tr3600-v1-1.1.0-rc1-sysupgrade.bin' | sha256sum -c -\ntar -xf reference/cudy-tr3600-v1-1.1.0-rc1-sysupgrade.bin -C reference\npayloads=(reference/sysupgrade-*/root)\ntest \"${#payloads[@]}\" = 1\nunsquashfs -d reference/rootfs \"${payloads[0]}\" > reference/extract.log\nquantum=\"$PWD/reference/rootfs/usr/lib/cudy-webfiles/bin/filebrowser\"\nexpected=c10353ecce3159edb2445a45dbcdce45433248c1e05e7beea5aa52cec00866c2\ntest \"$(sha256sum \"$quantum\" | cut -d' ' -f1)\" = \"$expected\"\n(\n  cd tr3600/webfiles/helper\n  CGO_ENABLED=0 GOTOOLCHAIN=local go test -count=1 ./...\n  CGO_ENABLED=0 GOTOOLCHAIN=local GOOS=linux GOARCH=arm64 go vet ./...\n  CGO_ENABLED=0 GOTOOLCHAIN=local GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags \"-s -w -X main.quantumHash=$expected\" -o ../../../hotfix/cudy-webfiles .\n  CGO_ENABLED=0 GOTOOLCHAIN=local GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags '-s -w' -o ../../../hotfix/unbound-helper .\n)\npython3 tr3600/webfiles/test_binary_guard.py hotfix/cudy-webfiles \"$quantum\" --unbound-helper hotfix/unbound-helper --report hotfix/binary-guard-verification.json\nqemu-aarch64-static hotfix/cudy-webfiles version\npython3 - <<'PY'\nimport hashlib,json,os\nfrom pathlib import Path\nfolder=Path('hotfix')\nmanifest=json.loads(Path('reference/rootfs/usr/lib/cudy-webfiles/manifest.json').read_text())\nmanifest.update(version='0.6.3',integrationRevision='firmware2-hashfix',helperSHA256=hashlib.sha256((folder/'cudy-webfiles').read_bytes()).hexdigest())\nassert manifest['quantum']['sha256']=='c10353ecce3159edb2445a45dbcdce45433248c1e05e7beea5aa52cec00866c2'\n(folder/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')\nproof={'source_commit':os.environ['GITHUB_SHA'],'base_firmware':'tr3600-1.1.0-rc1','helper_version':'0.6.3','Go':'1.27.2','full_firmware_rebuilt':False,'host_helper_regressions':'passed including Linux binary guard cases','actual_ARM64_binary_guard':'passed; tampered payload and unbound helper rejected','hardware_service_start':'not-performed-by-CI'}\n(folder/'hotfix-build.json').write_text(json.dumps(proof,indent=2)+'\n')\n(folder/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in sorted(folder.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))\nPY\n"
+        },
+        {
+          "name": "Preserve verified helper and exact manifest",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-webfiles-0.6.3-hashfix-${{ github.sha }}",
+            "path": "hotfix/",
+            "if-no-files-found": "error",
+            "retention-days": 90
+          }
+        }
+      ]
+    },
+    "disclose-rc1-defect": {
+      "needs": [
+        "verify"
+      ],
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 5,
+      "if": "github.repository == 'liuyong2027/mt300n-v2-openwrt' && github.ref == 'refs/heads/codex/tr3600-webfiles-runtime-hash-fix'",
+      "permissions": {
+        "contents": "write"
+      },
+      "steps": [
+        {
+          "name": "Checkout reviewed hash-binding fix",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Add hardware acceptance defect warning without altering rc1 assets",
+          "env": {
+            "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"
+          },
+          "run": "python3 release/tr3600-webfiles-hashfix/annotate.py"
+        }
+      ]
+    }
+  }
+}

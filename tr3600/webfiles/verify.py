@@ -31,6 +31,8 @@ def verify(image_root, kit):
         assert data[:6] == b'\x7fELF\x02\x01' and struct.unpack_from('<H', data, 18)[0] == 183, name
         assert hashlib.sha256(data).hexdigest() == expected, name
         assert path.stat().st_mode & 0o111
+    binary_dir = root / 'usr/lib/cudy-webfiles/bin'
+    subprocess.run(['qemu-aarch64-static', str(binary_dir / 'cudy-webfiles'), 'verify-binary', str(binary_dir / 'filebrowser')], check=True)
     js = ui / 'htdocs/luci-static/resources/view/cudy-webfiles.js'
     transformed = subprocess.run([str(kit / 'openwrt/staging_dir/hostpkg/bin/jsmin')], input=js.read_bytes(), stdout=subprocess.PIPE, check=True).stdout
     assert (root / 'www/luci-static/resources/view/cudy-webfiles.js').read_bytes() == transformed
@@ -52,5 +54,6 @@ def verify(image_root, kit):
     assert 'for config in cudy_l2tp ddns;' not in retire
     assert 'for service in cudy_l2tp xl2tpd swanctl ddns;' not in retire
     report = {'version': manifest['version'], 'integration_revision': manifest['integrationRevision'], 'package_files_exact': True, 'ARM64_binaries_and_hashes': True, 'jsmin_comparison': True, 'fresh_defaults_disabled_no_personal_volume': True, 'startup_priority': 99, 'persistent_accounts_keys_TLS_keep_list': True, 'clean_image_private_data_absent': True, 'DDNS_and_Dynu_provider_present': True, 'DDNS_legacy_cleanup_retired': True, 'hardware_acceptance': 'pending; no automatic flash'}
+    report['actual_ARM64_embedded_binary_guard'] = 'passed'
     (kit / 'reports/webfiles-image-verification.json').write_text(json.dumps(report, indent=2) + '\n')
     return report

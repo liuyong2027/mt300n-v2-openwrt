@@ -19,8 +19,11 @@ import (
 	"time"
 )
 
-const version = "0.6.2-test"
-const quantumHash = "dcca65dc898fd86bb8cc6cbd1a43b94dadd1cf2355ab6c2e07ec6dcff4c527b7"
+const version = "0.6.3"
+
+// Bound to the exact source-built Quantum executable by the build recipe.
+// An unbound development build must refuse to launch a file service.
+var quantumHash = ""
 
 type Volume struct {
 	ID       string `json:"id"`

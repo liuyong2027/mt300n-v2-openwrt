@@ -1,5 +1,5 @@
 {
-  "version": "0.6.2-test",
+  "version": "0.6.3",
   "displayName": "Cudy webpage",
   "targetBoard": "cudy,tr3600-v1",
   "architecture": "linux-arm64",
@@ -121,7 +121,7 @@
       65535
     ]
   },
-  "integrationRevision": "firmware1",
+  "integrationRevision": "firmware2-hashfix",
   "bootStartPriority": 99,
   "firmwareVersion": "tr3600-1.1.0-rc1"
 }

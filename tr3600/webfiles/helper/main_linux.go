@@ -75,6 +75,16 @@ func dispatch() error {
 		return nil
 	}
 	action := os.Args[1]
+	if action == "verify-binary" {
+		if len(os.Args) != 3 {
+			return fmt.Errorf("usage: cudy-webfiles verify-binary PATH")
+		}
+		if err := verifyBinary(os.Args[2]); err != nil {
+			return err
+		}
+		fmt.Println("VERIFIED: static ARM64 Quantum matches the embedded SHA256")
+		return nil
+	}
 	if action == "rpc" {
 		return managedRPC(os.Args[2:])
 	}
@@ -276,6 +286,10 @@ func regexpTable(t string) bool {
 	return e == nil
 }
 func verifyBinary(path string) error {
+	expected, e := hex.DecodeString(quantumHash)
+	if e != nil || len(expected) != sha256.Size {
+		return fmt.Errorf("Quantum SHA256 was not bound to this helper at build time")
+	}
 	f, e := os.Open(path)
 	if e != nil {
 		return e
