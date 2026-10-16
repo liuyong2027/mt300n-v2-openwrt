@@ -1,9 +1,14 @@
 include $(TOPDIR)/rules.mk
 PKG_NAME:=cudy-webfiles
 PKG_VERSION:=0.6.2
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_LICENSE:=MIT Apache-2.0 BSD-3-Clause
 include $(INCLUDE_DIR)/package.mk
+
+# Go already builds both binaries with -s -w. rstrip/sstrip changes their
+# bytes after manifest hashes are recorded, breaking installation validation.
+# Preserve exact source-built bytes; the final packed-image hash gate remains.
+RSTRIP:=:
 
 define Package/cudy-webfiles
   SECTION:=net

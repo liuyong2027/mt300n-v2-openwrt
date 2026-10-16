@@ -12,6 +12,7 @@ from importlib.machinery import SourceFileLoader
 led_integration = SourceFileLoader("led_integration", str(Path(__file__).parent/"led-integration.py")).load_module()
 usb_integration = SourceFileLoader("usb_integration", str(Path(__file__).parent/"usb-integration.py")).load_module()
 ss_integration = SourceFileLoader("ss_integration", str(Path(__file__).parent/"ss-integration.py")).load_module()
+zt_defaults = SourceFileLoader("zt_defaults", str(Path(__file__).parent/"zt-firewall-defaults.py")).load_module()
 zt_integration = SourceFileLoader("zt_integration", str(Path(__file__).parent/"zt-integration.py")).load_module()
 webfiles_integration = SourceFileLoader("webfiles_integration", str(Path(__file__).parent/"webfiles/verify.py")).load_module()
 
@@ -58,6 +59,10 @@ for name, digest in expected['source_rootfs_sha256'].items():
         original = (kit/'package/luci-app-mango-proxy/root'/name).read_bytes()
         assert hashlib.sha256(original).hexdigest() == digest, name
         assert (extracted/name).read_bytes() == led_integration.patch_probe(original.decode()).encode(), name
+    elif name == 'etc/uci-defaults/95-mango-proxy':
+        original = (kit/'package/luci-app-mango-proxy/root'/name).read_bytes()
+        assert hashlib.sha256(original).hexdigest() == digest, name
+        assert (extracted/name).read_bytes() == zt_defaults.patch(original.decode()).encode(), name
     elif name in ss_integration.WRAPPERS:
         original = (kit/'package/luci-app-mango-proxy/root'/name).read_bytes()
         assert hashlib.sha256(original).hexdigest() == digest, name
@@ -181,7 +186,8 @@ proof = {'device': 'cudy,tr3600-v1', 'version': 'tr3600-1.1.0-rc1', 'application
          'hardware_validation': 'New full 1.1.0-rc1 image has NOT been flashed or hardware accepted. Base firmware1.0.0 and WebFiles0.6.1-boot1 have separate prior evidence; that evidence does not establish acceptance of this image.',
          'release_status': '1.1.0-rc1 candidate build; gated GitHub prerelease publication; never automatically flashed',
          'validation_limits': 'Long-duration guard observation, physical fault/night/upgrade LEDs, current iPhone Files client and writable NTFS were not all covered; see RELEASE-NOTES.txt'}
-proof['zerotier_direct'] = {'policy_and_nft_regression': 'passed before build', 'lifecycle': 'exact locked ZeroTier init with bounded helper hooks; fw4 include and WAN hotplug; no proxy restart', 'upstream': 'derived from current WAN default route, SSDP source port1900 only', 'upgrade': 'stable-port file retained; existing local.conf/UCI rules preserved', 'keepalive': 'not made persistent; remote low-power-router trial only', 'hardware': 'new full-image restart/reload/end-to-end acceptance pending'}
+proof['zerotier_direct'] = {'policy_and_nft_regression': 'passed before build', 'lifecycle': 'exact locked ZeroTier init with bounded helper hooks; fw4 include and WAN hotplug; no proxy restart', 'upstream': 'derived from current WAN default route, SSDP source port1900 only', 'upgrade': 'stable-port file retained; existing local.conf and owner Mango firewall sections preserved; exact patched first-boot script verified', 'keepalive': 'not made persistent; remote low-power-router trial only', 'hardware': 'new full-image restart/reload/end-to-end acceptance pending'}
+proof['fresh_mangozt_policy'] = {'input': 'ACCEPT', 'output': 'ACCEPT', 'intra_zone_forward': 'ACCEPT', 'IPv4_masquerading': True, 'existing_owner_sections': 'preserved on settings upgrade'}
 proof['webfiles_and_DDNS'] = webfiles_proof
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)

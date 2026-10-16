@@ -38,7 +38,7 @@ WebFiles提供LuCI启停、最多16个独立账号及读写权限、HTTPS、可�
 
 恢复标准DDNS及Dynu等服务商定义。保留配置升级不再删除DDNS配置；WebFiles的账号加密密钥、账号和TLS目录列入保留清单。保留配置时沿用原端口、授权卷、密码、CA和访问开关；完整新镜像的升级恢复仍需实机验证。
 
-ZeroTier纳入固定UDP端口、按当前WAN网关限制的UPnP响应，以及防火墙重载/WAN事件/服务启停恢复。保留已有local.conf和规则，不包含个人网络ID；未将短时保活试验设为常驻，也未启用低带宽模式。不能保证所有NAT条件均直连，远端弱性能设备的首包延迟仍可能出现。首次从旧固件升级前，须把 /etc/zerotier-stable-ports.json 和 /etc/cudy-webfiles/ 加入旧固件 /etc/sysupgrade.conf，并核实备份中确有这些文件；新镜像中的保留清单不能替旧固件完成首次备份。\n\n仅适用于匹配的TR3600 V1.0定制OpenWrt。刷机前阅读README.txt和RELEASE-NOTES.txt，备份设置并校验SHA256SUMS。此sysupgrade镜像不是原厂通用升级包。本次构建和发布均不自动刷写路由器。
+软件包保留Go已精简可执行文件的原始字节，避免二次strip破坏内置校验值；最终镜像哈希比较继续强制执行。Mango首次启动只创建缺失的自有防火墙区段，保留已有策略、地址伪装范围和停用规则。按用户要求，新机mangozt默认入站/出站/区域内转发均接受、IPv4地址伪装开启。\n\nZeroTier纳入固定UDP端口、按当前WAN网关限制的UPnP响应，以及防火墙重载/WAN事件/服务启停恢复。保留已有local.conf和规则，不包含个人网络ID；未将短时保活试验设为常驻，也未启用低带宽模式。不能保证所有NAT条件均直连，远端弱性能设备的首包延迟仍可能出现。首次从旧固件升级前，须把 /etc/zerotier-stable-ports.json 和 /etc/cudy-webfiles/ 加入旧固件 /etc/sysupgrade.conf，并核实备份中确有这些文件；新镜像中的保留清单不能替旧固件完成首次备份。\n\n仅适用于匹配的TR3600 V1.0定制OpenWrt。刷机前阅读README.txt和RELEASE-NOTES.txt，备份设置并校验SHA256SUMS。此sysupgrade镜像不是原厂通用升级包。本次构建和发布均不自动刷写路由器。
 
 验证范围：CI代码回归、目标ARM64程序与库检查、最终镜像内容／架构／元数据／容量校验通过。新完整镜像尚未刷机验收。旧固件上WebFiles功能及重启测试的结果不能代替本镜像验收。
 

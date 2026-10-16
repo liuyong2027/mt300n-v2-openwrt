@@ -39,6 +39,7 @@ def adapt():
     prepare = ROOT/'scripts/prepare.sh'
     replace_once(prepare, 'cd openwrt\n', 'cd openwrt\ngit apply --check "$kit/tr3600/support.patch"\ngit apply "$kit/tr3600/support.patch"\ngit apply --check "$kit/tr3600/hardware-fixes.patch"\ngit apply "$kit/tr3600/hardware-fixes.patch"\ncp "$kit/tr3600/999-ubi-add-configurable-rootdev.patch" target/linux/mediatek/patches-6.12/\npython3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/network-defaults.py" "$PWD"\n')
     replace_once(prepare, 'cp -R "$kit/package/luci-app-zerotier-mini"', 'python3 "$kit/tr3600/zt-integration.py" "$PWD"\ncp -R "$kit/package/luci-app-zerotier-mini"')
+    replace_once(prepare, 'cp -R "$kit/package/luci-app-mango-proxy" package/\n', 'cp -R "$kit/package/luci-app-mango-proxy" package/\npython3 "$kit/tr3600/zt-firewall-defaults.py" "$PWD"\n')
     replace_once(prepare, '$kit/config/mt300n-v2.config', '$kit/tr3600/tr3600.config')
 
     replace_once(prepare, 'chmod +x package/luci-app-mango-proxy', 'cp -R "$kit/tr3600/luci-app-cudy-wifi" package/\nchmod +x package/luci-app-cudy-wifi/root/etc/init.d/cudy_wifi package/luci-app-cudy-wifi/root/etc/uci-defaults/93-cudy-wifi package/luci-app-cudy-wifi/root/usr/libexec/cudy-wifi-*\nchmod +x package/luci-app-mango-proxy')

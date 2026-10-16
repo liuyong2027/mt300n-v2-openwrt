@@ -42,3 +42,11 @@ ZeroTier direct-path fixes from the 2026-10-16 diagnostic are integrated:
   The optional small-ping trial on6.1 was not made permanent. This firmware
   does not claim to remove remote signature-verification delays or ensure
   DIRECT under all NAT/firewall conditions. New-image hardware testing pending.
+
+
+Packaging revision r2 preserves the exact Go -s/-w executable bytes instead of
+running OpenWrt rstrip/sstrip again after the manifest hashes are calculated.
+The packed-image binary/hash comparisons remain mandatory and unchanged.
+Settings upgrades preserve existing Mango firewall sections, including zone
+policies, NAT scopes and disabled DNS/gateway rules. A fresh mangozt zone keeps
+the owner-selected defaults: input/output/intra-zone forward ACCEPT, IPv4 masq1.

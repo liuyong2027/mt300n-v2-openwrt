@@ -80,7 +80,7 @@
         },
         {
           "name": "Validate ZeroTier direct-path policy, ownership and real nft lifecycle",
-          "run": "lua5.1 tr3600/test-zt-direct.lua\npython3 tr3600/test-zt-integration.py\nluac5.1 -p tr3600/network-root/usr/libexec/cudy-zt-direct-run\nsudo unshare --net sh tr3600/test-zt-direct-nft.sh\n"
+          "run": "lua5.1 tr3600/test-zt-direct.lua\npython3 tr3600/test-zt-integration.py\nluac5.1 -p tr3600/network-root/usr/libexec/cudy-zt-direct-run\nsudo unshare --net sh tr3600/test-zt-direct-nft.sh\npython3 tr3600/test-zt-firewall-defaults.py\n"
         },
         {
           "name": "Build guarded WebFiles and patched Quantum from pinned sources",
