@@ -1,0 +1,50 @@
+name: TR3600 RC1 versioned download filename
+on:
+  push:
+    branches: [codex/tr3600-webfiles-1.1.0-rc1]
+    paths: [.github/workflows/tr3600-release-filename.yml, release/asset-naming/**]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: tr3600-rc1-download-filename
+  cancel-in-progress: false
+jobs:
+  filename:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cudy-tr3600-v1-1.1.0-rc1-ad2f821a69a86ba7edf8e2f631e5e6dba279d7fb
+          run-id: 38902566288
+          github-token: ${{ github.token }}
+          path: original
+      - name: Verify original firmware and prepare naming correction
+        run: python3 release/asset-naming/tr3600-rc1.py prepare
+      - name: Preserve original public metadata before editing
+        id: backup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tr3600-rc1-original-download-metadata
+          path: backup/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Rename firmware asset and synchronize checksum metadata
+        env:
+          BACKUP_ARTIFACT_ID: ${{ steps.backup.outputs.artifact-id }}
+        run: python3 release/asset-naming/tr3600-rc1.py apply
+      - name: Preserve naming correction verification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tr3600-rc1-download-filename-verification
+          path: FILENAME-CORRECTION-VERIFICATION.json
+          if-no-files-found: warn
+          retention-days: 90
