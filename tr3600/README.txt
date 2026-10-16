@@ -1,4 +1,4 @@
-Cudy TR3600 V1.0 - 1.0.0 release build
+Cudy TR3600 V1.0 - 1.1.0-rc1 WebFiles + DDNS test build
 
 Only for Cudy TR3600 V1.0 (cudy,tr3600-v1 / R126).
 This is a community custom firmware, not a Cudy vendor firmware release.
@@ -10,7 +10,7 @@ Locked sources: application 1f6169759396a31d2e3beec35d300c1fe4f2eaec;
 OpenWrt 25.12.5 f0a60eee2fe051741c643ea6118718aae1ef17fb and locked feeds.
 Mango UI, R3 Xray patch, subscriptions, failover and ZeroTier are retained.
 The upstream application keeps its 20-test-failover1 marker for provenance;
-/etc/cudy-release identifies this device firmware as tr3600-1.0.0.
+/etc/cudy-release identifies this device firmware as tr3600-1.1.0-rc1.
 OpenWrt Filogic kernel defaults and XZ SquashFS with 1 MiB blocks are retained.
 
 Included:
@@ -45,8 +45,19 @@ Included:
   events do not reset the exit identity.
 - WAN/LAN EEE and Tx LPI workaround, PPP/PPPoE, Samba4 and full wpad.
 
-L2TP/IPsec server and Dynamic DNS remain excluded. Upgrade migration privately
-backs up retired configuration and removes only project-owned VPN rules.
+New in this candidate:
+- Cudy webpage WebFiles 0.6.2-test: LuCI start/stop, up to16 independent users,
+  per-user write permission, HTTPS, optional ZeroTier and public gateway.
+  Fresh service/read-write/ZeroTier/public access are disabled. No personal
+  volume, account, CA, DDNS domain or network ID is preconfigured. LAN port8080.
+- Standard LuCI Dynamic DNS and provider definitions including Dynu.
+  Existing DDNS configuration and enabled-service links are preserved.
+- WebFiles encrypted account key/accounts/TLS directory is included in the
+  sysupgrade keep list. Existing owner settings take precedence over defaults.
+
+PPTP and L2TP/IPsec server remain excluded. Upgrade migration privately backs
+up only the obsolete L2TP configuration and removes only its owned VPN rules.
+This new full candidate image has not been flashed or hardware accepted.
 Cudy vendor UI, App, cloud management and Mesh are not included.
 
 Upgrade from a matching custom TR3600 OpenWrt image:
@@ -78,3 +89,22 @@ https://github.com/hyqhyq3/openwrt-cudy-tr3600/blob/main/cudy-tr3600-v1-fixes.pa
 Vendor dual-image support originates from the official development ZIP.
 Upstream and bundled sources retain their original licenses.
 Source documentation: USB-SHARING.md, WIFI-UNIFICATION.md and LED-STATUS.txt.
+
+
+ZeroTier direct-path fixes from the 2026-10-16 diagnostic are integrated:
+- Pin secondary/tertiary UDP ports on a fresh installation; use the actual
+  configured primary port. Preserve an existing local.conf without rewriting it.
+- Accept only these UDP ports in fw4 input_wan; SSDP replies only from the
+  current WAN default gateway, UDP source1900 to high ports. No private gateway,
+  personal network ID, node identity or public mapping port is baked in.
+- Reconcile this helper's owned nft chain after firewall reload, WAN changes,
+  and ZeroTier start/stop. No proxy restart, timer loop or global firewall flush.
+- Preserve /etc/zerotier-stable-ports.json in subsequent settings upgrades.
+  IMPORTANT for the FIRST upgrade from older firmware: the old firmware selects
+  backup paths. Before flashing, add /etc/zerotier-stable-ports.json and
+  /etc/cudy-webfiles/ to its /etc/sysupgrade.conf, and verify they are in the
+  backup archive. This build does not modify or flash the running router.
+- Keep existing owner firewall rules. Low-bandwidth mode is not enabled.
+  The optional small-ping trial on6.1 was not made permanent. This firmware
+  does not claim to remove remote signature-verification delays or ensure
+  DIRECT under all NAT/firewall conditions. New-image hardware testing pending.

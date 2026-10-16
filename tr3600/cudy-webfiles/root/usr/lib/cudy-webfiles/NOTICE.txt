@@ -1,0 +1,9 @@
+Cudy WebFiles0.6.2-test / firmware1.1.0-rc1
+Integration helper, adapter and LuCI code: licenses/Integration-MIT.txt.
+Quantum v2.0.0-stable+cudy-jti1 is source rebuilt from commit
+a29573e7068a4a682f199b64bec3e206159f535c with the included random-JWT-jti
+patch and regression. It is a derived binary, not an unchanged upstream asset.
+Go1.27.2, CGO_ENABLED=0, pure-Go SQLite, no mupdf build tag; previews disabled.
+Quantum Apache-2.0 and Go BSD licenses are included. The source recipe,
+patch, dependency lockfiles and full derived Quantum source are release assets.
+Generated owner passwords, keys, CA private keys and databases are not included.

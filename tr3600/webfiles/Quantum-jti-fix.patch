@@ -1,0 +1,80 @@
+diff --git a/backend/internal/auth/auth.go b/backend/internal/auth/auth.go
+index cbe41d7..1759907 100644
+--- a/backend/internal/auth/auth.go
++++ b/backend/internal/auth/auth.go
+@@ -1,14 +1,16 @@
+ package auth
+ 
+ import (
++	"crypto/rand"
++	"encoding/hex"
+ 	"fmt"
+ 	"net/http"
+ 	"time"
+ 
+ 	"github.com/golang-jwt/jwt/v4"
+-	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/access"
+ 	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
++	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
+ )
+ 
+ // Auther is the authentication interface.
+@@ -39,6 +41,10 @@ func MakeSignedTokenAPI(user *users.User, name string, duration time.Duration, p
+ 	if _, ok := user.Tokens[name]; ok {
+ 		return "", users.AuthToken{}, fmt.Errorf("key already exists with same name %v ", name)
+ 	}
++	nonce := make([]byte, 16)
++	if _, err := rand.Read(nonce); err != nil {
++		return "", users.AuthToken{}, fmt.Errorf("token randomness unavailable: %w", err)
++	}
+ 	now := time.Now()
+ 	expires := now.Add(duration)
+ 	// Create minimal token with only JWT standard claims
+@@ -48,6 +54,7 @@ func MakeSignedTokenAPI(user *users.User, name string, duration time.Duration, p
+ 				IssuedAt:  jwt.NewNumericDate(now),
+ 				ExpiresAt: jwt.NewNumericDate(expires),
+ 				Issuer:    FB_ISSUER,
++				ID:        hex.EncodeToString(nonce),
+ 			},
+ 		},
+ 	}
+diff --git a/backend/internal/auth/token_unique_test.go b/backend/internal/auth/token_unique_test.go
+new file mode 100644
+--- /dev/null
++++ b/backend/internal/auth/token_unique_test.go
+@@ -0,0 +1,34 @@
++package auth
++
++import (
++	"github.com/golang-jwt/jwt/v4"
++	"github.com/gtsteffaniak/filebrowser/backend/internal/database/users"
++	"github.com/gtsteffaniak/filebrowser/backend/pkg/settings"
++	"testing"
++	"time"
++)
++
++func TestCudyUniqueJWTForConcurrentUsers(t *testing.T) {
++	old := settings.Config.Auth.Key
++	settings.Config.Auth.Key = "synthetic-jti-regression-key"
++	defer func() { settings.Config.Auth.Key = old }()
++	seen := map[string]bool{}
++	for i := 0; i < 200; i++ {
++		u := &users.User{FrontendUser: users.FrontendUser{Username: "test-reader"}}
++		token, _, e := MakeSignedTokenAPI(u, "session", 2*time.Hour, users.Permissions{}, true)
++		if e != nil {
++			t.Fatal(e)
++		}
++		if seen[token] {
++			t.Fatal("session JWT collision")
++		}
++		seen[token] = true
++		claims := jwt.MapClaims{}
++		if _, e = jwt.ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) { return []byte(settings.Config.Auth.Key), nil }); e != nil {
++			t.Fatal(e)
++		}
++		if len(claims["jti"].(string)) != 32 {
++			t.Fatal("missing unique JWT identifier")
++		}
++	}
++}

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Serialize only this feature; never acquire or restart the proxy service.
+exec flock -n /var/lock/cudy-zt-direct.lock /usr/bin/lua /usr/libexec/cudy-zt-direct-run

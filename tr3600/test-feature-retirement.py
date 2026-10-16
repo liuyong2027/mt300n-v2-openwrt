@@ -70,10 +70,12 @@ else: raise SystemExit(2)
         backup=self.root/'root/.cudy-retired-test2'
         self.assertEqual(backup.stat().st_mode & 0o777,0o700)
         self.assertEqual((backup/'firewall').read_text(),self.original)
-        for name in ('firewall','cudy_l2tp','ddns'): self.assertEqual((backup/name).stat().st_mode & 0o777,0o600)
-        for name in ('cudy_l2tp','ddns'): self.assertFalse((self.root/'etc/config'/name).exists())
-        for name in ('cudy_l2tp','xl2tpd','swanctl','ddns'): self.assertFalse((self.root/'etc/rc.d'/('S95'+name)).is_symlink())
-        for name in ('mango_proxy','samba4'): self.assertTrue((self.root/'etc/rc.d'/('S95'+name)).is_symlink())
+        for name in ('firewall','cudy_l2tp'): self.assertEqual((backup/name).stat().st_mode & 0o777,0o600)
+        self.assertFalse((self.root/'etc/config/cudy_l2tp').exists())
+        self.assertEqual((self.root/'etc/config/ddns').read_text(), 'fixture-only-private-config\n')
+        self.assertFalse((backup/'ddns').exists())
+        for name in ('cudy_l2tp','xl2tpd','swanctl'): self.assertFalse((self.root/'etc/rc.d'/('S95'+name)).is_symlink())
+        for name in ('mango_proxy','samba4','ddns'): self.assertTrue((self.root/'etc/rc.d'/('S95'+name)).is_symlink())
         self.assertEqual(self.run_script().returncode,0)
         self.assertEqual((backup/'firewall').read_text(),self.original)
     def test_wrong_board_changes_nothing(self):
@@ -92,18 +94,28 @@ else: raise SystemExit(2)
         (self.root/'etc/config/firewall').write_text("config zone 'lan'\n\toption name 'lan'\n")
         self.assertEqual(self.run_script().returncode,0)
         self.assertFalse((self.root/'root/.cudy-retired-test2').exists())
+    def test_DDNS_only_install_preserves_settings_and_start_link(self):
+        (self.root/'etc/config/cudy_l2tp').unlink()
+        (self.root/'etc/config/firewall').write_text("config zone 'lan'\n\toption name 'lan'\n")
+        self.assertEqual(self.run_script().returncode,0)
+        self.assertEqual((self.root/'etc/config/ddns').read_text(),'fixture-only-private-config\n')
+        self.assertTrue((self.root/'etc/rc.d/S95ddns').is_symlink())
+        self.assertFalse((self.root/'root/.cudy-retired-test2').exists())
     def test_absence_audit_rejects_removed_content_and_package(self):
         image=self.root/'image'; image.mkdir()
         removed.validate_root(image)
-        for path in ('etc/init.d/ddns','usr/sbin/xl2tpd','www/luci-static/resources/view/cudy-l2tp.js'):
+        for path in ('usr/sbin/pptpd','usr/sbin/xl2tpd','www/luci-static/resources/view/cudy-l2tp.js'):
             target=image/path; target.parent.mkdir(parents=True,exist_ok=True); target.write_text('unexpected')
             with self.assertRaises(AssertionError): removed.validate_root(image)
             target.unlink()
         config=self.root/'image.config'
-        for name in ('strongswan-charon','ddns-scripts-dynu','luci-app-ddns','cudy-l2tp-ifname'):
+        for name in ('strongswan-charon','pptpd','luci-app-pptp-server','cudy-l2tp-ifname'):
             config.write_text('CONFIG_PACKAGE_'+name+'=y\n')
             with self.assertRaises(AssertionError): removed.validate_config(config)
-        config.write_text('CONFIG_PACKAGE_ppp=y\nCONFIG_PACKAGE_zerotier=y\n')
+        config.write_text('CONFIG_PACKAGE_ppp=y\nCONFIG_PACKAGE_zerotier=y\nCONFIG_PACKAGE_luci-app-ddns=y\nCONFIG_PACKAGE_ddns-scripts=y\n')
         removed.validate_config(config)
+        allowed=image/'etc/init.d/ddns'; allowed.parent.mkdir(parents=True,exist_ok=True)
+        allowed.write_text('standard DDNS service')
+        removed.validate_root(image)
 
 if __name__ == '__main__': unittest.main(verbosity=2)

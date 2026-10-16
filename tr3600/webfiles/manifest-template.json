@@ -1,0 +1,127 @@
+{
+  "version": "0.6.2-test",
+  "displayName": "Cudy webpage",
+  "targetBoard": "cudy,tr3600-v1",
+  "architecture": "linux-arm64",
+  "helperSHA256": null,
+  "quantum": {
+    "version": "v2.0.0-stable+cudy-jti1",
+    "upstreamVersion": "v2.0.0-stable",
+    "unmodified": false,
+    "sourceBuilt": true,
+    "sha256": null,
+    "CGO_ENABLED": 0,
+    "MuPDFBuildTag": false,
+    "change": "128-bit random jti for every JWT; regression test included"
+  },
+  "features": [
+    "LuCI service start/stop with verified process shutdown",
+    "Up to 16 independent webpage users",
+    "Per-user read-only or read/write permission",
+    "Existing primary administrator and password retained",
+    "Blank password preserves an edited user password",
+    "Encrypted multi-user registry and TLS retained across service restart",
+    "Custom high HTTPS port",
+    "Public CA download and explicit certificate regeneration",
+    "Live MemAvailable even while stopped",
+    "Sanitized stop reason and timestamp, matched to process and boot identity",
+    "Root-only last-stop diagnostic retained across normal restart",
+    "LuCI opt-in ZeroTier access via an existing private-network LAN managed route",
+    "Pinned authorized ZeroTier network; fail closed to LAN when it is unavailable",
+    "Access switch updates only the package-owned nftables chain without restarting file service",
+    "Original LAN HTTPS endpoint, encrypted users and CA retained",
+    "Separate opt-in HTTPS gateway on a pinned private WAN IPv4, reusing webpage accounts",
+    "Separate public-IP test CA; LAN and ZeroTier CA unchanged",
+    "Unprivileged empty-chroot gateway with verified HTTPS upstream and bounded connections",
+    "DDNS hostname entry and DNS-name TLS SAN; public IP changes no longer require a new certificate for the same hostname",
+    "Separate encrypted domain TLS slot preserves the original public-IP CA for rollback",
+    "Link to standard LuCI dynamic DNS service",
+    "External upstream TCP port 443 with implicit or explicit default HTTPS authority; internal listener remains high-port",
+    "Start file service at S99 after synchronous Cudy USB reconciliation at S97",
+    "Firmware defaults have no preselected personal USB volume",
+    "Persistent WebFiles encryption key, accounts and TLS included in sysupgrade keep list"
+  ],
+  "persistentStorage": {
+    "directory": "/etc/cudy-webfiles",
+    "directoryMode": "0700 root",
+    "filesMode": "0600 root",
+    "accountEncryption": "AES-256-GCM, local root-only key",
+    "passwordInUCI": false,
+    "passwordReturnedByRPC": false,
+    "plaintextRuntimeConfig": "Private root input plus UID 65534 private jailed state; not exported"
+  },
+  "temporaryRuntime": "/tmp/cudy-webfiles-managed",
+  "access": "LAN by default; optional pinned private ZeroTier network and separate opt-in public HTTPS gateway",
+  "portRange": [
+    1024,
+    65535
+  ],
+  "initialServiceEnabled": false,
+  "autoRespawn": false,
+  "certificateValidityDays": 30,
+  "unchangedSafeguards": [
+    "Authorized volume and original mount identity",
+    "Mount/PID namespaces and chroot",
+    "UID/GID 65534 and no_new_privs",
+    "No Samba metadata access",
+    "WebDAV/previews/updates disabled",
+    "Memory preflight and guard stop"
+  ],
+  "notImplemented": [
+    "Per-user private directories",
+    "Direct TR3600 listener on privileged port 443",
+    "Automatic recovery after USB reinsert",
+    "Direct binding to ZeroTier IP without the existing LAN managed route"
+  ],
+  "credentialSourceOfTruth": "LuCI encrypted multi-user registry; webpage-side temporary edits are not synchronized back",
+  "minimumPasswordCharacters": 6,
+  "plainHTTPLuCIAccountSaveAllowed": true,
+  "maximumUsers": 16,
+  "diagnostics": {
+    "persistentStopRecord": "/etc/cudy-webfiles/last-stop.json",
+    "mode": "0600 root",
+    "writeFrequency": "Once per exit",
+    "includesPasswordsOrRawErrorText": false,
+    "OOMRootCauseFixed": false
+  },
+  "zerotier": {
+    "defaultEnabled": false,
+    "privateNetworkRequired": true,
+    "pinNetworkID": true,
+    "existingManagedLANRouteRequired": true,
+    "bindAddressUnchanged": true,
+    "certificateUnchanged": true,
+    "changesOriginalFirewallOrZeroTierConfig": false,
+    "policyPollSeconds": 5
+  },
+  "publicGateway": {
+    "defaultEnabled": false,
+    "IPv4Only": true,
+    "domainNamesSupported": true,
+    "upstreamPortForwardRequired": true,
+    "separateCertificate": true,
+    "certificateValidityDays": 30,
+    "maxTCPConnections": 16,
+    "maxConcurrentRequests": 32,
+    "chrootContainsUSB": false,
+    "UID": 65534,
+    "originalFirewallUCIChanged": false,
+    "runtimeFirewallRule": "Exact named WAN interface, pinned private address and single TCP port; removed on stop",
+    "automaticallyResolvesUpstreamPublicIP": false,
+    "domainTLSStorage": "public-domain-tls.enc",
+    "DDNSClient": "Standard OpenWrt ddns-scripts / luci-app-ddns, installed separately",
+    "domainDNSStatus": true,
+    "externalPortRange": [
+      1,
+      65535
+    ],
+    "defaultHTTPSPortSupported": true,
+    "listenerPortRange": [
+      1024,
+      65535
+    ]
+  },
+  "integrationRevision": "firmware1",
+  "bootStartPriority": 99,
+  "firmwareVersion": "tr3600-1.1.0-rc1"
+}

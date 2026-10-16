@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+/reports/
+/vendor/
+/openwrt/
+/tr3600-assets/

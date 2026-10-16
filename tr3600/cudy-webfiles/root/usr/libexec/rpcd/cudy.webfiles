@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/lib/cudy-webfiles/bin/cudy-webfiles rpc "$@"

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Account keys, credentials and certificates are created on the owner's device.
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'cudy,tr3600-v1' ] || exit 0
+[ ! -f /etc/config/ddns ] || chmod 600 /etc/config/ddns
+/etc/init.d/cudy-webfiles enable
+exit 0

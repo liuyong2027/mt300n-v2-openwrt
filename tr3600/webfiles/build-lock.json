@@ -1,0 +1,23 @@
+{
+  "firmware_version": "tr3600-1.1.0-rc1",
+  "helper_version": "0.6.2-test",
+  "recipe_baseline": "05f64f2925f111b3a25a987b23624d43ddeae724",
+  "image_baseline": "e298f2b015bc70eac46e0de58204616046cb119f",
+  "openwrt_commit": "f0a60eee2fe051741c643ea6118718aae1ef17fb",
+  "go_version": "1.27.2",
+  "node_version": "24.19.0",
+  "quantum_commit": "a29573e7068a4a682f199b64bec3e206159f535c",
+  "quantum_version": "v2.0.0-stable+cudy-jti1",
+  "quantum_patch_sha256": "db159a18fbacf18a9c5eab4e0dc459fe73cdbc9e1b62735ee1e34e82d4a07216",
+  "features_added": [
+    "WebFiles",
+    "DDNS",
+    "ZeroTier direct-path UDP/SSDP lifecycle and upgrade preservation"
+  ],
+  "PPTP_included": false,
+  "upstream_source": "https://github.com/gtsteffaniak/filebrowser",
+  "pretested_reference": {
+    "helper": "5c1d4f3f3539824afc345b657cd486d8a0d0f028105865a6ae4bc718de03c2e2",
+    "quantum": "dcca65dc898fd86bb8cc6cbd1a43b94dadd1cf2355ab6c2e07ec6dcff4c527b7"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "luci-app-cudy-webfiles": {
+    "description": "Manage Cudy webpage service and multiple users",
+    "read": {
+      "ubus": {
+        "cudy.webfiles": [
+          "status",
+          "certificate",
+          "public_certificate"
+        ]
+      }
+    },
+    "write": {
+      "ubus": {
+        "cudy.webfiles": [
+          "start",
+          "stop",
+          "settings",
+          "account",
+          "renew_certificate",
+          "user_save",
+          "user_delete",
+          "zerotier",
+          "public_access"
+        ]
+      }
+    }
+  }
+}

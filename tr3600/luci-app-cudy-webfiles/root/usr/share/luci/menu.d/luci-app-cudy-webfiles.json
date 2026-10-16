@@ -1,0 +1,1 @@
+{"admin/services/cudy-webfiles":{"title":"Cudy webpage","order":61,"action":{"type":"view","path":"cudy-webfiles"},"depends":{"acl":["luci-app-cudy-webfiles"]}}}

@@ -1,0 +1,20 @@
+#!/bin/sh
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'cudy,tr3600-v1' ] || exit 0
+# Preserve existing local.conf exactly, including the verified on-device fix.
+task_path=$(uci -q get zerotier.global.local_conf_path)
+if [ -z "$task_path" ] && [ ! -e /etc/zerotier-stable-ports.json ]; then
+    (umask 077; printf '%s\n' '{"settings":{"secondaryPort":48170,"tertiaryPort":20089,"portMappingEnabled":true}}' > /etc/zerotier-stable-ports.json) || exit 1
+    uci set zerotier.global.local_conf_path='/etc/zerotier-stable-ports.json'
+    uci commit zerotier || exit 1
+fi
+# Do not overwrite another include occupying this name.
+task_include=$(uci -q get firewall.cudy_zt_direct.path)
+if [ -n "$task_include" ] && [ "$task_include" != /usr/libexec/cudy-zt-direct ]; then
+    logger -t cudy-zt-direct 'Conflicting firewall include; left unchanged'
+    exit 1
+fi
+uci set firewall.cudy_zt_direct=include
+uci set firewall.cudy_zt_direct.type='script'
+uci set firewall.cudy_zt_direct.path='/usr/libexec/cudy-zt-direct'
+uci set firewall.cudy_zt_direct.fw4_compatible='1'
+uci commit firewall
