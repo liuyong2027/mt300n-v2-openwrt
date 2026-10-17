@@ -19,7 +19,7 @@
   },
   "concurrency": {
     "group": "tr3600-webfiles-1.1.1-${{ github.ref }}",
-    "cancel-in-progress": false
+    "cancel-in-progress": true
   },
   "jobs": {
     "build": {

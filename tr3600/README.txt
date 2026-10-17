@@ -1,4 +1,4 @@
-Cudy TR3600 V1.0 - 1.1.1 WebFiles + DDNS test build
+Cudy TR3600 V1.0 - 1.1.1 WebFiles + DDNS stable release
 
 Only for Cudy TR3600 V1.0 (cudy,tr3600-v1 / R126).
 This is a community custom firmware, not a Cudy vendor firmware release.
@@ -45,8 +45,8 @@ Included:
   events do not reset the exit identity.
 - WAN/LAN EEE and Tx LPI workaround, PPP/PPPoE, Samba4 and full wpad.
 
-New in this candidate:
-- Cudy webpage WebFiles 0.6.3: LuCI start/stop, up to16 independent users,
+Included WebFiles and DDNS:
+- Cudy webpage WebFiles 0.6.6: LuCI start/stop, up to16 independent users,
   per-user write permission, HTTPS, optional ZeroTier and public gateway.
   Fresh service/read-write/ZeroTier/public access are disabled. No personal
   volume, account, CA, DDNS domain or network ID is preconfigured. LAN port8080.
@@ -57,7 +57,7 @@ New in this candidate:
 
 PPTP and L2TP/IPsec server remain excluded. Upgrade migration privately backs
 up only the obsolete L2TP configuration and removes only its owned VPN rules.
-This new full candidate image has not been flashed or hardware accepted.
+This new full1.1.1 image has not been flashed or hardware accepted.
 Cudy vendor UI, App, cloud management and Mesh are not included.
 
 Upgrade from a matching custom TR3600 OpenWrt image:
@@ -128,7 +128,7 @@ before the full build and again against the final packed filesystem.
 Download name: cudy-tr3600-v1-1.1.1-sysupgrade.bin.
 The rc2 router required one manual directory-mode correction before its LAN,
 ZeroTier and public phone acceptance passed. This prior evidence does not
-replace keep-settings upgrade and client acceptance of the new rc3 image.
+replace keep-settings upgrade and client acceptance of this new1.1.1 image.
 No WAN/PHY/proxy change is included; previous spontaneous link flaps and the
 known FAT32 dirty-unmount condition are not claimed fixed.
 
