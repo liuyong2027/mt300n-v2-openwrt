@@ -1,0 +1,6 @@
+TR3600 1.1.1 release scope update
+
+The owner requested inclusion of the already accepted LED connectivity fix on 2026-10-17.
+The previous certificate/DDNS-only candidate is superseded and must not publish.
+Final source must include shared probing, exclusive LED/watchdog ownership and regressions.
+A new full-source build and packed-image verification are required before publication.
