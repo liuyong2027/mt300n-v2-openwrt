@@ -166,6 +166,7 @@ check(table.concat(frames,',')=='unknown,healthy,unknown,healthy,unknown,healthy
 
 M=dofile(module_path)
 local s=snapshot('split')
+M.board=function() return 'cudy,tr3600-v1' end
 M.config=function() return {mode='status'} end
 M.blocked=function() return false end
 M.snapshot=function() return s end
