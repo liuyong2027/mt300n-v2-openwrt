@@ -19,7 +19,8 @@ import (
 	"time"
 )
 
-const version = "0.6.4"
+const version = "0.6.6"
+const certificateValidityDays = 365
 
 // Bound to the exact source-built Quantum executable by the build recipe.
 // An unbound development build must refuse to launch a file service.
@@ -202,7 +203,7 @@ func makeTLS(ip string) (map[string][]byte, error) {
 		return nil, err
 	}
 	now := time.Now()
-	ca := &x509.Certificate{SerialNumber: serial(), Subject: pkix.Name{CommonName: "Cudy WebFiles TEST CA"}, NotBefore: now.Add(-time.Hour), NotAfter: now.AddDate(0, 0, 30), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign}
+	ca := &x509.Certificate{SerialNumber: serial(), Subject: pkix.Name{CommonName: "Cudy webpage CA"}, NotBefore: now.Add(-time.Hour), NotAfter: now.AddDate(0, 0, certificateValidityDays), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign}
 	caDER, err := x509.CreateCertificate(rand.Reader, ca, ca, &caKey.PublicKey, caKey)
 	if err != nil {
 		return nil, err
@@ -211,7 +212,7 @@ func makeTLS(ip string) (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	cert := &x509.Certificate{SerialNumber: serial(), Subject: pkix.Name{CommonName: "Cudy webpage Test"}, NotBefore: now.Add(-time.Hour), NotAfter: now.AddDate(0, 0, 30), IPAddresses: []net.IP{net.ParseIP(ip)}, KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	cert := &x509.Certificate{SerialNumber: serial(), Subject: pkix.Name{CommonName: "Cudy webpage"}, NotBefore: now.Add(-time.Hour), NotAfter: now.AddDate(0, 0, certificateValidityDays), IPAddresses: []net.IP{net.ParseIP(ip)}, KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 	if net.ParseIP(ip) == nil {
 		cert.IPAddresses = nil
 		cert.DNSNames = []string{ip}

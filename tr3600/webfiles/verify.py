@@ -79,10 +79,10 @@ def verify(image_root, kit):
     report['upgrade_storage_permission_restoration_case_count'] = 11
     report['upgrade_storage_test_runtime'] = 'ARM64 Lua/nixio and restoration module from the final packed image; synthetic root-owned accounts, keys and LAN/public-IP/DDNS TLS fixtures only'
     report['upgrade_storage_initializer_before_enable_and_reset'] = True
-    acceptance = json.loads((kit / 'release/tr3600-1.1.0/COMPONENT-ACCEPTANCE.json').read_text())
+    acceptance = json.loads((kit / 'release/tr3600-1.1.1/COMPONENT-ACCEPTANCE.json').read_text())
     assert manifest['helperSHA256'] == acceptance['helper_sha256']
     assert manifest['quantum']['sha256'] == acceptance['quantum_sha256']
-    assert manifest['version'] == '0.6.4' and manifest['startup']['initialWaitSeconds'] == 90
+    assert manifest['version'] == '0.6.6' and manifest['startup']['initialWaitSeconds'] == 90
     result = subprocess.run(['sudo', 'unshare', '--mount', '--fork', 'sh', str(kit / 'tr3600/webfiles/test_packed_boot.sh'), str(root)], check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     boot_proof = json.loads(result.stdout)
     assert boot_proof['actual_packed_ARM64_boot_action'] == 'passed' and boot_proof['diagnostic_root0600']
@@ -91,10 +91,27 @@ def verify(image_root, kit):
     assert log.rstrip().endswith('PASS') and '--- FAIL:' not in log
     top = len(re.findall(r'^--- PASS:', log, re.M))
     all_cases = len(re.findall(r'^\s*--- PASS:', log, re.M))
-    assert top == 45 and all_cases == 65
+    assert top == 46 and all_cases == 68
     report['boot_readiness_ARM64_tests_passed'] = top
     report['boot_readiness_ARM64_including_subtests_passed'] = all_cases
     report['accepted_hotfix_binary_byte_identical'] = True
     report['actual_packed_boot_startup_diagnostic'] = 'passed'
+    assert manifest['certificateValidityDays'] == 365
+    assert manifest['publicGateway']['certificateValidityDays'] == 365
+    assert manifest['certificateNames'] == {'CA': 'Cudy webpage CA', 'server': 'Cudy webpage'}
+    report['certificate_validity_days'] = 365
+    report['certificate_names_formal'] = True
+    for source in (kit / 'tr3600/network-root').rglob('*'):
+        if source.is_file() and ('dynu' in source.name):
+            packed = root / source.relative_to(kit / 'tr3600/network-root')
+            assert packed.read_bytes() == source.read_bytes(), str(packed)
+            if source.read_bytes().startswith(b'#!'): assert packed.stat().st_mode & 0o111
+    ddns = subprocess.run(['python3', str(kit / 'tr3600/test-dynu-https.py'), str(root), str(root)], check=True, text=True, stdout=subprocess.PIPE)
+    assert '"DDNS_HTTPS_regressions_passed": true' in ddns.stdout
+    (kit / 'reports/ddns-https-packed-regressions.txt').write_text(ddns.stdout)
+    report['DDNS_HTTPS_regressions_passed'] = True
+    report['DDNS_resolver_cases'] = 7
+    report['DDNS_provider_cases'] = 8
+    report['DDNS_migration_cases'] = 10
     (kit / 'reports/webfiles-image-verification.json').write_text(json.dumps(report, indent=2) + '\n')
     return report

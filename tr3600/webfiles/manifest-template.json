@@ -1,5 +1,5 @@
 {
-  "version": "0.6.4",
+  "version": "0.6.6",
   "displayName": "Cudy webpage",
   "targetBoard": "cudy,tr3600-v1",
   "architecture": "linux-arm64",
@@ -31,7 +31,7 @@
     "Access switch updates only the package-owned nftables chain without restarting file service",
     "Original LAN HTTPS endpoint, encrypted users and CA retained",
     "Separate opt-in HTTPS gateway on a pinned private WAN IPv4, reusing webpage accounts",
-    "Separate public-IP test CA; LAN and ZeroTier CA unchanged",
+    "Separate public-IP CA; LAN and ZeroTier CA unchanged",
     "Unprivileged empty-chroot gateway with verified HTTPS upstream and bounded connections",
     "DDNS hostname entry and DNS-name TLS SAN; public IP changes no longer require a new certificate for the same hostname",
     "Separate encrypted domain TLS slot preserves the original public-IP CA for rollback",
@@ -42,7 +42,8 @@
     "Persistent WebFiles encryption key, accounts and TLS included in sysupgrade keep list",
     "Helper SHA256 bound to the actual source-built Quantum; real ARM64 startup guard executed before and after packing",
     "Restore the preserved root-owned private directory0755 to0700 after metadata/marker validation before service startup; account keys and encrypted users/TLS unchanged",
-    "Bounded initial readiness wait, root-only boot-scoped startup diagnostics and cancellation; no runtime respawn"
+    "Bounded initial readiness wait, root-only boot-scoped startup diagnostics and cancellation; no runtime respawn",
+    "New LAN and public TLS certificates use 365-day validity; existing certificates are preserved until explicit regeneration"
   ],
   "persistentStorage": {
     "directory": "/etc/cudy-webfiles",
@@ -62,7 +63,7 @@
   ],
   "initialServiceEnabled": false,
   "autoRespawn": false,
-  "certificateValidityDays": 30,
+  "certificateValidityDays": 365,
   "unchangedSafeguards": [
     "Authorized volume and original mount identity",
     "Mount/PID namespaces and chroot",
@@ -104,7 +105,7 @@
     "domainNamesSupported": true,
     "upstreamPortForwardRequired": true,
     "separateCertificate": true,
-    "certificateValidityDays": 30,
+    "certificateValidityDays": 365,
     "maxTCPConnections": 16,
     "maxConcurrentRequests": 32,
     "chrootContainsUSB": false,
@@ -125,9 +126,9 @@
       65535
     ]
   },
-  "integrationRevision": "firmware4",
+  "integrationRevision": "firmware5",
   "bootStartPriority": 99,
-  "firmwareVersion": "tr3600-1.1.0",
+  "firmwareVersion": "tr3600-1.1.1",
   "startup": {
     "initialWaitSeconds": 90,
     "adapterAttemptTimeoutSeconds": 5,
@@ -137,5 +138,9 @@
     "diagnosticMode": "0600 root",
     "retryScope": "Initial LAN/authorized USB mount/memory readiness only"
   },
-  "releaseChannel": "stable"
+  "releaseChannel": "stable",
+  "certificateNames": {
+    "CA": "Cudy webpage CA",
+    "server": "Cudy webpage"
+  }
 }

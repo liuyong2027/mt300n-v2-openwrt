@@ -146,7 +146,7 @@ ss_defaults=(extracted/'etc/config/cudy_ss').read_text()
 assert "option enabled '0'" in ss_defaults
 for key in ('password','listen','subnet','network_id','interface'): assert 'option '+key not in ss_defaults
 assert not (extracted/'etc/cudy-ss').exists(), 'Private guard/journal data must only be created on the router'
-assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-1.1.0'
+assert (extracted/'etc/cudy-release').read_text().strip() == 'tr3600-1.1.1'
 ui_source = (kit/'package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js').read_bytes()
 assert hashlib.sha256(ui_source).hexdigest() == expected['ui_source_sha256']
 ui_expected = subprocess.run([str(tree/'staging_dir/hostpkg/bin/jsmin')], input=ui_source, stdout=subprocess.PIPE, check=True).stdout
@@ -170,7 +170,7 @@ assert (extracted/'etc/init.d/zerotier').read_text() == zt_integration.patch((ki
 assert (extracted/'lib/upgrade/keep.d/cudy-zt-direct').read_text().strip() == '/etc/zerotier-stable-ports.json'
 assert not (extracted/'etc/zerotier-stable-ports.json').exists(), 'Generated only on device; existing owner file must be retained'
 webfiles_proof = webfiles_integration.verify(extracted, kit)
-proof = {'device': 'cudy,tr3600-v1', 'version': 'tr3600-1.1.0', 'application_version': '20-test-failover1', 'source_commit': os.getenv('GITHUB_SHA'),
+proof = {'device': 'cudy,tr3600-v1', 'version': 'tr3600-1.1.1', 'application_version': '20-test-failover1', 'source_commit': os.getenv('GITHUB_SHA'),
          'image': image.name, 'image_bytes': image.stat().st_size,
          'image_sha256': hashlib.sha256(image.read_bytes()).hexdigest(),
          'container': 'sysupgrade tar with FIT kernel and SquashFS rootfs',
@@ -183,15 +183,15 @@ proof = {'device': 'cudy,tr3600-v1', 'version': 'tr3600-1.1.0', 'application_ver
          'ss_server': {'installed':'exact CLI/guard/watcher/transaction/RPC/LuCI; original core backups and narrow hooks verified; default disabled, no owner key/scope/network ID','arm64_checks':ss_runtime},
          'unified_wifi': 'selected; full ARM64 wpad/usteer, exact helper/configuration and LuCI page verified; disabled by default',
          'removed_features': 'L2TP/IPsec and PPTP server absent; owner DDNS configuration is preserved',
-         'hardware_validation': 'WebFiles0.6.4 identical component on rc3 passed one authorized whole-router reboot with zero manual starts and original-account/certificate phone LAN and cellular ZeroTier login/browse. Earlier rc2 file-operation/public acceptance remains prior-image evidence. This new complete1.1.0 image has not been flashed or hardware accepted; WAN flaps and FAT32 condition remain unresolved.',
-         'release_status': '1.1.0 stable release authorized by owner; full-image hardware acceptance pending; never automatically flashed',
+         'hardware_validation': 'WebFiles0.6.6 certificate component and Dynu HTTPS updater were accepted on the current1.1.0 router; original guest login and manual iOS CA trust succeeded, authenticated Dynu update succeeded. This complete1.1.1 image has not been flashed or reboot accepted. WAN flaps and FAT32 condition remain unresolved.',
+         'release_status': '1.1.1 stable release authorized by owner; full-image hardware acceptance pending; never automatically flashed',
          'validation_limits': 'Long-duration guard observation, physical fault/night/upgrade LEDs, current iPhone Files client and writable NTFS were not all covered; see RELEASE-NOTES.txt'}
 proof['zerotier_direct'] = {'policy_and_nft_regression': 'passed before build', 'lifecycle': 'exact locked ZeroTier init with bounded helper hooks; fw4 include and WAN hotplug; no proxy restart', 'upstream': 'derived from current WAN default route, SSDP source port1900 only', 'upgrade': 'stable-port file retained; existing local.conf and owner Mango firewall sections preserved; exact patched first-boot script verified', 'keepalive': 'not made persistent; remote low-power-router trial only', 'hardware': 'new full-image restart/reload/end-to-end acceptance pending'}
 proof['fresh_mangozt_policy'] = {'input': 'ACCEPT', 'output': 'ACCEPT', 'intra_zone_forward': 'ACCEPT', 'IPv4_masquerading': True, 'existing_owner_sections': 'preserved on settings upgrade'}
 proof['webfiles_and_DDNS'] = webfiles_proof
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)
-for source in ('tr3600-source.json', 'tr3600-verification.json', 'ss-validation.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config', 'webfiles-build.json', 'webfiles-image-verification.json', 'webfiles-storage-packed-regressions.txt', 'webfiles-boot-regressions.txt', 'webfiles-boot-packed-verification.json'):
+for source in ('tr3600-source.json', 'tr3600-verification.json', 'ss-validation.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config', 'webfiles-build.json', 'webfiles-image-verification.json', 'webfiles-storage-packed-regressions.txt', 'webfiles-boot-regressions.txt', 'webfiles-boot-packed-verification.json', 'ddns-https-packed-regressions.txt'):
     shutil.copyfile(reports/source, assets/source)
 shutil.copyfile(kit/'tr3600/README.txt', assets/'README.txt')
 shutil.copyfile(kit/'tr3600/RELEASE-NOTES.txt', assets/'RELEASE-NOTES.txt')

@@ -248,7 +248,7 @@ func managedRunning() bool {
 func managedStatus() map[string]any {
 	s := managedSettingsNow()
 	running := managedRunning()
-	r := map[string]any{"version": version, "display_name": "Cudy webpage", "running": running, "users": []map[string]any{}, "user_count": 0, "max_users": maxManagedUsers, "settings": s, "enabled": uciGet("enabled", "0") == "1", "account_set": false, "username": "admin", "access": "仅 LAN", "certificate_days": 30}
+	r := map[string]any{"version": version, "display_name": "Cudy webpage", "running": running, "users": []map[string]any{}, "user_count": 0, "max_users": maxManagedUsers, "settings": s, "enabled": uciGet("enabled", "0") == "1", "account_set": false, "username": "admin", "access": "仅 LAN", "certificate_days": certificateValidityDays}
 	registry, e := loadManagedRegistry()
 	if e == nil {
 		a := primaryAccount(registry)

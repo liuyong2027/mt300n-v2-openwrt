@@ -1,0 +1,20 @@
+{
+  "component": "Cudy WebFiles0.6.6 + Cudy Dynu HTTPS",
+  "helper_sha256": "bf08f0b68eff6eb1611377821a3932c92b7aba41eb153a8fa34cb6c4336c7a02",
+  "quantum_sha256": "c10353ecce3159edb2445a45dbcdce45433248c1e05e7beea5aa52cec00866c2",
+  "native_ARM64_top_level_tests_passed": 46,
+  "native_ARM64_including_subtests_passed": 68,
+  "certificate_days": 365,
+  "CA_name": "Cudy webpage CA",
+  "leaf_name": "Cudy webpage",
+  "current_router_component_acceptance": "WebFiles0.6.6 installed on1.1.0; original guest login/browse accepted; iOS full CA trust resolved warning. Dynu HTTPS authenticated update succeeded; original credentials retained.",
+  "whole_router_reboot_after_these_components": false,
+  "new_complete_image_hardware_acceptance": "not performed",
+  "existing_accounts_certificates_and_DDNS_credentials_retained": true,
+  "owner_authorized_normal_GitHub_release": true,
+  "real_credentials_or_private_keys_included": false,
+  "known_unresolved": [
+    "WAN link flaps",
+    "FAT32 dirty-unmount warning; offline consistency check pending"
+  ]
+}

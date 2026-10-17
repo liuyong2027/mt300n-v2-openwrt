@@ -1,0 +1,6 @@
+/etc/config/ddns
+/usr/libexec/cudy-dynu-resolve
+/usr/lib/ddns/update_cudy_dynu_https.sh
+/usr/share/ddns/custom/cudy-dynu-https.json
+/lib/upgrade/keep.d/cudy-dynu-ddns
+/usr/lib/lua/cudy/dynu-migrate.lua

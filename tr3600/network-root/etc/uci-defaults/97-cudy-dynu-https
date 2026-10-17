@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs once on a new image; an existing profile's enabled state is retained.
+/usr/bin/lua -e "require('cudy.dynu-migrate').apply(require('uci').cursor())" || exit 1
+exit 0

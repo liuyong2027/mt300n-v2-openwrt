@@ -56,7 +56,7 @@ for name in ('cudy-webfiles', 'filebrowser'):
 # Execute the same embedded hash and ELF guard used during service startup.
 # Comparing binaries with a separate manifest alone missed the rc1 defect.
 run(['qemu-aarch64-static', str(OUT / 'cudy-webfiles'), 'verify-binary', str(OUT / 'filebrowser')], ROOT)
-acceptance = json.loads((ROOT / 'release/tr3600-1.1.0/COMPONENT-ACCEPTANCE.json').read_text())
+acceptance = json.loads((ROOT / 'release/tr3600-1.1.1/COMPONENT-ACCEPTANCE.json').read_text())
 assert quantum_hash == acceptance['quantum_sha256'], 'Quantum differs from the accepted component'
 assert digest(OUT / 'cudy-webfiles') == acceptance['helper_sha256'], 'Helper differs from the accepted component'
 manifest = json.loads((FEATURE / 'manifest-template.json').read_text())

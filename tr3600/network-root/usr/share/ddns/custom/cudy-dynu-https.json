@@ -1,0 +1,7 @@
+{
+  "name": "Dynu HTTPS",
+  "ipv4": {
+    "url": "update_cudy_dynu_https.sh",
+    "answer": "^(good|nochg)([[:space:]]|$)"
+  }
+}
