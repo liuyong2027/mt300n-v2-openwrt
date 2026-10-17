@@ -1,13 +1,22 @@
 #!/usr/bin/lua
 package.path='/usr/lib/?.lua;'..package.path
-local fs=require('nixio.fs')
-local j=require('luci.jsonc')
+local j=require('mango.zt-json')
 local c=require('uci').cursor()
 local m=require('mango.zt-direct')
-if (fs.readfile('/tmp/sysinfo/board_name') or ''):match('^%s*(.-)%s*$')~='glinet,gl-mt300n-v2' then os.exit(0) end
+local function readfile(path)
+    if type(path)~='string' or path=='' then return end
+    local f=io.open(path,'rb'); if not f then return end
+    local text=f:read('*a'); f:close(); return text
+end
+local function parse(text)
+    if type(text)~='string' then return end
+    local ok,value=pcall(j.decode,text)
+    if ok then return value end
+end
+if (readfile('/tmp/sysinfo/board_name') or ''):match('^%s*(.-)%s*$')~='glinet,gl-mt300n-v2' then os.exit(0) end
 local function capture(cmd)
     local p=io.popen(cmd,'r'); if not p then return end
-    local data=p:read('*a'); p:close(); return j.parse(data)
+    local data=p:read('*a'); p:close(); return parse(data)
 end
 local function fail(message)
     -- Messages are fixed policy errors; never log config contents or identity.
@@ -18,7 +27,7 @@ enabled=enabled and c:get('firewall','mango_zt_direct')=='include'
     and c:get('firewall','mango_zt_direct','path')=='/usr/libexec/mango-zt-direct'
     and c:get('firewall','mango_zt_direct','enabled')~='0'
 local path=c:get('zerotier','global','local_conf_path')
-local conf=path and j.parse(fs.readfile(path) or '')
+local conf=path and parse(readfile(path))
 local status=capture('timeout 3 ubus call network.interface.wan status 2>/dev/null')
 local policy,err=m.policy(enabled,c:get('zerotier','global','port'),conf,status)
 -- Invalid configuration removes only this helper's rules, leaving owner UCI rules intact.

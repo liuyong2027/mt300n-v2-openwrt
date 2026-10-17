@@ -89,6 +89,7 @@ def prepare(dest):
     edit('scripts/package-release.py', lambda s: s.replace("'KERNEL-PROFILES-20.md']", "'KERNEL-PROFILES-20.md', 'SOURCE-DELTA-22.json']").replace("'build': 'passed',", "'zerotier_direct': read('reports/zt-direct-nft.json'),\n        'zerotier_target': read('reports/zt-direct-target.json'),\n        'build': 'passed',"))
     edit('scripts/publish-release.py', lambda s: s.replace("'KERNEL-PROFILES-20.md'}", "'KERNEL-PROFILES-20.md', 'SOURCE-DELTA-22.json'}"))
     content['RELEASE-22.md'] = (ROOT / 'release22/RELEASE-22.md').read_bytes()
+    content['README.md'] = content['RELEASE-22.md']
     validation = json.loads(original['VALIDATION-21.json'])
     validation.update(version='22', date='2026-10-17', base_commit=BASE_COMMIT,
                       artifact_scope='Release 21 plus MT300N-V2 ZeroTier direct UDP/UPnP runtime rules and preservation of existing defaults',
@@ -97,13 +98,14 @@ def prepare(dest):
     validation['source_rootfs_sha256'] = {n.split('/root/', 1)[1]: sha(b) for n, b in content.items() if n.startswith('package/luci-app-mango-proxy/root/')}
     content['VALIDATION-22.json'] = (json.dumps(validation, indent=2) + '\n').encode()
     changed = {n: {'before': sha(original[n]), 'after': sha(b)} for n, b in content.items() if n in original and b != original[n] and n != 'SOURCE-FILES-SHA256SUMS'}
-    allowed = {fw, wifi, lang, 'files/etc/mango-release', prepare_name, 'scripts/package-release.py', 'scripts/publish-release.py', 'tests/test_release_packaging.py'}
+    allowed = {fw, wifi, lang, 'README.md', 'files/etc/mango-release', prepare_name, 'scripts/package-release.py', 'scripts/publish-release.py', 'tests/test_release_packaging.py'}
     assert set(changed) == allowed, sorted(changed)
     delta = {'version': '22', 'base_tag': 'v21.0.0', 'base_commit': BASE_COMMIT, 'base_source_sha256': BASE_SHA256,
              'changed_files': changed, 'added_files': {n: sha(b) for n, b in content.items() if n not in original},
              'unchanged_baseline_files': len(original) - len(changed) - 1,
              'proxy_ui_and_runtime': 'Byte-identical to Release 21 except three first-boot defaults guarded to preserve existing settings',
-             'new_hardware_acceptance': 'pending; publication does not flash devices'}
+             'new_hardware_acceptance': 'pending; publication does not flash devices',
+             'vendored_json': {'upstream': 'https://github.com/rxi/json.lua', 'commit': 'dbf4b2dd2eb7c23be2773c89eb059dadd6436f94', 'license': 'MIT, included in module header', 'sha256': sha(content['package/luci-app-mango-proxy/root/usr/lib/mango/zt-json.lua'])}}
     content['SOURCE-DELTA-22.json'] = (json.dumps(delta, indent=2) + '\n').encode()
     content['SOURCE-FILES-SHA256SUMS'] = ''.join(sha(b) + '  ' + n + '\n' for n, b in sorted(content.items()) if n != 'SOURCE-FILES-SHA256SUMS').encode()
     buf = io.BytesIO()

@@ -1,17 +1,10 @@
 -- Exercise the actual runner with private UCI/ubus/nft fixtures. No shell runs.
 local m=dofile('package/luci-app-mango-proxy/root/usr/lib/mango/zt-direct.lua')
+local j=dofile('package/luci-app-mango-proxy/root/usr/lib/mango/zt-json.lua')
 local runner='package/luci-app-mango-proxy/root/usr/libexec/mango-zt-direct-run'
-local old_popen,old_exit,old_arg=io.popen,os.exit,arg
+local old_popen,old_open,old_exit,old_arg=io.popen,io.open,os.exit,arg
 local config,conf,listing,status,writes,board
-package.preload['nixio.fs']=function() return {readfile=function(path)
-    if path=='/tmp/sysinfo/board_name' then return board end
-    if path=='/owner/custom.json' then return 'CONF' end
-end} end
-package.preload['luci.jsonc']=function() return {parse=function(text)
-    if text=='CONF' then return conf end
-    if text=='STATUS' then return status end
-    if text=='LIST' then return listing end
-end} end
+package.preload['mango.zt-json']=function() return j end
 package.preload['uci']=function() return {cursor=function() return {get=function(self,c,s,o)
     return config[c..'.'..s..(o and '.'..o or '')]
 end} end} end
@@ -27,12 +20,20 @@ local function run(changes,stop)
         {chain={family='inet',table='fw4',name=m.chain,comment=m.owner}},
         {rule={family='inet',table='fw4',chain='input_wan',comment=m.owner,handle=77,expr={{jump={target=m.chain}}}}}}}
     writes={}
+    io.open=function(path,mode)
+        assert(mode=='rb')
+        local text
+        if path=='/tmp/sysinfo/board_name' then text=board
+        elseif path=='/owner/custom.json' then text=j.encode(conf)
+        else error('Unexpected file read') end
+        return {read=function() return text end,close=function() return true end}
+    end
     io.popen=function(cmd,mode)
         if mode=='w' then
             assert(cmd=='nft -f -')
             return {write=function(self,text) writes[#writes+1]=text end,close=function() return true end}
         end
-        local result=cmd:find('ubus',1,true) and 'STATUS' or 'LIST'
+        local result=cmd:find('ubus',1,true) and j.encode(status) or j.encode(listing)
         assert(cmd:find('ubus',1,true) or cmd:find('nft -j',1,true))
         return {read=function() return result end,close=function() return true end}
     end
@@ -52,5 +53,5 @@ for _,test in ipairs({{{},true},{{['zerotier.global.enabled']='0'}},{{['firewall
     assert(text:find('delete chain inet fw4 '..m.chain,1,true))
     assert(not text:find(' accept',1,true))
 end
-io.popen,os.exit,arg=old_popen,old_exit,old_arg
+io.popen,io.open,os.exit,arg=old_popen,old_open,old_exit,old_arg
 print('ZeroTier runner: enabled, explicit stop, disabled client/include and include ownership passed')

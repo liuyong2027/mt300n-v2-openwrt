@@ -18,7 +18,7 @@ def apply(policy):
     # -e leaves the remaining command arguments as script names, so use one
     # environment-free Lua fixture file rather than interpolating packet data.
     driver = ROOT / 'reports/zt-nft-driver.lua'
-    driver.write_text("local j=require('cjson');local m=dofile(arg[1]);print(assert(m.transaction(j.decode(arg[2]),j.decode(io.read('*a')))))\n")
+    driver.write_text("local j=dofile('package/luci-app-mango-proxy/root/usr/lib/mango/zt-json.lua');local m=dofile(arg[1]);print(assert(m.transaction(j.decode(arg[2]),j.decode(io.read('*a')))))\n")
     transaction = command('lua5.1', str(driver), MODULE, json.dumps(policy), input=listing)
     command('nft', '-f', '-', input=transaction)
     return json.loads(command('nft', '-j', 'list', 'table', 'inet', 'fw4'))['nftables']
