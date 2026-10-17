@@ -1,0 +1,3 @@
+#!/bin/sh
+# Serialize only this feature; never acquire or restart the proxy service.
+exec flock -w 10 /var/lock/mango-zt-direct.lock /usr/bin/lua /usr/libexec/mango-zt-direct-run "$@"

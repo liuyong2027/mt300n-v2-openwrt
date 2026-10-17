@@ -1,0 +1,33 @@
+#!/usr/bin/lua
+package.path='/usr/lib/?.lua;'..package.path
+local fs=require('nixio.fs')
+local j=require('luci.jsonc')
+local c=require('uci').cursor()
+local m=require('mango.zt-direct')
+if (fs.readfile('/tmp/sysinfo/board_name') or ''):match('^%s*(.-)%s*$')~='glinet,gl-mt300n-v2' then os.exit(0) end
+local function capture(cmd)
+    local p=io.popen(cmd,'r'); if not p then return end
+    local data=p:read('*a'); p:close(); return j.parse(data)
+end
+local function fail(message)
+    -- Messages are fixed policy errors; never log config contents or identity.
+    io.stderr:write('mango-zt-direct: '..message..'\n'); os.exit(1)
+end
+local enabled=arg[1]~='stop' and c:get('zerotier','global','enabled')=='1'
+enabled=enabled and c:get('firewall','mango_zt_direct')=='include'
+    and c:get('firewall','mango_zt_direct','path')=='/usr/libexec/mango-zt-direct'
+    and c:get('firewall','mango_zt_direct','enabled')~='0'
+local path=c:get('zerotier','global','local_conf_path')
+local conf=path and j.parse(fs.readfile(path) or '')
+local status=capture('timeout 3 ubus call network.interface.wan status 2>/dev/null')
+local policy,err=m.policy(enabled,c:get('zerotier','global','port'),conf,status)
+-- Invalid configuration removes only this helper's rules, leaving owner UCI rules intact.
+if not policy then io.stderr:write('mango-zt-direct: '..err..'\n'); policy={ports={}} end
+local listing=capture('nft -j list table inet fw4 2>/dev/null')
+if not listing then os.exit(0) end
+local text,problem=m.transaction(policy,listing)
+if not text then fail(problem) end
+if text=='\n' then os.exit(0) end
+-- nft consumes the whole batch atomically. No temporary config or shell interpolation.
+local p=assert(io.popen('nft -f -','w')); p:write(text)
+local ok=p:close(); if not ok then fail('nft transaction failed; retry on firewall reload or WAN event') end
