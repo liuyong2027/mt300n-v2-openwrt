@@ -1,13 +1,26 @@
-# Release 21 — GL-MT300N-V2
+# GL-MT300N-V2 定制 OpenWrt 固件
 
-本版用于 GL.iNet GL-MT300N-V2（ramips/mt76x8，MIPS little-endian），沿用20-test-failover2普通版内核、代理后台、策略与恢复保护。
+**Release 22（v22.0.0）** 以 [Release 21](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/tag/v21.0.0) 为基础，增加 ZeroTier UDP 直连与 UPnP 发现响应规则。仅适用于 **GL.iNet GL-MT300N-V2**。
 
-本次修正：第一次和第二次代理探测失败时，状态分别显示“连续失败 1/3、2/3”，避免保留上一次成功或出口稳定等待的文字。第三次连续失败、间歇故障窗口、恢复队列、候选清理和退避策略保持原样。
+- [Release 22 发布页与下载](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/tag/v22.0.0)
+- [完整更新与升级说明](release22/RELEASE-22.md)
+- [构建和验证流程](.github/workflows/release22.yml)
+- [Release 21 历史说明](RELEASE-21.md)
 
-2026-10-04 在现有路由器上完成：主节点及备用1故障时切换备用2；全部节点不可用时保留核心并退避；备用1 TCP成功但代理失败时继续候选；IPv4默认出口缺失及恢复；出口恢复后主节点仍故障时自动切换备用1。修正脚本另通过17项隔离回归和实机1/3、2/3显示、第三次失败后自动切换与恢复验证。所有故障资源清理后恢复原主节点，持久配置不变。
+## ZeroTier 规则
 
-发布门禁包含源码完整性、Linux回归、真实nftables策略、实际MIPS Xray、目标BusyBox、内核配置与离线符号、安装内容哈希、SquashFS格式、必需软件包以及至少1MiB镜像分区余量检查。产物对应的提交、运行编号、大小和SHA256见 BUILD-VERIFICATION.json 与 SHA256SUMS。
+`ZeroTier direct UDP` 放行 WAN 到本机三个明确配置的 ZeroTier UDP 监听端口；`ZeroTier UPnP discovery` 仅允许当前 IPv4 WAN 上级网关从 UDP 源端口 1900 返回发现响应。它们由专属 nftables 链维护，在开机、防火墙重载、WAN 上下线或更新，以及 ZeroTier 启停时刷新，带有可核对的规则注释。
 
-实机结果来自20-test-failover2上应用同一修正脚本，21版完整镜像尚未重新刷机验收。物理WAN断线、LAN／ZeroTier客户端透明转发、重启后的完整恢复仍待验证；不承诺吞吐提升。
+已有 local.conf 路径和内容保持不变。没有 local.conf 时，固件新增持久配置，将第二、第三端口固定为 48170 和 20089；主端口遵循原 UCI 设置，默认 9993。已有自定义配置若没有固定三个端口，辅助程序会保留配置并记录原因，不猜测随机端口。显式禁用的专属 include 保持禁用。
 
-下载 mt300n-v2-21-production-sysupgrade.bin；本次发布不自动刷机。刷入后版本标识 /etc/mango-release 应为21。
+## 功能和配置保留
+
+沿用 Release 21 的依赖版本、普通版内核、代理核心与界面、分流和 DNS、故障切换与恢复保护、ZeroTier 网关。升级初始化脚本保护已有防火墙段、语言和 Wi-Fi LED 设置。源码差异和哈希见发布附件 `SOURCE-DELTA-22.json`。
+
+备份配置、核对型号和 SHA256 后，使用 `mt300n-v2-22-production-sysupgrade.bin`。已有本项目固件可选择保留配置升级。构建和发布不会自动刷写设备；新完整镜像实机升级、重启及跨公网直连验收仍待完成，历史硬件记录不代表新镜像实机验收。实际直连效果取决于上游 NAT、防火墙和对端。
+
+## 可复现的源码入口
+
+`release21-source.zip.b64` 是锁定的基线；`release22/overlay/` 保存可审查的增量文件。运行 `python3 release22/prepare.py` 会校验基线和逐文件清单，在新目录 `source22/` 中生成完整 Release 22 源码、差异清单和源码包。后续 Linux 构建、原有回归、真实 nftables UDP 测试、实际 MIPS 验证和发布门禁均由工作流执行。
+
+本仓库其他分支或发布中的 Cudy TR3600 镜像不适用于 GL-MT300N-V2。

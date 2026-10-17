@@ -43,11 +43,11 @@
         },
         {
           "name": "Install build dependencies",
-          "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 lua-cjson nftables iproute2 iputils-ping qemu-user-static\nmkdir -p reports\ndf -h . | tee reports/disk-before.txt"
+          "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 nftables iproute2 iputils-ping qemu-user-static\nmkdir -p reports\ndf -h . | tee reports/disk-before.txt"
         },
         {
           "name": "Validate recipe",
-          "run": "python3 -m unittest discover -s tests -v\nsh tests/test_switch_perf.sh .\nsh tests/test_probe_logging.sh .\nsh tests/test_watchdog_startup.sh .\nsh tests/test_watchdog_failure_status.sh .\nnode tests/test-ui.cjs\nnode tests/test-site-ui.cjs\nnode tests/subscription.cjs\nnode tests/test-update-progress.cjs\nbash -n scripts/prepare.sh scripts/validate-runtime.sh\nfor f in package/luci-app-mango-proxy/root/usr/libexec/mango-* package/luci-app-mango-proxy/root/usr/libexec/rpcd/mango package/luci-app-mango-proxy/root/etc/init.d/mango_* package/luci-app-mango-proxy/root/etc/uci-defaults/9*-mango-*; do if head -n1 \"$f\" | grep -q lua; then continue; fi; sh -n \"$f\"; done\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/mango/subscription.js\nsh tests/test_cache_refresh.sh .\nsh tests/test_fw_reuse.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy\nsh tests/test_recovery_trace.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy package/luci-app-mango-proxy/root/usr/libexec/mango-failover\nsh tests/test_fw_installed.sh package/luci-app-mango-proxy/root/usr/libexec/mango-fw\nsh tests/test_recovery_policy.sh .\nsh tests/test_uplink.sh .\nsh tests/test_runtime_id.sh .\nsh tests/test_start_failure.sh .\npython3 scripts/loading-diagnostic/test-diagnostic.py\nsh tests/test_lifecycle_budget.sh .\nsh tests/test_apply_rollback.sh .\nsh tests/test_process_wait.sh package/luci-app-mango-proxy/root/usr/libexec/mango-process\nsh tests/test_preflight_phases.sh .\nsh tests/test_preflight_reuse.sh .\npython3 scripts/audit-installed-content.py files\npython3 scripts/audit-installed-content.py package/luci-app-mango-proxy/root\nsh tests/test_intermittent_watchdog.sh .\nsh tests/test_socks_lifecycle.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy\nlua5.1 tests/zt-direct.lua\nlua5.1 tests/zt-direct-runner.lua\n"
+          "run": "python3 -m unittest discover -s tests -v\nsh tests/test_switch_perf.sh .\nsh tests/test_probe_logging.sh .\nsh tests/test_watchdog_startup.sh .\nsh tests/test_watchdog_failure_status.sh .\nnode tests/test-ui.cjs\nnode tests/test-site-ui.cjs\nnode tests/subscription.cjs\nnode tests/test-update-progress.cjs\nbash -n scripts/prepare.sh scripts/validate-runtime.sh\nfor f in package/luci-app-mango-proxy/root/usr/libexec/mango-* package/luci-app-mango-proxy/root/usr/libexec/rpcd/mango package/luci-app-mango-proxy/root/etc/init.d/mango_* package/luci-app-mango-proxy/root/etc/uci-defaults/9*-mango-*; do if head -n1 \"$f\" | grep -q lua; then continue; fi; sh -n \"$f\"; done\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/view/mango-proxy.js\nnode --check package/luci-app-mango-proxy/htdocs/luci-static/resources/mango/subscription.js\nsh tests/test_cache_refresh.sh .\nsh tests/test_fw_reuse.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy\nsh tests/test_recovery_trace.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy package/luci-app-mango-proxy/root/usr/libexec/mango-failover\nsh tests/test_fw_installed.sh package/luci-app-mango-proxy/root/usr/libexec/mango-fw\nsh tests/test_recovery_policy.sh .\nsh tests/test_uplink.sh .\nsh tests/test_runtime_id.sh .\nsh tests/test_start_failure.sh .\npython3 scripts/loading-diagnostic/test-diagnostic.py\nsh tests/test_lifecycle_budget.sh .\nsh tests/test_apply_rollback.sh .\nsh tests/test_process_wait.sh package/luci-app-mango-proxy/root/usr/libexec/mango-process\nsh tests/test_preflight_phases.sh .\nsh tests/test_preflight_reuse.sh .\npython3 scripts/audit-installed-content.py files\npython3 scripts/audit-installed-content.py package/luci-app-mango-proxy/root\nsh tests/test_intermittent_watchdog.sh .\nsh tests/test_socks_lifecycle.sh package/luci-app-mango-proxy/root/etc/init.d/mango_proxy\nlua5.1 tests/zt-json.lua\nlua5.1 tests/zt-direct.lua\nlua5.1 tests/zt-direct-runner.lua\n"
         },
         {
           "name": "Validate routing policy and nftables",
@@ -71,7 +71,7 @@
           "id": "compile",
           "continue-on-error": true,
           "working-directory": "source22/openwrt",
-          "run": "make -j2 V=s 2>&1 | tee ../build.log"
+          "run": "jobs=$(nproc)\n[ \"$jobs\" -le 4 ] || jobs=4\nmem=$(awk '/MemTotal/ {print $2}' /proc/meminfo)\nif [ \"$mem\" -lt 12000000 ] && [ \"$jobs\" -gt 2 ]; then jobs=2; fi\necho \"Build jobs: $jobs; RAM KiB: $mem\"\nmake -j\"$jobs\" V=s 2>&1 | tee ../build.log"
         },
         {
           "name": "Verify resolved kernel, matching symbols and installed content",
@@ -104,6 +104,16 @@
           "run": "python3 scripts/report.py"
         },
         {
+          "name": "Preserve target diagnostic bundle",
+          "if": "success() && steps.compile.outcome == 'success'",
+          "run": "roots=(openwrt/build_dir/target-*/root-ramips)\nimages=(openwrt/bin/targets/ramips/mt76x8/*sysupgrade.bin)\ntar -czf reports/target-debug.tar.gz \"${roots[0]}\" \"${images[0]}\" openwrt/feeds/packages/net/zerotier/files/etc/init.d/zerotier"
+        },
+        {
+          "name": "Verify installed ZeroTier helpers and actual MIPS Lua",
+          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success' && steps.kernel_diag.outcome == 'success'",
+          "run": "python3 scripts/verify-zt-target.py 2>&1 | tee reports/zt-direct-target.log"
+        },
+        {
           "name": "Upload diagnostics only",
           "if": "always()",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
@@ -126,11 +136,6 @@
             "if-no-files-found": "error",
             "include-hidden-files": true
           }
-        },
-        {
-          "name": "Verify installed ZeroTier helpers and actual MIPS Lua",
-          "if": "success() && steps.compile.outcome == 'success' && steps.runtime.outcome == 'success' && steps.kernel_diag.outcome == 'success'",
-          "run": "python3 scripts/verify-zt-target.py"
         },
         {
           "name": "Package verified profile assets",
