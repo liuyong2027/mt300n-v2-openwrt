@@ -40,7 +40,8 @@
     "Start file service at S99 after synchronous Cudy USB reconciliation at S97",
     "Firmware defaults have no preselected personal USB volume",
     "Persistent WebFiles encryption key, accounts and TLS included in sysupgrade keep list",
-    "Helper SHA256 bound to the actual source-built Quantum; real ARM64 startup guard executed before and after packing"
+    "Helper SHA256 bound to the actual source-built Quantum; real ARM64 startup guard executed before and after packing",
+    "Restore the preserved root-owned private directory0755 to0700 after metadata/marker validation before service startup; account keys and encrypted users/TLS unchanged"
   ],
   "persistentStorage": {
     "directory": "/etc/cudy-webfiles",
@@ -49,7 +50,8 @@
     "accountEncryption": "AES-256-GCM, local root-only key",
     "passwordInUCI": false,
     "passwordReturnedByRPC": false,
-    "plaintextRuntimeConfig": "Private root input plus UID 65534 private jailed state; not exported"
+    "plaintextRuntimeConfig": "Private root input plus UID 65534 private jailed state; not exported",
+    "upgradeDirectoryModeRecovery": "Only0755->0700 after root marker and all regular0600 single-link files are verified; no account key or ciphertext reads/replacement"
   },
   "temporaryRuntime": "/tmp/cudy-webfiles-managed",
   "access": "LAN by default; optional pinned private ZeroTier network and separate opt-in public HTTPS gateway",
@@ -122,7 +124,7 @@
       65535
     ]
   },
-  "integrationRevision": "firmware2",
+  "integrationRevision": "firmware3",
   "bootStartPriority": 99,
-  "firmwareVersion": "tr3600-1.1.0-rc2"
+  "firmwareVersion": "tr3600-1.1.0-rc3"
 }

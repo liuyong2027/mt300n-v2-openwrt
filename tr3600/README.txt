@@ -1,4 +1,4 @@
-Cudy TR3600 V1.0 - 1.1.0-rc2 WebFiles + DDNS test build
+Cudy TR3600 V1.0 - 1.1.0-rc3 WebFiles + DDNS test build
 
 Only for Cudy TR3600 V1.0 (cudy,tr3600-v1 / R126).
 This is a community custom firmware, not a Cudy vendor firmware release.
@@ -10,7 +10,7 @@ Locked sources: application 1f6169759396a31d2e3beec35d300c1fe4f2eaec;
 OpenWrt 25.12.5 f0a60eee2fe051741c643ea6118718aae1ef17fb and locked feeds.
 Mango UI, R3 Xray patch, subscriptions, failover and ZeroTier are retained.
 The upstream application keeps its 20-test-failover1 marker for provenance;
-/etc/cudy-release identifies this device firmware as tr3600-1.1.0-rc2.
+/etc/cudy-release identifies this device firmware as tr3600-1.1.0-rc3.
 OpenWrt Filogic kernel defaults and XZ SquashFS with 1 MiB blocks are retained.
 
 Included:
@@ -117,13 +117,17 @@ Settings upgrades preserve existing Mango firewall sections, including zone
 policies, NAT scopes and disabled DNS/gateway rules. A fresh mangozt zone keeps
 the owner-selected defaults: input/output/intra-zone forward ACCEPT, IPv4 masq1.
 
-RC2 fixes the WebFiles startup failure found in rc1 hardware acceptance.
-Quantum is built first; its actual SHA256 is linked into the helper. Both
-pre-package and packed-image checks execute the real ARM64 startup binary
-guard. Tampered payloads, unbound helpers and unsuitable ELF files are rejected.
-The0.6.3 helper repair on the existing rc1 router passed native ARM64 checks
-and user-reported phone LAN login/upload/download/rename/delete. This does
-not replace acceptance of the new full rc2 image after flashing.
-Download name: cudy-tr3600-v1-1.1.0-rc2-sysupgrade.bin.
-Existing router accounts, certificates and fixed UDP ports must be included
-in a keep-settings backup; original rc1 now includes their keep lists.
+RC3 restores a preserved WebFiles private directory from0755 to0700 only
+after validating its root ownership, public marker and every private file.
+Encrypted accounts, keys and all TLS slots are retained without replacement.
+The initializer runs before service enable and before the service reset.
+Missing directories are left absent; abnormal ownership, permissions, links
+and writable directories are rejected. Existing binary guards remain strict.
+Actual ARM64 tests cover11 cases, including real tar file-list restoration,
+before the full build and again against the final packed filesystem.
+Download name: cudy-tr3600-v1-1.1.0-rc3-sysupgrade.bin.
+The rc2 router required one manual directory-mode correction before its LAN,
+ZeroTier and public phone acceptance passed. This prior evidence does not
+replace keep-settings upgrade and client acceptance of the new rc3 image.
+No WAN/PHY/proxy change is included; previous spontaneous link flaps and the
+known FAT32 dirty-unmount condition are not claimed fixed.

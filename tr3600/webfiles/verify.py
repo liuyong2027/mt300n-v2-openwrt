@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Verify the new components in the packed image, in addition to TR1 gates."""
 import hashlib
+import os
+import re
 import json
 from pathlib import Path
 import stat
@@ -55,5 +57,25 @@ def verify(image_root, kit):
     assert 'for service in cudy_l2tp xl2tpd swanctl ddns;' not in retire
     report = {'version': manifest['version'], 'integration_revision': manifest['integrationRevision'], 'package_files_exact': True, 'ARM64_binaries_and_hashes': True, 'jsmin_comparison': True, 'fresh_defaults_disabled_no_personal_volume': True, 'startup_priority': 99, 'persistent_accounts_keys_TLS_keep_list': True, 'clean_image_private_data_absent': True, 'DDNS_and_Dynu_provider_present': True, 'DDNS_legacy_cleanup_retired': True, 'hardware_acceptance': 'pending; no automatic flash'}
     report['actual_ARM64_embedded_binary_guard'] = 'passed'
+    init = (root / 'etc/init.d/cudy-webfiles').read_text()
+    boot = (root / 'etc/uci-defaults/98-cudy-webfiles').read_text()
+    call = '/usr/bin/lua /usr/lib/cudy-webfiles/prepare-storage.lua || '
+    assert init.index(call + 'return 1') < init.index('"$helper" reset')
+    assert boot.index(call + 'exit 1') < boot.index('/etc/init.d/cudy-webfiles enable')
+    wrapper = root / 'usr/lib/cudy-webfiles/prepare-storage.lua'
+    module = root / 'usr/lib/lua/cudy/webfiles-storage.lua'
+    assert "prepare('/etc/cudy-webfiles', 0)" in wrapper.read_text()
+    subprocess.run(['qemu-aarch64-static', '-L', str(root), str(root / 'usr/bin/lua'), '-e', 'assert(loadfile("' + str(wrapper) + '"))'], check=True)
+    temporary = subprocess.check_output(['sudo', 'mktemp', '-d', '/tmp/cudy-webfiles-storage-test.XXXXXX'], text=True).strip()
+    assert re.fullmatch(r'/tmp/cudy-webfiles-storage-test\.[A-Za-z0-9]+', temporary), temporary
+    try:
+        run = subprocess.run(['sudo', 'env', 'LUA_CPATH=' + str(root / 'usr/lib/lua/?.so'), 'LUA_PATH=' + str(root / 'usr/lib/lua/?.lua') + ';' + str(root / 'usr/lib/lua/?/init.lua'), 'qemu-aarch64-static', '-L', str(root), str(root / 'usr/bin/lua'), str(kit / 'tr3600/test-webfiles-storage.lua'), temporary, str(module)], check=True, text=True, stdout=subprocess.PIPE)
+        assert 'PASS all11 native storage restoration regressions' in run.stdout
+        (kit / 'reports/webfiles-storage-packed-regressions.txt').write_text(run.stdout)
+    finally:
+        subprocess.run(['sudo', 'rm', '-rf', '--', temporary], check=True)
+    report['upgrade_storage_permission_restoration_case_count'] = 11
+    report['upgrade_storage_test_runtime'] = 'ARM64 Lua/nixio and restoration module from the final packed image; synthetic root-owned accounts, keys and LAN/public-IP/DDNS TLS fixtures only'
+    report['upgrade_storage_initializer_before_enable_and_reset'] = True
     (kit / 'reports/webfiles-image-verification.json').write_text(json.dumps(report, indent=2) + '\n')
     return report
