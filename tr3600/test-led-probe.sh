@@ -13,6 +13,10 @@ original=Path('package/luci-app-mango-proxy/root/usr/libexec/mango-probe').read_
 patched=module.patch_probe(original).replace('/usr/libexec/cudy-led-control',sys.argv[1]+'/bin/control')
 assert shutil.which('timeout'), 'GNU timeout is required for this host regression'
 patched=patched.replace('/usr/libexec/timeout-coreutils',shutil.which('timeout'))
+common=Path(sys.argv[1]+'/bin/common-probe')
+common.write_bytes(Path('tr3600/led-probe/mango-connectivity-probe').read_bytes())
+common.chmod(0o755)
+patched=patched.replace('/usr/libexec/mango-connectivity-probe',str(common))
 Path(sys.argv[1]+'/package/luci-app-mango-proxy/root/usr/libexec/mango-probe').write_text(patched)
 PY
 cat > "$task_dir/bin/control" <<'SH'

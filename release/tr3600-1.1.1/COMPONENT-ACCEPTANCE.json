@@ -16,5 +16,14 @@
   "known_unresolved": [
     "WAN link flaps",
     "FAT32 dirty-unmount warning; offline consistency check pending"
-  ]
+  ],
+  "LED_fix": {
+    "source_thread": "排查路由器9.1白灯闪烁",
+    "source_runtime_sha256": "c2c04345caa5151c97aaa2df210a86376bca6d30d874ffbff54bebef38e8116e",
+    "wrapper_sha256": "cae537f694165508e67b0140de4c22fb07b9bcfa75a43f729fe5d8c3e017e3af",
+    "common_probe_sha256": "e090d6c7a9662bd23e4d9e42db8cc6390c491c6addb4a409058e478b0dc0ac61",
+    "existing_router_acceptance": "installed and steady white verified in the source thread; not a full-image boot test",
+    "source_assertions": 175,
+    "HTTP_mode_scenarios": 20
+  }
 }

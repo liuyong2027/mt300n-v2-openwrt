@@ -130,6 +130,11 @@ for module in ('catia', 'fruit', 'streams_xattr', 'xattr_tdb'):
 assert (extracted/'sbin/sysupgrade').read_bytes() == (tree/'package/base-files/files/sbin/sysupgrade').read_bytes()
 assert 'cudy-led-upgrade suspend' in (extracted/'sbin/sysupgrade').read_text()
 assert (extracted/'usr/libexec/mango-probe').stat().st_mode & 0o111
+assert (extracted/'usr/libexec/mango-connectivity-probe').read_bytes()==(kit/'tr3600/led-probe/mango-connectivity-probe').read_bytes()
+assert (extracted/'usr/libexec/mango-connectivity-probe').stat().st_mode & 0o111
+led_probe_proof=subprocess.run(['python3',str(kit/'tr3600/test-led-shared-packed.py'),str(extracted)],check=True,text=True,stdout=subprocess.PIPE)
+assert '"LED_shared_probe_regressions_passed": true' in led_probe_proof.stdout
+(reports/'led-shared-probe-packed-regressions.txt').write_text(led_probe_proof.stdout)
 wireless_defaults = extracted/'lib/wifi/mac80211.uc'
 assert wireless_defaults.read_bytes() == (tree/'package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc').read_bytes()
 subprocess.run(['python3', str(kit/'tr3600/check-removed.py'), str(extracted), str(tree/'.config')], check=True)
@@ -175,7 +180,7 @@ proof = {'device': 'cudy,tr3600-v1', 'version': 'tr3600-1.1.1', 'application_ver
          'image_sha256': hashlib.sha256(image.read_bytes()).hexdigest(),
          'container': 'sysupgrade tar with FIT kernel and SquashFS rootfs',
          'squashfs_block_bytes': 1048576, 'squashfs_compression': 'xz',
-         'actual_arm64_xray': runtime, 'rootfs_original_hashes': 'passed; original probe source and exact additive LED hook verified',
+         'actual_arm64_xray': runtime, 'rootfs_original_hashes': 'passed; original probe source hash verified and exact shared-probe wrapper installed',
          'ui_jsmin_comparison': 'passed', 'dual_boot_kernel_parameters': 'present',
          'usb_sharing_and_repeater_packages': 'selected; smbd and relayd ARM64 binaries verified',
          'usb_disk_consent': 'selected; exact LuCI/helpers/menu/ACL, per-share Samba guards and ARM64 metadata VFS modules verified; new disks not shared without consent',
@@ -189,9 +194,10 @@ proof = {'device': 'cudy,tr3600-v1', 'version': 'tr3600-1.1.1', 'application_ver
 proof['zerotier_direct'] = {'policy_and_nft_regression': 'passed before build', 'lifecycle': 'exact locked ZeroTier init with bounded helper hooks; fw4 include and WAN hotplug; no proxy restart', 'upstream': 'derived from current WAN default route, SSDP source port1900 only', 'upgrade': 'stable-port file retained; existing local.conf and owner Mango firewall sections preserved; exact patched first-boot script verified', 'keepalive': 'not made persistent; remote low-power-router trial only', 'hardware': 'new full-image restart/reload/end-to-end acceptance pending'}
 proof['fresh_mangozt_policy'] = {'input': 'ACCEPT', 'output': 'ACCEPT', 'intra_zone_forward': 'ACCEPT', 'IPv4_masquerading': True, 'existing_owner_sections': 'preserved on settings upgrade'}
 proof['webfiles_and_DDNS'] = webfiles_proof
+proof['LED_shared_probe']={'regressions_passed':True,'ownership_assertions':175,'HTTP_mode_scenario_cases':20,'wrapper_logging_callbacks':'passed','probe_producer':'LED when failover disabled; watchdog when enabled in proxy modes; LED always in direct mode','whole_image_hardware_acceptance':'pending'}
 (reports/'tr3600-verification.json').write_text(json.dumps(proof, indent=2)+'\n')
 shutil.copyfile(image, assets/image.name)
-for source in ('tr3600-source.json', 'tr3600-verification.json', 'ss-validation.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config', 'webfiles-build.json', 'webfiles-image-verification.json', 'webfiles-storage-packed-regressions.txt', 'webfiles-boot-regressions.txt', 'webfiles-boot-packed-verification.json', 'ddns-https-packed-regressions.txt'):
+for source in ('tr3600-source.json', 'tr3600-verification.json', 'ss-validation.json', 'image-metadata.json', 'resolved.config', 'feed-commits.txt', 'actual-kernel.config', 'webfiles-build.json', 'webfiles-image-verification.json', 'webfiles-storage-packed-regressions.txt', 'webfiles-boot-regressions.txt', 'webfiles-boot-packed-verification.json', 'ddns-https-packed-regressions.txt', 'led-shared-probe-packed-regressions.txt'):
     shutil.copyfile(reports/source, assets/source)
 shutil.copyfile(kit/'tr3600/README.txt', assets/'README.txt')
 shutil.copyfile(kit/'tr3600/RELEASE-NOTES.txt', assets/'RELEASE-NOTES.txt')

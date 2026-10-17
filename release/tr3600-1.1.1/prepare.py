@@ -25,6 +25,8 @@ assert proof['webfiles_and_DDNS']['actual_packed_boot_startup_diagnostic'] == 'p
 assert proof['webfiles_and_DDNS']['certificate_validity_days'] == 365
 assert proof['webfiles_and_DDNS']['certificate_names_formal'] is True
 assert proof['webfiles_and_DDNS']['DDNS_HTTPS_regressions_passed'] is True
+assert proof['LED_shared_probe']['regressions_passed'] is True
+assert proof['LED_shared_probe']['ownership_assertions'] == 175
 assert proof['webfiles_and_DDNS']['boot_readiness_ARM64_tests_passed'] == 46
 image = ASSETS / proof['image']
 assert hashlib.sha256(image.read_bytes()).hexdigest() == proof['image_sha256']

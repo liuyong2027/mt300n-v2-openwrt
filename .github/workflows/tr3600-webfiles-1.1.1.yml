@@ -306,6 +306,10 @@
           "run": "set -euo pipefail\npython3 tr3600/test-dynu-https.py \"$PWD/reference/rootfs\" \"$PWD/tr3600/network-root\" | tee proof/ddns-https-preregressions.txt\nsh -n tr3600/network-root/usr/lib/ddns/update_cudy_dynu_https.sh tr3600/network-root/etc/uci-defaults/97-cudy-dynu-https\n"
         },
         {
+          "name": "Exercise LED ownership and shared HTTP detection on actual ARM64 before the full build",
+          "run": "set -euo pipefail\npython3 tr3600/test-led-shared-packed.py \"$PWD/reference/rootfs\" \"$PWD/tr3600\" | tee proof/led-shared-probe-preregressions.txt\n"
+        },
+        {
           "name": "Preserve regression evidence",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {

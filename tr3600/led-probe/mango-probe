@@ -1,0 +1,37 @@
+#!/bin/sh
+# Proxy recovery/LED publication wrapper around the common HTTP probe.
+umask 077
+mkdir -p /var/etc/mango 2>/dev/null || :
+cudy_led_token=$(/usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control begin 2>/dev/null) || cudy_led_token=
+pid_start=$(pidof xray 2>/dev/null)
+attempts=
+# Diagnostic failures must not affect probe results or wait for another logger.
+write_log() (
+    mkdir -p /var/lock 2>/dev/null || exit 0
+    exec 5>/var/lock/mango-probe-log.lock
+    flock -n 5 || exit 0
+    configured=$(uci -q get mango_proxy.main.node)
+    confirmed=$(sed -n '2p' /var/etc/mango/runtime-state 2>/dev/null)
+    uncertain=0
+    if [ -z "$confirmed" ] || [ -z "$pid_start" ] || [ -f /var/etc/mango/runtime-uncertain ]; then uncertain=1; fi
+    file=/var/etc/mango/probe-history
+    {
+        tail -n 9 "$file" 2>/dev/null
+        printf '%s | result=%s configured=%s confirmed=%s uncertain=%s pid_start=%s pid_end=%s | %s\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S %z')" "$1" "$configured" "$confirmed" "$uncertain" \
+            "$pid_start" "$(pidof xray 2>/dev/null)" "$attempts"
+    } > "$file.new" && mv "$file.new" "$file"
+    exit 0
+)
+probe_mode=$(sed -n '1p' /var/etc/mango/runtime-state 2>/dev/null)
+# This entry point retains its existing forced-proxy recovery contract.
+case "$probe_mode" in split|global|gfw) :;; *) probe_mode=split;; esac
+attempts=$(/usr/libexec/mango-connectivity-probe "$probe_mode")
+probe_result=$?
+if [ "$probe_result" = 0 ]; then
+    /usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control finish "$cudy_led_token" 0 >/dev/null 2>&1 || :
+    write_log ok || :
+    exit 0
+fi
+/usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control finish "$cudy_led_token" 1 >/dev/null 2>&1 || :; write_log failed || :
+exit 1

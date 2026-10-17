@@ -3,16 +3,11 @@
 from pathlib import Path
 import sys
 
+PROBE_SOURCE_SHA256='a2582dd3f23951946269ca5feaa9aeaa1651acf5f395a788be4905e6e6c07c07'
 def patch_probe(source):
-    assert 'cudy_led_token' not in source, 'LED probe hook already installed'
-    anchor='pid_start=$(pidof xray 2>/dev/null)\n'
-    assert source.count(anchor)==1
-    source=source.replace(anchor,'cudy_led_token=$(/usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control begin 2>/dev/null) || cudy_led_token=\n'+anchor)
-    for old,code in [('write_log ok || :; exit 0','0'),('write_log failed || :\nexit 1','1')]:
-        assert source.count(old)==1
-        new='/usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control finish "$cudy_led_token" '+code+' >/dev/null 2>&1 || :; '+old
-        source=source.replace(old,new)
-    return source
+    import hashlib
+    assert hashlib.sha256(source.encode()).hexdigest()==PROBE_SOURCE_SHA256, 'Unexpected original Mango probe; refusing replacement'
+    return (Path(__file__).resolve().parent/'led-probe/mango-probe').read_text(encoding='utf-8')
 
 def patch_upgrade(source):
     assert 'cudy-led-upgrade' not in source, 'LED upgrade hook already installed'
@@ -38,4 +33,7 @@ if __name__=='__main__':
     patched_probe=patch_probe(probe.read_text(encoding='utf-8'))
     patched_upgrade=patch_upgrade(upgrade.read_text(encoding='utf-8'))
     probe.write_text(patched_probe,encoding='utf-8',newline='\n')
+    common=probe.with_name('mango-connectivity-probe')
+    common.write_bytes((Path(__file__).resolve().parent/'led-probe/mango-connectivity-probe').read_bytes())
+    common.chmod(0o755)
     upgrade.write_text(patched_upgrade,encoding='utf-8',newline='\n')

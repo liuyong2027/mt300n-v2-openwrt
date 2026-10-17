@@ -17,19 +17,20 @@ def module(name,path):
 led=module('led_integration',kit/'tr3600/led-integration.py')
 
 class Integration(unittest.TestCase):
-    def test_additive_probe_is_based_on_verified_original(self):
+    def test_shared_probe_is_based_on_verified_original(self):
         original=(kit/'package/luci-app-mango-proxy/root/usr/libexec/mango-probe').read_bytes()
         digest=json.loads((kit/'VALIDATION-20.json').read_text())['source_rootfs_sha256']['usr/libexec/mango-probe']
         self.assertEqual(hashlib.sha256(original).hexdigest(),digest)
         patched=led.patch_probe(original.decode())
+        self.assertEqual(patched.encode(),(kit/'tr3600/led-probe/mango-probe').read_bytes())
         self.assertEqual(patched.count('/usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control'),3)
-        self.assertIn('|| :; write_log ok || :; exit 0',patched)
-        self.assertIn('|| :; write_log failed || :\nexit 1',patched)
-        reversed=patched.replace('cudy_led_token=$(/usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control begin 2>/dev/null) || cudy_led_token=\n','')
-        for code in ('0','1'):
-            reversed=reversed.replace('/usr/libexec/timeout-coreutils 2 /usr/libexec/cudy-led-control finish "$cudy_led_token" '+code+' >/dev/null 2>&1 || :; ','')
-        self.assertEqual(reversed.encode(),original)
+        self.assertEqual(patched.count('attempts=$(/usr/libexec/mango-connectivity-probe "$probe_mode")'),1)
+        self.assertNotIn('curl ',patched)
+        self.assertIn('probe_result=$?',patched)
+        self.assertIn('write_log ok || :',patched)
+        self.assertIn('write_log failed || :',patched)
         with self.assertRaises(AssertionError): led.patch_probe(patched)
+        with self.assertRaises(AssertionError): led.patch_probe(original.decode()+'# changed\n')
     def test_upgrade_handoff_after_validation_and_test_exit(self):
         original='if [ $TEST -eq 1 ]; then\n\texit 0\nfi\ninstall_bin /sbin/upgraded\nv "Commencing upgrade. Closing all shell sessions."\nif [ -n "$FAILSAFE" ]; then\n :\nelse\n\tubus call system sysupgrade "$(json_dump)"\nfi\n'
         patched=led.patch_upgrade(original)

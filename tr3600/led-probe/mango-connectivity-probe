@@ -1,0 +1,42 @@
+#!/bin/sh
+# Common HTTP probe. stdout: per-target diagnostics; exit 0/1: reachable/failed.
+# Callers own scheduling, LED observations, and automatic recovery decisions.
+umask 077
+[ "$#" = 1 ] || exit 2
+mode=$1
+case "$mode" in
+    direct) targets='https://www.baidu.com/ https://www.qq.com/' ;;
+    split|global|gfw)
+        fallback=https://cp.cloudflare.com/generate_204
+        [ "$mode" != gfw ] || fallback=https://www.bbc.com/robots.txt
+        targets="https://www.google.com/generate_204 $fallback"
+        ;;
+    *) exit 2 ;;
+esac
+
+set -- -q -4 --silent --show-error --output /dev/null \
+    --write-out '%{http_code} connect=%{time_connect} tls=%{time_appconnect} first=%{time_starttransfer} total=%{time_total}'
+if [ "$mode" = direct ]; then
+    set -- "$@" --noproxy '*' --head --connect-timeout 3 --max-time 5
+else
+    set -- "$@" --proxy socks5h://127.0.0.1:10809 --connect-timeout 4 --max-time 8 --max-filesize 65536
+fi
+
+errors=$(mktemp /tmp/mango-connectivity-error.XXXXXX 2>/dev/null) || errors=/dev/null
+trap '[ "$errors" = /dev/null ] || rm -f "$errors"' EXIT
+attempts=
+for target in $targets; do
+    metrics=$(curl "$@" "$target" 2>"$errors")
+    rc=$?
+    code=${metrics%% *}
+    detail=$(tr '\n\r\t' '   ' < "$errors" | cut -c 1-180)
+    host=${target#https://}; host=${host%%/*}
+    attempts="${attempts}${attempts:+ ; }$host {rc=$rc http=$metrics error=$detail}"
+    if [ "$rc" = 0 ]; then
+        case "$code" in
+            [23][0-9][0-9]) printf '%s\n' "$attempts"; exit 0 ;;
+        esac
+    fi
+done
+printf '%s\n' "$attempts"
+exit 1

@@ -166,7 +166,7 @@ end)
 local state={}
 R.snapshot=function() return state end
 local function observed()
-    init(); state={id='id-A',now=100,uplink=0,busy=false,mode='global',ready=true}
+    init(); state={id='id-A',now=100,uplink=0,busy=false,mode='global',ready=true,failover=true}
     return assert(R.begin())
 end
 test('proxy publication binds identity and monotonic timestamp',function()
@@ -187,20 +187,20 @@ test('direct/off/default modes do not publish proxy observations',function()
     observed(); state.mode='direct'; assert(not R.begin())
     state.mode='global'; raw.mode='off'; assert(not R.begin()); raw.mode='default'; assert(not R.begin())
 end)
-test('direct probe uses bounded HEAD, direct routing and valid TLS',function()
+test('direct probe delegates to the shared TLS and HTTP implementation',function()
     init(); state={id='direct-id',now=100,uplink=0,busy=false,mode='direct'}
     R.capture=function(command)
-        assert(command:find("--noproxy '*'",1,true) and command:find('--head',1,true) and command:find('--max-time 5',1,true))
-        assert(not command:find('--insecure',1,true)); return '200 OK'
+        assert(command:find('/usr/libexec/mango-connectivity-probe direct',1,true))
+        assert(not command:find('curl ',1,true)); return 'target diagnostics\nMANGO_PROBE_OK'
     end
-    assert(R.direct(state).result==true)
+    assert(R.probe(state).result==true)
 end)
-test('HTTP code without successful curl exit is failure',function()
-    R.capture=function() return '200' end; assert(R.direct(state).result==false)
+test('diagnostics without successful shared command exit are failure',function()
+    R.capture=function() return '200' end; assert(R.probe(state).result==false)
 end)
-test('direct redirect counts as reachable and changes invalidate result',function()
-    R.capture=function() return '302 OK' end; assert(R.direct(state).result==true)
-    local before={id='old',mode='direct',busy=false,uplink=0}; assert(not R.direct(before))
+test('shared success counts as reachable and changed identity invalidates it',function()
+    R.capture=function() return '302 diagnostics\nMANGO_PROBE_OK' end; assert(R.probe(state).result==true)
+    local before={id='old',mode='direct',busy=false,uplink=0}; assert(not R.probe(before))
 end)
 test('wait/slow LED timer durations are explicit',function()
     init(); assert(R.apply({white='wait',red='slow'}))

@@ -144,3 +144,9 @@ No real device is flashed by this workflow. WAN flaps/FAT32 remain unresolved.
 existing TLS slots. Dynu HTTPS uses a WAN-bound public-IP source and scoped
 encrypted DNS, with credential-preserving IPv4 migration. Other providers,
 IPv6 and custom updaters are not migrated. Full-image hardware acceptance pending.
+
+1.1.1 also includes the accepted LED connectivity ownership fix. LED probes
+when failover is off; proxy-mode failover supplies observations when enabled.
+Direct mode always uses LED probes. Both callers share one bounded HTTP/TLS
+script installed with the proxy package. Original failover decisions stay unchanged.
+Source changes discard stale observations; the complete image is not boot accepted.
