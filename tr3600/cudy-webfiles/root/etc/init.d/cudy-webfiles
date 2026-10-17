@@ -10,18 +10,18 @@ start_service() {
     config_get port main port 8080
     config_get_bool rw main read_write 0
     helper=/usr/lib/cudy-webfiles/bin/cudy-webfiles
-    [ -x "$helper" ] || return 1
-    /usr/bin/lua /usr/lib/cudy-webfiles/prepare-storage.lua || return 1
-    "$helper" reset >/dev/null 2>&1 || return 1
+    [ -x "$helper" ] || { logger -t cudy-webfiles 'startup_helper_missing'; return 1; }
+    /usr/bin/lua /usr/lib/cudy-webfiles/prepare-storage.lua || { logger -t cudy-webfiles 'startup_private_storage_invalid'; return 1; }
+    "$helper" reset >/dev/null 2>&1 || { logger -t cudy-webfiles 'startup_runtime_reset_failed'; return 1; }
     procd_open_instance
     if [ "$rw" = 1 ]; then
-        procd_set_param command "$helper" run --volume "$volume" --port "$port" --read-write
+        procd_set_param command "$helper" boot-run --volume "$volume" --port "$port" --read-write
     else
-        procd_set_param command "$helper" run --volume "$volume" --port "$port"
+        procd_set_param command "$helper" boot-run --volume "$volume" --port "$port"
     fi
     procd_set_param env GOMAXPROCS=2 GOMEMLIMIT=160MiB GOGC=75
     procd_set_param stdout 0
-    procd_set_param stderr 0
+    procd_set_param stderr 1
     # Guard failures remain stopped until the administrator explicitly starts again.
     procd_close_instance
 }

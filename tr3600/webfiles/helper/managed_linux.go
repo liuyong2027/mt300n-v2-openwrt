@@ -270,10 +270,18 @@ func managedStatus() map[string]any {
 		}
 	}
 	mergeRuntimeStatus(r, previous, running, available, time.Now())
+	if startup, ok := loadStartupRecord(); ok {
+		r["startup"] = startup
+		r["starting"] = !running && managedStarting()
+	}
 	if !running {
-		if stop, ok := publicStopRecord(previous); ok {
+		if r["starting"] == true {
+			r["stopReason"] = "正在等待 USB、局域网或可用内存就绪（最多 90 秒）"
+		} else if stop, ok := publicStopRecord(previous); ok {
 			r["lastStop"] = stop
 			r["stopReason"] = stop.Reason
+		} else if startup, ok := loadStartupRecord(); ok && startup.Stage == "failed" {
+			r["stopReason"] = startup.Reason
 		} else if r["enabled"] == true {
 			r["stopReason"] = "进程已退出，未取得本次退出记录"
 		}
@@ -360,6 +368,9 @@ func stopManagedService() error {
 func startManagedService() error {
 	if managedRunning() {
 		return nil
+	}
+	if managedStarting() {
+		return fmt.Errorf("网页服务正在等待启动条件就绪，请稍候或先关闭服务")
 	}
 	if _, e := loadManagedAccount(); e != nil {
 		return fmt.Errorf("请先保存有效的网页账号和密码")

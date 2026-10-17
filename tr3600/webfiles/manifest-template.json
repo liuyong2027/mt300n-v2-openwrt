@@ -1,5 +1,5 @@
 {
-  "version": "0.6.3",
+  "version": "0.6.4",
   "displayName": "Cudy webpage",
   "targetBoard": "cudy,tr3600-v1",
   "architecture": "linux-arm64",
@@ -41,7 +41,8 @@
     "Firmware defaults have no preselected personal USB volume",
     "Persistent WebFiles encryption key, accounts and TLS included in sysupgrade keep list",
     "Helper SHA256 bound to the actual source-built Quantum; real ARM64 startup guard executed before and after packing",
-    "Restore the preserved root-owned private directory0755 to0700 after metadata/marker validation before service startup; account keys and encrypted users/TLS unchanged"
+    "Restore the preserved root-owned private directory0755 to0700 after metadata/marker validation before service startup; account keys and encrypted users/TLS unchanged",
+    "Bounded initial readiness wait, root-only boot-scoped startup diagnostics and cancellation; no runtime respawn"
   ],
   "persistentStorage": {
     "directory": "/etc/cudy-webfiles",
@@ -124,7 +125,16 @@
       65535
     ]
   },
-  "integrationRevision": "firmware3",
+  "integrationRevision": "firmware3-bootfix1",
   "bootStartPriority": 99,
-  "firmwareVersion": "tr3600-1.1.0-rc3"
+  "firmwareVersion": "tr3600-1.1.0-rc3",
+  "startup": {
+    "initialWaitSeconds": 90,
+    "adapterAttemptTimeoutSeconds": 5,
+    "runtimeAdapterTimeoutSeconds": 2,
+    "runtimeRespawn": false,
+    "diagnostic": "/tmp/cudy-webfiles-startup.json",
+    "diagnosticMode": "0600 root",
+    "retryScope": "Initial LAN/authorized USB mount/memory readiness only"
+  }
 }

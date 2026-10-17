@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 PKG_NAME:=cudy-webfiles
-PKG_VERSION:=0.6.3
-PKG_RELEASE:=2
+PKG_VERSION:=0.6.4
+PKG_RELEASE:=1
 PKG_LICENSE:=MIT Apache-2.0 BSD-3-Clause
 include $(INCLUDE_DIR)/package.mk
 

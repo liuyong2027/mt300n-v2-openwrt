@@ -8,6 +8,7 @@ import (
 	"debug/elf"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -141,6 +142,9 @@ func dispatch() error {
 	if f.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments")
 	}
+	if action == "boot-run" {
+		return runAtBoot(base, *id, *port, *rw)
+	}
 	snap, err := getSnapshot(base)
 	if err != nil {
 		return err
@@ -194,24 +198,41 @@ func usage() {
 	fmt.Printf("Cudy WebFiles %s (ARM64/OpenWrt, LuCI managed account)\n  cudy-webfiles list\n  cudy-webfiles check --volume usb_UUID\n  cudy-webfiles run --volume usb_UUID [--read-write] [--port 8443]\n  cudy-webfiles status\n  cudy-webfiles stop\n  cudy-webfiles rpc list\n", version)
 }
 func getSnapshot(base string) (Snapshot, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	s, e := getSnapshotContext(context.Background(), base, 2*time.Second)
+	var startup *startupError
+	if errors.As(e, &startup) && startup.Code == "startup_adapter_timeout" {
+		return s, &serviceStopError{"status_check_timeout", "USB/LAN 状态检查超过 2 秒，已保护性停止", e}
+	}
+	return s, e
+}
+func getSnapshotContext(parent context.Context, base string, limit time.Duration) (Snapshot, error) {
+	ctx, cancel := context.WithTimeout(parent, limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/usr/bin/lua", base+"/adapter.lua")
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return Snapshot{}, &serviceStopError{"status_check_timeout", "USB/LAN 状态检查超过 2 秒，已保护性停止", ctx.Err()}
+			return Snapshot{}, &startupError{"startup_adapter_timeout", "USB/LAN 状态检查暂未完成，等待重试", true, ctx.Err()}
 		}
 		if exit, ok := err.(*exec.ExitError); ok {
-			return Snapshot{}, fmt.Errorf("Cudy read-only adapter failed: %s: %w", strings.TrimSpace(string(exit.Stderr)), err)
+			message := string(exit.Stderr)
+			for _, transient := range []string{"Cannot read LAN status from ubus", "LAN is not ready", "No LAN IPv4 address", "No LAN interface"} {
+				if strings.Contains(message, transient) {
+					return Snapshot{}, &startupError{"startup_lan_wait", "等待局域网接口及地址就绪", true, err}
+				}
+			}
+			return Snapshot{}, &startupError{"startup_adapter_failed", "USB/LAN 状态适配器检查失败，拒绝启动", false, err}
 		}
-		return Snapshot{}, fmt.Errorf("Cudy read-only adapter failed: %w", err)
+		return Snapshot{}, &startupError{"startup_adapter_failed", "无法执行 USB/LAN 状态检查，拒绝启动", false, err}
 	}
 	var s Snapshot
 	if err = json.Unmarshal(out, &s); err != nil {
-		return s, err
+		return s, &startupError{"startup_snapshot_invalid", "USB/LAN 状态格式无效，拒绝启动", false, err}
 	}
-	return s, validateSnapshot(s)
+	if err = validateSnapshot(s); err != nil {
+		return s, &startupError{"startup_snapshot_invalid", "USB/LAN 状态身份校验失败，拒绝启动", false, err}
+	}
+	return s, nil
 }
 func getGuard(base, id string) (Volume, MountInfo, error) {
 	s, e := getSnapshot(base)
@@ -325,7 +346,9 @@ func selfExe() string {
 	return e
 }
 func probeNamespaces() error {
-	c := exec.Command(selfExe(), "__probe")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c := exec.CommandContext(ctx, selfExe(), "__probe")
 	c.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWPID, Pdeathsig: syscall.SIGKILL}
 	out, e := c.CombinedOutput()
 	if e != nil {
@@ -437,6 +460,15 @@ func (l *cappedLog) Write(p []byte) (int, error) {
 	return n, e
 }
 func runService(base string, vol Volume, mount MountInfo, port int, rw bool) (err error) {
+	return runServiceContext(context.Background(), base, vol, mount, port, rw)
+}
+func runServiceContext(ctx context.Context, base string, vol Volume, mount MountInfo, port int, rw bool) (err error) {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(signals)
 	if err = os.Mkdir(runtimeDir, 0700); err != nil {
 		return fmt.Errorf("test already running or stale runtime directory: %w", err)
 	}
@@ -457,11 +489,15 @@ func runService(base string, vol Volume, mount MountInfo, port int, rw bool) (er
 	defer func() { recordManagedStop(err, o) }()
 	os.Mkdir(runtimeDir+"/input", 0700)
 	os.Mkdir(runtimeDir+"/jail", 0700)
-	s, err := getSnapshot(base)
+	s, err := getSnapshotContext(ctx, base, 5*time.Second)
 	if err != nil {
 		return err
 	}
-	v, m, err := getGuard(base, vol.ID)
+	fresh, err := getSnapshotContext(ctx, base, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	v, m, err := guardVolume(fresh, vol.ID)
 	if err != nil {
 		return err
 	}
@@ -470,17 +506,17 @@ func runService(base string, vol Volume, mount MountInfo, port int, rw bool) (er
 	}
 	ln, err := net.Listen("tcp", net.JoinHostPort(s.LAN, strconv.Itoa(port)))
 	if err != nil {
-		return fmt.Errorf("LAN address or port unavailable: %w", err)
+		return &serviceStopError{"startup_listener_unavailable", "局域网地址或 HTTPS 端口不可用，请检查端口占用", err}
 	}
 	ln.Close()
 	registry, err := ensureManagedRegistry()
 	if err != nil {
-		return fmt.Errorf("请先在 LuCI 中设置独立的网页账号")
+		return &serviceStopError{"startup_account_unavailable", "无法读取有效网页账号，请检查 LuCI 账号设置", err}
 	}
 	account := primaryAccount(registry)
 	tlsFiles, err := managedTLS(s.LAN)
 	if err != nil {
-		return err
+		return &serviceStopError{"startup_certificate_unavailable", "已保存的 HTTPS 证书不适用于当前地址或时间，请检查系统时间及证书有效期", err}
 	}
 	for n, data := range tlsFiles {
 		if err = os.WriteFile(runtimeDir+"/input/"+n, data, 0600); err != nil {
@@ -528,15 +564,15 @@ func runService(base string, vol Volume, mount MountInfo, port int, rw bool) (er
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWPID, Pdeathsig: syscall.SIGKILL}
 	cmd.Stdout = writer
 	cmd.Stderr = writer
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err = cmd.Start(); err != nil {
 		return err
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	terminate := func() { _ = cmd.Process.Kill(); <-done }
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	defer signal.Stop(signals)
 	fmt.Printf("HTTPS: https://%s:%d\nAccount: %s (managed in LuCI)\nCA certificate: %s/ca.crt\n", s.LAN, port, account.Username, runtimeDir)
 	initContext, cancelInit := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancelInit()

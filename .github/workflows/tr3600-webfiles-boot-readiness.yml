@@ -1,0 +1,59 @@
+{
+  "name": "TR3600 WebFiles bounded boot readiness fix",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/tr3600-webfiles-boot-readiness"
+      ]
+    },
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "verify": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "name": "Checkout reviewed source",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up pinned Go compiler",
+          "uses": "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+          "with": {
+            "go-version": "1.27.2",
+            "cache": false
+          }
+        },
+        {
+          "name": "Install Lua and ARM64 emulator",
+          "run": "sudo apt-get update\nsudo apt-get install -y lua5.1 qemu-user-static\nmkdir -p reports"
+        },
+        {
+          "name": "Check consent, keep-list and scripts",
+          "run": "python3 tr3600/webfiles/test_integration.py\nsh -n tr3600/cudy-webfiles/root/etc/init.d/cudy-webfiles\nnode --check tr3600/luci-app-cudy-webfiles/htdocs/luci-static/resources/view/cudy-webfiles.js"
+        },
+        {
+          "name": "Native and actual ARM64 regressions; build bound helper",
+          "run": "set -euo pipefail\ncd tr3600/webfiles/helper\nCGO_ENABLED=0 go test -count=1 -json ./... > ../../../reports/bootfix-host-tests.jsonl\nCGO_ENABLED=0 GOOS=linux GOARCH=arm64 go vet ./...\nCGO_ENABLED=0 GOOS=linux GOARCH=arm64 go test -c -o ../../../reports/bootfix-arm64.test .\nsudo qemu-aarch64-static ../../../reports/bootfix-arm64.test -test.v > ../../../reports/bootfix-arm64-tests.txt\nCGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags \"-s -w -X main.quantumHash=c10353ecce3159edb2445a45dbcdce45433248c1e05e7beea5aa52cec00866c2\" -o ../../../reports/cudy-webfiles-0.6.4 .\ncd ../../..\nsha256sum reports/cudy-webfiles-0.6.4 > reports/bootfix-helper-SHA256SUMS\npython3 - <<'PY'\nfrom pathlib import Path\nimport json,hashlib\np=Path(\"reports/cudy-webfiles-0.6.4\")\nm=json.loads(Path(\"tr3600/webfiles/manifest-template.json\").read_text())\nm[\"helperSHA256\"]=hashlib.sha256(p.read_bytes()).hexdigest()\nm[\"quantum\"][\"sha256\"]=\"c10353ecce3159edb2445a45dbcdce45433248c1e05e7beea5aa52cec00866c2\"\nPath(\"reports/bootfix-manifest.json\").write_text(json.dumps(m,indent=2)+\"\\n\")\nPY"
+        },
+        {
+          "name": "Upload component and regression evidence",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-webfiles-0.6.4-bootfix",
+            "path": "reports/cudy-webfiles-0.6.4\nreports/bootfix-*.json*\nreports/bootfix-*.txt\nreports/bootfix-helper-SHA256SUMS",
+            "if-no-files-found": "error",
+            "retention-days": 30
+          }
+        }
+      ]
+    }
+  }
+}

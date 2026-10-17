@@ -58,6 +58,8 @@ class WebFilesIntegration(unittest.TestCase):
         self.assertIn('START=97', (ROOT / 'tr3600/luci-app-cudy-usb/root/etc/init.d/cudy_usb').read_text())
         self.assertNotIn('procd_set_param respawn', init)
         self.assertNotIn('usb_2ac7_e8ef', init)
+        self.assertIn('"$helper" boot-run', init)
+        self.assertIn('procd_set_param stderr 1', init)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

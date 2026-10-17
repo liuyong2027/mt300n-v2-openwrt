@@ -60,7 +60,9 @@ def verify(image_root, kit):
     init = (root / 'etc/init.d/cudy-webfiles').read_text()
     boot = (root / 'etc/uci-defaults/98-cudy-webfiles').read_text()
     call = '/usr/bin/lua /usr/lib/cudy-webfiles/prepare-storage.lua || '
-    assert init.index(call + 'return 1') < init.index('"$helper" reset')
+    assert init.index(call) < init.index('"$helper" reset')
+    assert '"$helper" boot-run' in init and 'procd_set_param stderr 1' in init
+    assert 'procd_set_param respawn' not in init
     assert boot.index(call + 'exit 1') < boot.index('/etc/init.d/cudy-webfiles enable')
     wrapper = root / 'usr/lib/cudy-webfiles/prepare-storage.lua'
     module = root / 'usr/lib/lua/cudy/webfiles-storage.lua'

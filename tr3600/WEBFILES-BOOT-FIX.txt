@@ -1,0 +1,25 @@
+Cudy WebFiles 0.6.4 / rc3 component hotfix
+
+Observed on the full rc3 image: preserved account directory was0700 and
+guest/LAN/public CA were retained, but the boot process exited1 before its
+runtime directory or stop record existed. A later manual start succeeded.
+The original early stderr was suppressed; the exact triggering condition
+cannot be established retrospectively. Boot readiness timing is a hypothesis.
+
+The procd launch now uses boot-run. It checks binary integrity and isolation,
+then waits for LAN, the already-authorized USB mount and startup memory to
+be ready, for at most90 seconds. Each adapter attempt is bounded by5 seconds;
+only initial readiness can retry. Wrong identities, unsafe mounts, write
+permission conflicts, changed settings and binary/isolation failures stop.
+No mount/reconcile, UCI commit, disk repair, account or CA replacement occurs.
+Stopping the service cancels the wait. Runtime guard stops never respawn.
+
+A root0600 boot-scoped temporary record describes attempt, stage and a fixed
+reason code without credentials, upstream input or raw error text. LuCI can
+show waiting/failed startup and avoids a duplicate start while waiting.
+Early helper/permission/reset errors are also logged; no raw password output.
+
+This is a component fix for an installed rc3 system, not a new full firmware
+image or proof of successful reboot. Record component hashes separately and
+require authorized whole-router reboot acceptance before claiming auto-start
+fixed on hardware. Existing WAN flaps and FAT32 dirty warning are not repaired.

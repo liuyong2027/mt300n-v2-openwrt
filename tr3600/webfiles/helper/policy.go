@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const version = "0.6.3"
+const version = "0.6.4"
 
 // Bound to the exact source-built Quantum executable by the build recipe.
 // An unbound development build must refuse to launch a file service.
