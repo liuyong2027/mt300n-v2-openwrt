@@ -1,5 +1,5 @@
 {
-  "firmware_version": "tr3600-1.1.0-rc3",
+  "firmware_version": "tr3600-1.1.0",
   "helper_version": "0.6.4",
   "recipe_baseline": "05f64f2925f111b3a25a987b23624d43ddeae724",
   "image_baseline": "e298f2b015bc70eac46e0de58204616046cb119f",

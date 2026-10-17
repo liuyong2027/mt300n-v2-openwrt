@@ -65,7 +65,7 @@ exit 0
     s = runtime.read_text(encoding='utf-8').replace('qemu-mipsel-static', 'qemu-aarch64-static').replace('actual_mips_xray', 'actual_arm64_xray').replace('MIPS', 'ARM64')
     runtime.write_text(s, encoding='utf-8', newline='\n')
     (ROOT/'files/etc/mango-device').write_text('cudy,tr3600-v1\n')
-    (ROOT/'files/etc/cudy-release').write_text('tr3600-1.1.0-rc3\n')
+    (ROOT/'files/etc/cudy-release').write_text('tr3600-1.1.0\n')
     (ROOT/'files/etc/mango-kernel-profile').write_text('openwrt-filogic-default\n')
     shutil.copyfile(ROOT/'tr3600/cudy-upgrade.sh', ROOT/'files/lib-upgrade-cudy.tmp')
     destination = ROOT/'files/lib/upgrade/cudy-tr3600.sh'
@@ -84,7 +84,7 @@ exit 0
                   'device': 'cudy,tr3600-v1', 'kernel_profile': 'OpenWrt Filogic defaults',
                   'requested_features': ['USB file sharing (Samba4) with LuCI per-partition consent, remembered UUID, metadata repair and safe unmount', 'Wi-Fi client/AP repeater', 'IPv4 relayd pseudo bridge', 'Optional unified dual-band Wi-Fi with local usteer and private restore backup', 'White/red network and proxy status LEDs with GFW support and exit-only identity', 'Private ZeroTier SS server with LuCI, authenticated AES/ChaCha20, atomic guarded apply and private rollback'],
                   'zerotier_direct': 'Fixed UDP ports, scoped upstream SSDP response, fw4/WAN/start-stop lifecycle hooks and upgrade keep; no permanent keepalive or low-bandwidth mode',
-                  'webfiles': '0.6.3 with Quantum JWT fix; fresh service/access disabled and no personal volume', 'ddns': 'standard LuCI/ddns-scripts with providers; owner configuration preserved', 'excluded_features': ['L2TP/IPsec VPN server', 'PPTP server'], 'hardware_validation': 'new image pending', 'wireless_first_boot': 'disabled; configure country and password in LuCI'}
+                  'webfiles': '0.6.4 accepted boot-readiness fix with Quantum JWT fix; fresh service/access disabled and no personal volume', 'ddns': 'standard LuCI/ddns-scripts with providers; owner configuration preserved', 'excluded_features': ['L2TP/IPsec VPN server', 'PPTP server'], 'hardware_validation': 'new image pending', 'wireless_first_boot': 'disabled; configure country and password in LuCI'}
     (ROOT/'reports').mkdir(exist_ok=True)
     (ROOT/'reports/tr3600-source.json').write_text(json.dumps(provenance, indent=2)+'\n')
 

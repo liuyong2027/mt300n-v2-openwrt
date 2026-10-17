@@ -1,0 +1,26 @@
+{
+  "component": "Cudy WebFiles0.6.4",
+  "source_commit": "2f2000bd7e3108b7d9783de4754000b140d42cf8",
+  "helper_sha256": "7d212c758a81d6e70abea3da1de4db393ac924f8dacf655f66f003241ac71c99",
+  "quantum_sha256": "c10353ecce3159edb2445a45dbcdce45433248c1e05e7beea5aa52cec00866c2",
+  "native_ARM64_top_level_tests_passed": 45,
+  "native_ARM64_including_subtests_passed": 65,
+  "CI_run_id": 39007400665,
+  "CI_artifact_digest": "177266dbe1b27a86829f33aa751a0431c3542ff3d304cf9a110c66bbae9bc5f3",
+  "installed_and_CI_component_byte_identical": true,
+  "whole_router_reboot_count": 1,
+  "manual_service_starts_after_reboot": 0,
+  "observed_all_services_recovery_seconds": 76.034,
+  "original_account_and_certificate_retained": true,
+  "phone_original_password_LAN_login_and_browse": "passed by direct user report",
+  "phone_original_password_cellular_ZeroTier_login_and_browse": "passed by direct user report",
+  "public_access_during_this_reboot_test": "disabled by owner; not retested",
+  "prior_rc2_phone_file_operations_and_public_access": "passed on the older image; not acceptance of this complete image",
+  "new_complete_1_1_0_image_hardware_acceptance": "not performed",
+  "owner_authorized_normal_GitHub_release": true,
+  "real_credentials_or_private_keys_included": false,
+  "known_unresolved": [
+    "WAN link flaps",
+    "FAT32 dirty-unmount warning; offline consistency check pending"
+  ]
+}
