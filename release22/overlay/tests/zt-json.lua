@@ -6,7 +6,7 @@ assert(#value.label==6)
 local listing=j.decode('{"nftables":[{"table":{"family":"inet","name":"fw4"}},{"rule":{"handle":77,"expr":[{"jump":{"target":"mango_zt_direct"}}]}}]}')
 assert(listing.nftables[2].rule.expr[1].jump.target=='mango_zt_direct')
 assert(j.decode(j.encode(value)).settings.tertiaryPort==20089)
-for _,bad in ipairs({'{','{"x":true trailing}', '{"x":"\\q"}', '[1,]','null garbage'}) do
+for _,bad in ipairs({'{','{"x":true trailing}', '{"x":"\\q"}', '[1,]','{"x":null,}','null garbage'}) do
     assert(not pcall(j.decode,bad),bad)
 end
 print('Self-contained JSON: config, nft structure, booleans, Unicode and malformed input passed')

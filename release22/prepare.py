@@ -105,7 +105,7 @@ def prepare(dest):
              'unchanged_baseline_files': len(original) - len(changed) - 1,
              'proxy_ui_and_runtime': 'Byte-identical to Release 21 except three first-boot defaults guarded to preserve existing settings',
              'new_hardware_acceptance': 'pending; publication does not flash devices',
-             'vendored_json': {'upstream': 'https://github.com/rxi/json.lua', 'commit': 'dbf4b2dd2eb7c23be2773c89eb059dadd6436f94', 'license': 'MIT, included in module header', 'sha256': sha(content['package/luci-app-mango-proxy/root/usr/lib/mango/zt-json.lua'])}}
+             'vendored_json': {'upstream': 'https://github.com/rxi/json.lua', 'commit': 'dbf4b2dd2eb7c23be2773c89eb059dadd6436f94', 'local_patch': 'Reject trailing commas in arrays and objects', 'license': 'MIT, included in module header', 'sha256': sha(content['package/luci-app-mango-proxy/root/usr/lib/mango/zt-json.lua'])}}
     content['SOURCE-DELTA-22.json'] = (json.dumps(delta, indent=2) + '\n').encode()
     content['SOURCE-FILES-SHA256SUMS'] = ''.join(sha(b) + '  ' + n + '\n' for n, b in sorted(content.items()) if n != 'SOURCE-FILES-SHA256SUMS').encode()
     buf = io.BytesIO()

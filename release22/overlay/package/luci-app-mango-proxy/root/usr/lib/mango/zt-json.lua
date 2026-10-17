@@ -23,6 +23,8 @@
 --
 
 local json = { _version = "0.1.2" }
+-- Local compatibility hardening: reject trailing commas in arrays and objects.
+-- Upstream: rxi/json.lua, dbf4b2dd2eb7c23be2773c89eb059dadd6436f94.
 
 -------------------------------------------------------------------------------
 -- Encode
@@ -286,6 +288,7 @@ local function parse_array(str, i)
     i = next_char(str, i, space_chars, true)
     -- Empty / end of array?
     if str:sub(i, i) == "]" then
+      if n > 1 then decode_error(str, i, "trailing comma in array") end
       i = i + 1
       break
     end
@@ -306,16 +309,19 @@ end
 
 local function parse_object(str, i)
   local res = {}
+  local first = true
   i = i + 1
   while 1 do
     local key, val
     i = next_char(str, i, space_chars, true)
     -- Empty / end of object?
     if str:sub(i, i) == "}" then
+      if not first then decode_error(str, i, "trailing comma in object") end
       i = i + 1
       break
     end
     -- Read key
+    first = false
     if str:sub(i, i) ~= '"' then
       decode_error(str, i, "expected string for key")
     end
