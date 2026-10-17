@@ -56,7 +56,7 @@
     "verify": {
       "needs": "withdraw",
       "runs-on": "ubuntu-24.04",
-      "timeout-minutes": 12,
+      "timeout-minutes": 20,
       "permissions": {
         "contents": "read"
       },
@@ -69,11 +69,18 @@
           }
         },
         {
-          "name": "Verify hidden RC images remain readable by existing build jobs",
+          "name": "Verify public list and stable release are unchanged",
           "env": {
             "GH_TOKEN": "${{ github.token }}"
           },
           "run": "python3 release/prerelease-retirement/retire.py verify"
+        },
+        {
+          "name": "Run maintained storage regression against public stable1.1.0 image",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "python3 - <<'PY'\nimport json,subprocess\nfrom pathlib import Path\nworkflow=json.loads(Path('.github/workflows/tr3600-webfiles-1.1.0.yml').read_text())\nscript=workflow['jobs']['storage-regression']['steps'][1]['run']\nassert 'gh release download tr3600-v1.1.0 --repo' in script\nassert 'c2abceeddaec72df75066f1f6e0f745a07fab2db937ff1945be93a44e2f85d11' in script\nassert 'tr3600-v1.1.0-rc2' not in script\nsubprocess.run(['bash','-euo','pipefail','-c',script],check=True)\nPY"
         },
         {
           "name": "Save verify receipt",
