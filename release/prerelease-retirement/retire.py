@@ -21,13 +21,13 @@ def shape(r):
     return out
 
 def unchanged_assets(r,expected):
-    got=shape(r); ref={k:v for k,v in expected.items() if k!='tagRef'}
+    got=shape(r); ref=shape(expected)
     got.pop('draft');got.pop('prerelease');ref.pop('draft');ref.pop('prerelease')
     assert got==ref,expected['tag_name']
 
 def stable_unchanged():
     for expected in APPROVAL['otherPublished']:
-        assert shape(api('/releases/'+str(expected['id'])))==expected,expected['tag_name']
+        assert shape(api('/releases/'+str(expected['id'])))==shape(expected),expected['tag_name']
     return True
 
 def tags_unchanged():
