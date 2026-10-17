@@ -1,0 +1,131 @@
+{
+  "name": "TR3600 withdraw superseded RC releases",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/tr3600-archive-prereleases-20261017"
+      ],
+      "paths": [
+        ".github/workflows/tr3600-prerelease-retirement.yml",
+        "release/prerelease-retirement/**"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "tr3600-reviewed-prerelease-retirement",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "withdraw": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 8,
+      "permissions": {
+        "contents": "write"
+      },
+      "steps": [
+        {
+          "name": "Checkout reviewed retirement recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Withdraw exactly RC1 RC2 RC3 from public releases",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "python3 release/prerelease-retirement/retire.py withdraw"
+        },
+        {
+          "name": "Save withdraw receipt",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-prerelease-withdraw-receipt",
+            "path": "retirement-withdraw.json",
+            "if-no-files-found": "error",
+            "retention-days": 90
+          }
+        }
+      ]
+    },
+    "verify": {
+      "needs": "withdraw",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 12,
+      "permissions": {
+        "contents": "read"
+      },
+      "steps": [
+        {
+          "name": "Checkout reviewed retirement recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Verify hidden RC images remain readable by existing build jobs",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "python3 release/prerelease-retirement/retire.py verify"
+        },
+        {
+          "name": "Save verify receipt",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-prerelease-verify-receipt",
+            "path": "retirement-verify.json",
+            "if-no-files-found": "error",
+            "retention-days": 90
+          }
+        }
+      ]
+    },
+    "restore": {
+      "needs": [
+        "withdraw",
+        "verify"
+      ],
+      "if": "always() && (needs.withdraw.result == 'failure' || (needs.withdraw.result == 'success' && needs.verify.result != 'success'))",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 8,
+      "permissions": {
+        "contents": "write"
+      },
+      "steps": [
+        {
+          "name": "Checkout reviewed retirement recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Restore RC publication after failed dependency verification",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "python3 release/prerelease-retirement/retire.py restore"
+        },
+        {
+          "name": "Save restore receipt",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-prerelease-restore-receipt",
+            "path": "retirement-restore.json",
+            "if-no-files-found": "error",
+            "retention-days": 90
+          }
+        }
+      ]
+    }
+  }
+}

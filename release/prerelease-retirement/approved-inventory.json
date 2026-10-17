@@ -1,0 +1,761 @@
+{
+  "repository": "liuyong2027/mt300n-v2-openwrt",
+  "authorization": "Github上的pre-release 版去掉吧",
+  "method": "Withdraw exactly the three RC releases to non-prerelease drafts; preserve all assets/tags for authenticated build references.",
+  "stable": {
+    "id": 415657207,
+    "tag_name": "tr3600-v1.1.0",
+    "target_commitish": "594e4e6948907aaa15983bb4cb7f59e5c7f94b41",
+    "name": "Cudy TR3600 V1.0 — 1.1.0 正式版 · WebFiles + DDNS",
+    "body": "**固件下载：[cudy-tr3600-v1-1.1.0-sysupgrade.bin](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/download/tr3600-v1.1.0/cudy-tr3600-v1-1.1.0-sysupgrade.bin)**\n\nCudy TR3600 V1.0 / R126 — 1.1.0 正式版\n\n整合 WebFiles0.6.4 开机自启修复：初次启动最多等待90秒，让局域网、已授权USB\n挂载及可用内存就绪；停止操作可取消等待。程序、隔离、挂载身份和写入权限检查\n继续执行，异常不扩大权限，运行中保护性退出不自动重启。早期错误采用固定原因码\n记录到root600临时文件并显示于LuCI，避免开机退出后无诊断信息。\n\n保留升级账号目录自动恢复：仅在验证root所有权、公开标记及全部私有文件元数据\n后，将符合条件的目录755恢复为700，保留原账号、密钥和LAN／公网证书。沿用\n实际编译Quantum摘要绑定及镜像内程序校验，不再修改已经计算摘要的程序字节。\n\n本版还包含WebFiles多账号与读写权限、USB授权与SMB共享、LuCI DDNS/Dynu、\nZeroTier固定端口与防火墙同步、Xray/Mango、SS、Wi-Fi和LED功能。新机mangozt\n入站、出站、区域内转发默认接受，IPv4伪装开启；保留升级设备已有配置。\nZeroTier新机固定UDP9993/48170/20089，升级保留已有端口文件和网络身份。\n未增加PPTP或L2TP/IPsec服务端，不调整WAN速率、PHY或代理策略。\n\n验证范围：相同WebFiles0.6.4管理程序和Quantum二进制已在rc3上实机验收：一次\n整机重启后自动启动，无手动开启；原账号、密码和证书保留；用户确认手机LAN与\n蜂窝数据加ZeroTier登录及浏览正常。原生ARM64及CI通过45项顶层测试（含子项65项）。\n此前rc2手机四项文件操作及公网测试通过，属于旧镜像证据。本次完整1.1.0镜像\n尚未刷入实机，因此不将组件验收写成这份完整镜像已经完成刷机验收。\n本版按用户要求发布为普通GitHub Release，提供完整源码、构建记录及SHA256。\n\n已知事项：历史WAN短暂断链原因未确定，当前恢复千兆不代表长期稳定性通过；\n已有FAT32未正常卸载提示未修复，仍需安全卸载后离线检查。本版不声称修复这两项。\n原始rc3早期错误未保留，不能追溯认定唯一根因；本次改进了就绪等待和可观察性。\n\n新机WebFiles关闭、未选择USB卷、默认只读、LAN HTTPS端口8080；ZeroTier和\n公网入口默认关闭，没有预置任何个人账号、CA、DDNS密码或网络身份。\n升级保留/etc/cudy-webfiles/与/etc/zerotier-stable-ports.json。刷机前确认旧系统\n备份清单含这些路径，另存系统备份、结束USB传输并核对SHA256SUMS。不保留配置\n或恢复出厂按新机设置处理。现有rc3加修复组件的路由器不会被本次构建自动刷机。\n\n固件文件：cudy-tr3600-v1-1.1.0-sysupgrade.bin，仅用于匹配的TR3600 V1.0/R126\n定制OpenWrt，sysupgrade不是原厂通用刷机包。原厂迁移与设备限制见README。\n\n\nSource: `594e4e6948907aaa15983bb4cb7f59e5c7f94b41`\nBuild: https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/39008834556",
+    "draft": false,
+    "prerelease": false,
+    "assets": [
+      {
+        "id": 649877192,
+        "name": "actual-kernel.config",
+        "size": 135435,
+        "digest": "sha256:4ea125ec52b3ba43c20eafc2023d7f548229e3c46dacd6a6772250f5a5de33ae"
+      },
+      {
+        "id": 649876946,
+        "name": "COMPONENT-ACCEPTANCE.json",
+        "size": 1396,
+        "digest": "sha256:5fa59d61f335bdd9e0fda00e5f5958d7a8e3b5e9bafb65bdde63bc341d802a83"
+      },
+      {
+        "id": 649877206,
+        "name": "cudy-tr3600-v1-1.1.0-sysupgrade.bin",
+        "size": 50053395,
+        "digest": "sha256:c2abceeddaec72df75066f1f6e0f745a07fab2db937ff1945be93a44e2f85d11"
+      },
+      {
+        "id": 649877322,
+        "name": "feed-commits.txt",
+        "size": 566,
+        "digest": "sha256:cba798acf35719d9c98b04112608b429b62b498051f9c5aec04fb56b28ca9f02"
+      },
+      {
+        "id": 649877336,
+        "name": "image-metadata.json",
+        "size": 251,
+        "digest": "sha256:18478f41e04e0dbb9e67db0cf7ed5b78b2976646a3126a40d212da596266db8a"
+      },
+      {
+        "id": 649877005,
+        "name": "QUANTUM-SOURCE-1.1.0.tar.gz",
+        "size": 21411976,
+        "digest": "sha256:9275cfefe184fbda5ac6aaf5a670550e72f6c18cff53b3512cb8378215fffa27"
+      },
+      {
+        "id": 649877075,
+        "name": "README.txt",
+        "size": 9066,
+        "digest": "sha256:dc2c19158b3ac2a127dff7e371eacbb60d4f30add79d4ac3ca04b97697f26cfe"
+      },
+      {
+        "id": 649877097,
+        "name": "RELEASE-1.1.0.txt",
+        "size": 2873,
+        "digest": "sha256:47c43c310254ef3a4ea69e3147441391aef8741d62467c31067168e15c9bfc9a"
+      },
+      {
+        "id": 649877120,
+        "name": "RELEASE-NOTES.txt",
+        "size": 2873,
+        "digest": "sha256:47c43c310254ef3a4ea69e3147441391aef8741d62467c31067168e15c9bfc9a"
+      },
+      {
+        "id": 649877345,
+        "name": "resolved.config",
+        "size": 299675,
+        "digest": "sha256:f5a014cc8d28424d9c27e264efa021fe54e8b5d3226d25f14e2ebe2a593f82fc"
+      },
+      {
+        "id": 649877129,
+        "name": "SHA256SUMS",
+        "size": 1802,
+        "digest": "sha256:3aa566ab0702579910c1916ca951c9e14deb4e9e6e8e4cf7b63bb6482f705325"
+      },
+      {
+        "id": 649877153,
+        "name": "SOURCE-1.1.0.zip",
+        "size": 4470109,
+        "digest": "sha256:c126eccbedea0a323c9d691b809e1c238d900e8d8a32f8159bd20dd773f0adbc"
+      },
+      {
+        "id": 649877168,
+        "name": "SOURCE-PROVENANCE-1.1.0.json",
+        "size": 665,
+        "digest": "sha256:46882db96f201fad8adb66605ff70a1dec05bed9356340dbd3edfd511e946772"
+      },
+      {
+        "id": 649877357,
+        "name": "ss-validation.json",
+        "size": 310,
+        "digest": "sha256:30e6be1f3f41012d1317f2ffea06185a1ea7fd70fce4b3bf01a4bb9707c2627b"
+      },
+      {
+        "id": 649877369,
+        "name": "tr3600-source.json",
+        "size": 1458,
+        "digest": "sha256:703dc0365380aec54fca68af9e28ba05de4d9cdc9175eb0d8b8f6fab807fba9b"
+      },
+      {
+        "id": 649877378,
+        "name": "tr3600-verification.json",
+        "size": 4713,
+        "digest": "sha256:7f6bb0fa2f875052ea7a7e0d464472de4c2f1f3f811cfb6632686bbb95007be6"
+      },
+      {
+        "id": 649877398,
+        "name": "webfiles-boot-packed-verification.json",
+        "size": 196,
+        "digest": "sha256:0663f016c3fd33d8d325791f27034c2e637865753e8f54bd93c3f6e027a9d190"
+      },
+      {
+        "id": 649877412,
+        "name": "webfiles-boot-regressions.txt",
+        "size": 7733,
+        "digest": "sha256:3536cf7e2f7aabe82b30824c8512b6b0332cb8c1052c0c56d2ceb4520b614c9b"
+      },
+      {
+        "id": 649877434,
+        "name": "webfiles-build.json",
+        "size": 1794,
+        "digest": "sha256:02885226afebcfe1aa27941a38a134070a46382aff28961ab823709916d0750f"
+      },
+      {
+        "id": 649877452,
+        "name": "webfiles-image-verification.json",
+        "size": 1025,
+        "digest": "sha256:7a020c291d4ef2916f64edd2f7ebafa38c4b18036bbe2d9c3bf2bd59c733077f"
+      },
+      {
+        "id": 649877461,
+        "name": "webfiles-storage-packed-regressions.txt",
+        "size": 480,
+        "digest": "sha256:5b869baa2071f720b418b5bf629d4b694ddac9fe3efdaebb7efa60b9c1609d59"
+      }
+    ]
+  },
+  "otherPublished": [
+    {
+      "id": 415657207,
+      "tag_name": "tr3600-v1.1.0",
+      "target_commitish": "594e4e6948907aaa15983bb4cb7f59e5c7f94b41",
+      "name": "Cudy TR3600 V1.0 — 1.1.0 正式版 · WebFiles + DDNS",
+      "body": "**固件下载：[cudy-tr3600-v1-1.1.0-sysupgrade.bin](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/download/tr3600-v1.1.0/cudy-tr3600-v1-1.1.0-sysupgrade.bin)**\n\nCudy TR3600 V1.0 / R126 — 1.1.0 正式版\n\n整合 WebFiles0.6.4 开机自启修复：初次启动最多等待90秒，让局域网、已授权USB\n挂载及可用内存就绪；停止操作可取消等待。程序、隔离、挂载身份和写入权限检查\n继续执行，异常不扩大权限，运行中保护性退出不自动重启。早期错误采用固定原因码\n记录到root600临时文件并显示于LuCI，避免开机退出后无诊断信息。\n\n保留升级账号目录自动恢复：仅在验证root所有权、公开标记及全部私有文件元数据\n后，将符合条件的目录755恢复为700，保留原账号、密钥和LAN／公网证书。沿用\n实际编译Quantum摘要绑定及镜像内程序校验，不再修改已经计算摘要的程序字节。\n\n本版还包含WebFiles多账号与读写权限、USB授权与SMB共享、LuCI DDNS/Dynu、\nZeroTier固定端口与防火墙同步、Xray/Mango、SS、Wi-Fi和LED功能。新机mangozt\n入站、出站、区域内转发默认接受，IPv4伪装开启；保留升级设备已有配置。\nZeroTier新机固定UDP9993/48170/20089，升级保留已有端口文件和网络身份。\n未增加PPTP或L2TP/IPsec服务端，不调整WAN速率、PHY或代理策略。\n\n验证范围：相同WebFiles0.6.4管理程序和Quantum二进制已在rc3上实机验收：一次\n整机重启后自动启动，无手动开启；原账号、密码和证书保留；用户确认手机LAN与\n蜂窝数据加ZeroTier登录及浏览正常。原生ARM64及CI通过45项顶层测试（含子项65项）。\n此前rc2手机四项文件操作及公网测试通过，属于旧镜像证据。本次完整1.1.0镜像\n尚未刷入实机，因此不将组件验收写成这份完整镜像已经完成刷机验收。\n本版按用户要求发布为普通GitHub Release，提供完整源码、构建记录及SHA256。\n\n已知事项：历史WAN短暂断链原因未确定，当前恢复千兆不代表长期稳定性通过；\n已有FAT32未正常卸载提示未修复，仍需安全卸载后离线检查。本版不声称修复这两项。\n原始rc3早期错误未保留，不能追溯认定唯一根因；本次改进了就绪等待和可观察性。\n\n新机WebFiles关闭、未选择USB卷、默认只读、LAN HTTPS端口8080；ZeroTier和\n公网入口默认关闭，没有预置任何个人账号、CA、DDNS密码或网络身份。\n升级保留/etc/cudy-webfiles/与/etc/zerotier-stable-ports.json。刷机前确认旧系统\n备份清单含这些路径，另存系统备份、结束USB传输并核对SHA256SUMS。不保留配置\n或恢复出厂按新机设置处理。现有rc3加修复组件的路由器不会被本次构建自动刷机。\n\n固件文件：cudy-tr3600-v1-1.1.0-sysupgrade.bin，仅用于匹配的TR3600 V1.0/R126\n定制OpenWrt，sysupgrade不是原厂通用刷机包。原厂迁移与设备限制见README。\n\n\nSource: `594e4e6948907aaa15983bb4cb7f59e5c7f94b41`\nBuild: https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/39008834556",
+      "draft": false,
+      "prerelease": false,
+      "assets": [
+        {
+          "id": 649877192,
+          "name": "actual-kernel.config",
+          "size": 135435,
+          "digest": "sha256:4ea125ec52b3ba43c20eafc2023d7f548229e3c46dacd6a6772250f5a5de33ae"
+        },
+        {
+          "id": 649876946,
+          "name": "COMPONENT-ACCEPTANCE.json",
+          "size": 1396,
+          "digest": "sha256:5fa59d61f335bdd9e0fda00e5f5958d7a8e3b5e9bafb65bdde63bc341d802a83"
+        },
+        {
+          "id": 649877206,
+          "name": "cudy-tr3600-v1-1.1.0-sysupgrade.bin",
+          "size": 50053395,
+          "digest": "sha256:c2abceeddaec72df75066f1f6e0f745a07fab2db937ff1945be93a44e2f85d11"
+        },
+        {
+          "id": 649877322,
+          "name": "feed-commits.txt",
+          "size": 566,
+          "digest": "sha256:cba798acf35719d9c98b04112608b429b62b498051f9c5aec04fb56b28ca9f02"
+        },
+        {
+          "id": 649877336,
+          "name": "image-metadata.json",
+          "size": 251,
+          "digest": "sha256:18478f41e04e0dbb9e67db0cf7ed5b78b2976646a3126a40d212da596266db8a"
+        },
+        {
+          "id": 649877005,
+          "name": "QUANTUM-SOURCE-1.1.0.tar.gz",
+          "size": 21411976,
+          "digest": "sha256:9275cfefe184fbda5ac6aaf5a670550e72f6c18cff53b3512cb8378215fffa27"
+        },
+        {
+          "id": 649877075,
+          "name": "README.txt",
+          "size": 9066,
+          "digest": "sha256:dc2c19158b3ac2a127dff7e371eacbb60d4f30add79d4ac3ca04b97697f26cfe"
+        },
+        {
+          "id": 649877097,
+          "name": "RELEASE-1.1.0.txt",
+          "size": 2873,
+          "digest": "sha256:47c43c310254ef3a4ea69e3147441391aef8741d62467c31067168e15c9bfc9a"
+        },
+        {
+          "id": 649877120,
+          "name": "RELEASE-NOTES.txt",
+          "size": 2873,
+          "digest": "sha256:47c43c310254ef3a4ea69e3147441391aef8741d62467c31067168e15c9bfc9a"
+        },
+        {
+          "id": 649877345,
+          "name": "resolved.config",
+          "size": 299675,
+          "digest": "sha256:f5a014cc8d28424d9c27e264efa021fe54e8b5d3226d25f14e2ebe2a593f82fc"
+        },
+        {
+          "id": 649877129,
+          "name": "SHA256SUMS",
+          "size": 1802,
+          "digest": "sha256:3aa566ab0702579910c1916ca951c9e14deb4e9e6e8e4cf7b63bb6482f705325"
+        },
+        {
+          "id": 649877153,
+          "name": "SOURCE-1.1.0.zip",
+          "size": 4470109,
+          "digest": "sha256:c126eccbedea0a323c9d691b809e1c238d900e8d8a32f8159bd20dd773f0adbc"
+        },
+        {
+          "id": 649877168,
+          "name": "SOURCE-PROVENANCE-1.1.0.json",
+          "size": 665,
+          "digest": "sha256:46882db96f201fad8adb66605ff70a1dec05bed9356340dbd3edfd511e946772"
+        },
+        {
+          "id": 649877357,
+          "name": "ss-validation.json",
+          "size": 310,
+          "digest": "sha256:30e6be1f3f41012d1317f2ffea06185a1ea7fd70fce4b3bf01a4bb9707c2627b"
+        },
+        {
+          "id": 649877369,
+          "name": "tr3600-source.json",
+          "size": 1458,
+          "digest": "sha256:703dc0365380aec54fca68af9e28ba05de4d9cdc9175eb0d8b8f6fab807fba9b"
+        },
+        {
+          "id": 649877378,
+          "name": "tr3600-verification.json",
+          "size": 4713,
+          "digest": "sha256:7f6bb0fa2f875052ea7a7e0d464472de4c2f1f3f811cfb6632686bbb95007be6"
+        },
+        {
+          "id": 649877398,
+          "name": "webfiles-boot-packed-verification.json",
+          "size": 196,
+          "digest": "sha256:0663f016c3fd33d8d325791f27034c2e637865753e8f54bd93c3f6e027a9d190"
+        },
+        {
+          "id": 649877412,
+          "name": "webfiles-boot-regressions.txt",
+          "size": 7733,
+          "digest": "sha256:3536cf7e2f7aabe82b30824c8512b6b0332cb8c1052c0c56d2ceb4520b614c9b"
+        },
+        {
+          "id": 649877434,
+          "name": "webfiles-build.json",
+          "size": 1794,
+          "digest": "sha256:02885226afebcfe1aa27941a38a134070a46382aff28961ab823709916d0750f"
+        },
+        {
+          "id": 649877452,
+          "name": "webfiles-image-verification.json",
+          "size": 1025,
+          "digest": "sha256:7a020c291d4ef2916f64edd2f7ebafa38c4b18036bbe2d9c3bf2bd59c733077f"
+        },
+        {
+          "id": 649877461,
+          "name": "webfiles-storage-packed-regressions.txt",
+          "size": 480,
+          "digest": "sha256:5b869baa2071f720b418b5bf629d4b694ddac9fe3efdaebb7efa60b9c1609d59"
+        }
+      ]
+    },
+    {
+      "id": 405920223,
+      "tag_name": "tr3600-v1.0.0",
+      "target_commitish": "e298f2b015bc70eac46e0de58204616046cb119f",
+      "name": "Cudy TR3600 V1.0 — 1.0.0",
+      "body": "# Cudy TR3600 V1.0 定制固件 1.0.0\n\n本项目的正式发布版，基于 OpenWrt 25.12.5。仅适用于 **Cudy TR3600 V1.0**，不是 Cudy 原厂固件，也不适用于本仓库的 GL-MT300N-V2。\n\n## 功能与修正\n\n- 保留原代理界面、分流和自动切换、ZeroTier。\n- 增加 SS 服务端及 LuCI 管理，支持 AES-128-GCM、AES-256-GCM、ChaCha20-Poly1305、TCP/UDP；仅限明确授权的私有 ZeroTier 接口和网段，默认关闭，无预置密码或个人网络 ID。\n- USB 新盘首次在“网络共享 → USB 文件共享”授权；记住 UUID 后再插入自动恢复，自动重建共享元数据，提供只读/读写、安全卸载和取消授权。不格式化磁盘。\n- Wi-Fi 双频合一纳入“无线”标签页；保留无线中继和频段引导。\n- 增加状态 LED 推荐方案；LAN 和无关 USB 拔插不重置出口/代理状态。保留 WAN/LAN EEE 修正与 PPPoE 支持。\n- 相对 RC1，修正 SS 防火墙守护无谓占用代理操作锁，以及 SS 关闭时页面仍显示勾选的问题。\n- 移除 L2TP/IPsec 服务端和动态 DNS。\n\n## 验证结果\n\n完整 CI、原应用和双槽、实际 ARM64 Xray 14 项配置、SS 三种加密、UCI/nixio、9 项守护锁回归、真实 nft 隔离网络测试及最终镜像/压缩页面检查通过。\n\n1.0.0 已完成保留配置升级和一次独立重启：11 项配置保持一致，代理、ZeroTier、SS、双频 Wi-Fi 与原 USB 自动恢复；SS 对端国内外访问均正常，白灯恢复常亮。实际 SMB3.1.1 的读写、中文名、目录、改名、删除和 ADS 元数据检查通过；90 个静态安装路径与源码或 ROM 比对通过。用户另确认 iPhone“文件”读写正常。\n\n仍未全部覆盖长期稳定性、物理故障/夜间/升级灯光、可写 NTFS 及客户端占用磁盘时的安全卸载。\n\n## 安装\n\n先核对底部型号与硬件版本、备份配置并校验 SHA256。已有本项目匹配的 RC1/1.0.0 可从 LuCI“系统 → 备份/升级”上传本次 sysupgrade 镜像；本次已验收保留配置升级。原厂迁移须遵循 Cudy 官方中间固件流程，不能把 sysupgrade 直接当作原厂升级包。升级期间保持供电，不使用强制刷写。\n\n原厂界面、App、云管理和原厂 Mesh 不保留。SS 未开放公网，USB 共享仅局域网。ZeroTier 重连后的 SS 自动恢复可能需要数分钟。\n\n## 来源与校验\n\n- 固件源码提交：`e298f2b015bc70eac46e0de58204616046cb119f`。\n- [完整构建与检查](https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/37619658990)。\n- 固件文件：`openwrt-mediatek-filogic-cudy_tr3600-v1-squashfs-sysupgrade.bin`，30,607,635 字节。\n- SHA256：`2531c70f462513ca94124cbfd0c19571921e473d6b84749e1cd4161febe5e8b1`。\n- `SOURCE-1.0.0.zip` 包含该提交全部 137 个 Git 文件、模式和逐文件 SHA256；依赖来源锁定信息见 `SOURCE-PROVENANCE-1.0.0.json`。\n\n固件与已验收的 1.0.0 镜像相同；只补充发布资料，无需为了此次公开发布再次刷写。\n",
+      "draft": false,
+      "prerelease": false,
+      "assets": [
+        {
+          "id": 619121249,
+          "name": "BUILD-VERIFICATION-1.0.0.json",
+          "size": 2689,
+          "digest": "sha256:fd1970c310b6399fb7d9d0a709d54497aa049e9c4378d70c2a2b000e69ed986f"
+        },
+        {
+          "id": 619121299,
+          "name": "HARDWARE-ACCEPTANCE-1.0.0.json",
+          "size": 1066,
+          "digest": "sha256:714dcfb40c66711a7b4cf605f384afdec3559f5ed13cd56926bfb50a6425d434"
+        },
+        {
+          "id": 619121339,
+          "name": "IMAGE-METADATA-1.0.0.json",
+          "size": 251,
+          "digest": "sha256:18478f41e04e0dbb9e67db0cf7ed5b78b2976646a3126a40d212da596266db8a"
+        },
+        {
+          "id": 619121653,
+          "name": "openwrt-mediatek-filogic-cudy_tr3600-v1-squashfs-sysupgrade.bin",
+          "size": 30607635,
+          "digest": "sha256:2531c70f462513ca94124cbfd0c19571921e473d6b84749e1cd4161febe5e8b1"
+        },
+        {
+          "id": 619121377,
+          "name": "RELEASE-1.0.0.txt",
+          "size": 3044,
+          "digest": "sha256:55176b96483ff277ef7f2976b86e02b732c93738c259ecd459b9fe941a06433f"
+        },
+        {
+          "id": 619121417,
+          "name": "SHA256SUMS",
+          "size": 761,
+          "digest": "sha256:0b2058ef3389059b808ca8ea84d9063f061e6da9c9b35ee0eb93f56c492fef86"
+        },
+        {
+          "id": 619121480,
+          "name": "SOURCE-1.0.0.zip",
+          "size": 6018553,
+          "digest": "sha256:76da5a880c06d3d5573fc5561ccedf21fb205dafc1d0faf1ab4317c22f3000d5"
+        },
+        {
+          "id": 619121539,
+          "name": "SOURCE-PROVENANCE-1.0.0.json",
+          "size": 1076,
+          "digest": "sha256:75412a457121cb0433a7ade22482c37ac4bec6c5c9782d5152a9a96e8480e1c0"
+        },
+        {
+          "id": 619121600,
+          "name": "UPGRADE-1.0.0.txt",
+          "size": 1518,
+          "digest": "sha256:d78aa2e6c177a5bd3e6b4aebc7926040a4ae72a4c50ba8faae93d767eddb0f20"
+        }
+      ]
+    },
+    {
+      "id": 402975201,
+      "tag_name": "v21.0.0",
+      "target_commitish": "e77231ac984c411ad4b1c96c1abd486606f3fbca",
+      "name": "Release 21 — GL-MT300N-V2",
+      "body": "# Release 21 — GL-MT300N-V2\n\n本版用于 GL.iNet GL-MT300N-V2（ramips/mt76x8，MIPS little-endian），沿用20-test-failover2普通版内核、代理后台、策略与恢复保护。\n\n本次修正：第一次和第二次代理探测失败时，状态分别显示“连续失败 1/3、2/3”，避免保留上一次成功或出口稳定等待的文字。第三次连续失败、间歇故障窗口、恢复队列、候选清理和退避策略保持原样。\n\n2026-10-04 在现有路由器上完成：主节点及备用1故障时切换备用2；全部节点不可用时保留核心并退避；备用1 TCP成功但代理失败时继续候选；IPv4默认出口缺失及恢复；出口恢复后主节点仍故障时自动切换备用1。修正脚本另通过17项隔离回归和实机1/3、2/3显示、第三次失败后自动切换与恢复验证。所有故障资源清理后恢复原主节点，持久配置不变。\n\n发布门禁包含源码完整性、Linux回归、真实nftables策略、实际MIPS Xray、目标BusyBox、内核配置与离线符号、安装内容哈希、SquashFS格式、必需软件包以及至少1MiB镜像分区余量检查。产物对应的提交、运行编号、大小和SHA256见 BUILD-VERIFICATION.json 与 SHA256SUMS。\n\n实机结果来自20-test-failover2上应用同一修正脚本，21版完整镜像尚未重新刷机验收。物理WAN断线、LAN／ZeroTier客户端透明转发、重启后的完整恢复仍待验证；不承诺吞吐提升。\n\n下载 mt300n-v2-21-production-sysupgrade.bin；本次发布不自动刷机。刷入后版本标识 /etc/mango-release 应为21。\n",
+      "draft": false,
+      "prerelease": false,
+      "assets": [
+        {
+          "id": 609670560,
+          "name": "BUILD-VERIFICATION.json",
+          "size": 3274,
+          "digest": "sha256:4977b63e14a691dafa26d0a2679e39526e1349a2ca3c6b4d12abe2e10974c9c9"
+        },
+        {
+          "id": 609670563,
+          "name": "HARDWARE-EVIDENCE-21.json",
+          "size": 24511,
+          "digest": "sha256:a89f418272ed4d91b52aa5f793720345995689306e2338c1b6b8b04d1048e10f"
+        },
+        {
+          "id": 609670564,
+          "name": "KERNEL-PROFILES-20.md",
+          "size": 2115,
+          "digest": "sha256:3f162f04597ef4b5a0c196b2e96b0e71ab3d18b8e6e6c5b827a93779516fef0d"
+        },
+        {
+          "id": 609670572,
+          "name": "mt300n-v2-21-production-sysupgrade.bin",
+          "size": 14942502,
+          "digest": "sha256:d44a06141685f8897d16b91edc4b948931cc4ba8ec3d1e627f67d7538cc912fc"
+        },
+        {
+          "id": 609670576,
+          "name": "mt300n-v2-21-source.zip",
+          "size": 538763,
+          "digest": "sha256:f532e8fa2d4e839db9d1a1baba790f3212d346987ba484775b0ad7044bdc9231"
+        },
+        {
+          "id": 609670562,
+          "name": "RELEASE-21.md",
+          "size": 1616,
+          "digest": "sha256:55d928562cbea0ae95497f0eaa2b2552cdbceb03fd8567fbb3f993e8412d188a"
+        },
+        {
+          "id": 609670565,
+          "name": "SHA256SUMS",
+          "size": 545,
+          "digest": "sha256:c9e69a7cd227a9660bb421cae8157f6fcef0f718d6f698dbd08ad66f06e18c0d"
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "id": 415585454,
+      "tag_name": "tr3600-v1.1.0-rc3",
+      "target_commitish": "5cb9af7ca76390f2d72cce711ebbd1cf1a9dbf1b",
+      "name": "Cudy TR3600 V1.0 — 1.1.0-rc3 WebFiles + DDNS",
+      "body": "**固件下载：[cudy-tr3600-v1-1.1.0-rc3-sysupgrade.bin](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/download/tr3600-v1.1.0-rc3/cudy-tr3600-v1-1.1.0-rc3-sysupgrade.bin)**\n\nCudy TR3600 V1.0 / R126 — 1.1.0-rc3\n\n修复保留配置升级后 WebFiles 账号目录权限变为755、导致服务无法启动的问题。\n升级恢复脚本和服务启动脚本会先核对目录及文件身份，再仅将符合条件的私有目录\n恢复为700。账号密钥、账号密文、LAN证书和公网IP／DDNS证书密文不读取、不替换。\n遇到可写目录、其他所有者、错误标记、符号链接、硬链接或非600文件时保持拒绝。\n账号目录不存在时不创建，已有700目录不改；原有运行校验继续保留。\n\n构建前及最终镜像中分别使用真实 ARM64 Lua/nixio 执行11项回归，复现实际tar\n文件清单恢复，并核对LAN、公网IP、DDNS证书等合成文件内容与权限保持不变。\n继续将实际编译的Quantum SHA256绑定至WebFiles管理程序，并执行真实ARM64启动\n校验、篡改拒绝及最终镜像内容校验。固件文件名包含1.1.0-rc3，摘要与源码可追溯。\n\n此前rc2在手工修正目录权限后，用户确认手机LAN登录及上传、下载、重命名、删除\n全部正常；蜂窝数据+ZeroTier登录、浏览、下载正常；关闭Wi-Fi和ZeroTier后，\n公网登录及四项文件操作正常且无证书警告。这是上一版修复后设备的证据，不代替\n这份完整rc3镜像刷机后的配置保留、自动启动和手机验收。本次不会自动刷路由器。\n\n沿用WebFiles多账号及读写权限、USB授权共享、LuCI DDNS/Dynu、Xray/Mango、\nZeroTier、SS、Wi-Fi和LED功能，不加入PPTP或L2TP/IPsec服务端。\n不调整WAN速率、PHY、Xray或现有防火墙策略。此前WAN反复断链和FAT32未正常\n卸载提示尚未解决；短时间恢复千兆不代表长期稳定性通过，也没有自动修复磁盘。\n\n新机WebFiles关闭、未选USB卷、只读、LAN HTTPS端口8080；ZeroTier及公网访问\n默认关闭。未预置个人账号、证书、DDNS密码、网络ID或设备身份。\nZeroTier新机固定UDP9993/48170/20089，防火墙从固定端口配置生成本程序规则；\n新机mangozt入站、出站和区域内转发默认接受，IPv4伪装开启。保留升级设备已有\n网络身份、local.conf及防火墙设置，不设常驻保活或低带宽试验。\n\n升级保留清单包括/etc/cudy-webfiles/与/etc/zerotier-stable-ports.json。\n从rc2保留配置升级时，账号、证书和端口文件应带入，自动恢复本次已验证的目录\n权限；刷机前仍须检查备份成员并保存系统备份。不保留配置或恢复出厂会清除\n个人设置，按新机配置。更旧固件需先补齐原系统保留路径并备份。\n\n仅用于匹配的TR3600 V1.0/R126定制OpenWrt。sysupgrade不是原厂通用刷机包；\n原厂迁移见README。刷机前结束USB传输，备份设置并核验SHA256SUMS。\n新完整镜像的实际升级、启动、手机路径和长期稳定性仍待验收。\n\n\nSource: `5cb9af7ca76390f2d72cce711ebbd1cf1a9dbf1b`\nBuild: https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/38995600312",
+      "draft": false,
+      "prerelease": true,
+      "assets": [
+        {
+          "id": 649551019,
+          "name": "actual-kernel.config",
+          "size": 135435,
+          "digest": "sha256:4ea125ec52b3ba43c20eafc2023d7f548229e3c46dacd6a6772250f5a5de33ae"
+        },
+        {
+          "id": 649551039,
+          "name": "cudy-tr3600-v1-1.1.0-rc3-sysupgrade.bin",
+          "size": 50043155,
+          "digest": "sha256:6da3d927b0baa65260ca0e0e943dbab467d2a4ebe88f823e73f6116c8f7a230b"
+        },
+        {
+          "id": 649551095,
+          "name": "feed-commits.txt",
+          "size": 566,
+          "digest": "sha256:cba798acf35719d9c98b04112608b429b62b498051f9c5aec04fb56b28ca9f02"
+        },
+        {
+          "id": 649551117,
+          "name": "image-metadata.json",
+          "size": 251,
+          "digest": "sha256:18478f41e04e0dbb9e67db0cf7ed5b78b2976646a3126a40d212da596266db8a"
+        },
+        {
+          "id": 649550849,
+          "name": "QUANTUM-SOURCE-1.1.0-rc3.tar.gz",
+          "size": 21412029,
+          "digest": "sha256:4a3e3624bfe94c1e38e423c7985cd799354910d0fbd9fe4c114475fd425c8159"
+        },
+        {
+          "id": 649550901,
+          "name": "README.txt",
+          "size": 8555,
+          "digest": "sha256:d86e0f06db5ed3ca51d2a4d427e65875037b4ec06481af96fc0d8fffed22a20c"
+        },
+        {
+          "id": 649550923,
+          "name": "RELEASE-1.1.0-rc3.txt",
+          "size": 2912,
+          "digest": "sha256:826a0b8a935475c228155686b1f13fd1199a9e96ce94e2a04122fb7b68dc498e"
+        },
+        {
+          "id": 649550937,
+          "name": "RELEASE-NOTES.txt",
+          "size": 2912,
+          "digest": "sha256:826a0b8a935475c228155686b1f13fd1199a9e96ce94e2a04122fb7b68dc498e"
+        },
+        {
+          "id": 649551127,
+          "name": "resolved.config",
+          "size": 299675,
+          "digest": "sha256:f5a014cc8d28424d9c27e264efa021fe54e8b5d3226d25f14e2ebe2a593f82fc"
+        },
+        {
+          "id": 649550959,
+          "name": "SHA256SUMS",
+          "size": 1529,
+          "digest": "sha256:54d6975faae97806b393dfe6a9e516fe9c34d2f4bbdff5a0d0a5663b3c3d0946"
+        },
+        {
+          "id": 649550981,
+          "name": "SOURCE-1.1.0-rc3.zip",
+          "size": 4443284,
+          "digest": "sha256:073b202be62a6a0b11037102b9e73d79e5fc56075d4d2660adf43599cd5c8d6d"
+        },
+        {
+          "id": 649551003,
+          "name": "SOURCE-PROVENANCE-1.1.0-rc3.json",
+          "size": 669,
+          "digest": "sha256:f6731bfe5968786191b1cd7b7d0da7ddfaac53e94300dca1466bea904c153dfa"
+        },
+        {
+          "id": 649551141,
+          "name": "ss-validation.json",
+          "size": 310,
+          "digest": "sha256:30e6be1f3f41012d1317f2ffea06185a1ea7fd70fce4b3bf01a4bb9707c2627b"
+        },
+        {
+          "id": 649551156,
+          "name": "tr3600-source.json",
+          "size": 1430,
+          "digest": "sha256:1dff0ae316cc52a92e58c233b46e243f542ea7796ca9819cc116524ba3b32615"
+        },
+        {
+          "id": 649551171,
+          "name": "tr3600-verification.json",
+          "size": 4551,
+          "digest": "sha256:e7b00358c6d7d1a2f1577c83cd0c45819b8178ee601628686c89a111bd48495b"
+        },
+        {
+          "id": 649551185,
+          "name": "webfiles-build.json",
+          "size": 1798,
+          "digest": "sha256:cd482cdc39f665cbc272e2961cd1270ecc65e966fe5cba3adb5287d4d4a92c62"
+        },
+        {
+          "id": 649551216,
+          "name": "webfiles-image-verification.json",
+          "size": 824,
+          "digest": "sha256:5b7aca6f51e3144696257a8e2a98583756a2edc6d5b433f80c394ed660c12c92"
+        },
+        {
+          "id": 649551240,
+          "name": "webfiles-storage-packed-regressions.txt",
+          "size": 480,
+          "digest": "sha256:5b869baa2071f720b418b5bf629d4b694ddac9fe3efdaebb7efa60b9c1609d59"
+        }
+      ],
+      "tagRef": {
+        "sha": "5cb9af7ca76390f2d72cce711ebbd1cf1a9dbf1b",
+        "type": "commit",
+        "url": "https://api.github.com/repos/liuyong2027/mt300n-v2-openwrt/git/commits/5cb9af7ca76390f2d72cce711ebbd1cf1a9dbf1b"
+      }
+    },
+    {
+      "id": 415258912,
+      "tag_name": "tr3600-v1.1.0-rc2",
+      "target_commitish": "5fd9e9641aeb2b5415ecd3516c6add0c39f1c6af",
+      "name": "Cudy TR3600 V1.0 — 1.1.0-rc2 WebFiles + DDNS",
+      "body": "<!-- cudy-webfiles-rc2-upgrade-storage-mode-defect -->\n> **2026-10-17 实机验收发现：保留配置升级后，WebFiles 可能因账号目录权限而无法启动。**\n>\n> 账号和证书文件已保留，但仅归档文件的升级恢复过程会把父目录重建为 755；程序要求私有目录权限为 700，因此拒绝读取。现场只修正目录权限后，原 guest 账号与原 CA 均恢复使用，无需重建密码或证书。\n>\n> 修复分支：`codex/tr3600-webfiles-upgrade-storage-mode`。修复只在目录、标记及文件身份符合预期时恢复目录权限；不读取或替换账号密钥、加密账号及证书。原生路由器与 ARM64 Lua/nixio 回归覆盖真实 tar 恢复和异常文件拒绝。新的完整固件尚未发布；这台设备此前的 WAN 反复断链原因也尚未查明，不能将短时恢复千兆视为全部实机验收通过。\n\n**固件下载：[cudy-tr3600-v1-1.1.0-rc2-sysupgrade.bin](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/download/tr3600-v1.1.0-rc2/cudy-tr3600-v1-1.1.0-rc2-sysupgrade.bin)**\n\nCudy TR3600 V1.0 / R126 — 1.1.0-rc2\n\n修复 rc1 实机发现的 WebFiles 启动失败：原管理程序沿用旧 Quantum 校验值，\n与重新编译的程序不一致。现在先编译 Quantum，再把实际 SHA256 绑定进\nWebFiles0.6.3，继续保留严格校验；没有关闭或跳过校验来启动服务。\n\n构建阶段和最终镜像阶段均实际执行 ARM64 启动校验。加入篡改文件、缺失绑定、\n错误架构和动态 ELF 的拒绝测试。下载的固件文件名直接包含1.1.0-rc2版本号，\n校验清单及镜像报告使用同一个文件名。\n\n已有 rc1 设备单独安装0.6.3修复后，原生 ARM64检查、HTTPS CA/IP校验通过；\n用户确认手机连接 TR3600 Wi-Fi 时，登录及上传、下载、重命名、删除全部正常。\n以上是组件修复的实机证据，不能代替这份新完整 rc2 镜像的刷机、配置保留和\n手机端验收。本次构建不自动刷机，仍作为 GitHub Prerelease 发布。\n\n沿用 WebFiles多账号与读写权限、USB授权共享、标准 LuCI DDNS/Dynu、Xray/Mango、\nZeroTier、SS、Wi-Fi和LED基线，不新增PPTP或L2TP/IPsec服务端。\n新机 WebFiles关闭、未选择USB卷、只读，LAN默认端口8080；ZeroTier访问和公网\n访问默认关闭。没有预置个人账号、证书、DDNS密码、网络ID或设备身份。\n\nZeroTier新机默认 UDP9993/48170/20089，配套防火墙规则读取固定端口配置生成。\n保留既有 local.conf、网络身份和防火墙设置；新机mangozt区域入站、出站和\n区域内转发默认接受，IPv4地址伪装开启。只按当前WAN网关限制SSDP响应，\n防火墙重载、WAN变化和服务启停时重新应用本程序规则，不重启Xray。\n短时保活试验不设为常驻，低带宽模式保持关闭；不能保证任何NAT条件都直连。\n\n升级保留清单包含 /etc/cudy-webfiles/ 和 /etc/zerotier-stable-ports.json。\n从已安装这份清单的 rc1保留配置升级，账号、证书和固定端口文件应被带入；\n升级前仍须核实实际备份成员。更旧固件需先在旧系统补充保留路径并备份。\n不保留配置刷机或恢复出厂会清除个人设置，按新机重新配置。\n\n仅用于匹配的TR3600 V1.0/R126定制OpenWrt。当前sysupgrade不是原厂通用刷机包，\n原厂迁移见README。刷机前结束USB传输、备份设置并校验SHA256SUMS。\n已知WAN短断、FAT32未正常卸载提示和远端弱性能节点延迟未宣称修复。\n长期观察、完整rc2的手机ZeroTier/公网路径、升级与物理故障恢复仍需实测。\n\n\nSource: `5fd9e9641aeb2b5415ecd3516c6add0c39f1c6af`\nBuild: https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/38931529210",
+      "draft": false,
+      "prerelease": true,
+      "assets": [
+        {
+          "id": 648202762,
+          "name": "actual-kernel.config",
+          "size": 135435,
+          "digest": "sha256:4ea125ec52b3ba43c20eafc2023d7f548229e3c46dacd6a6772250f5a5de33ae"
+        },
+        {
+          "id": 648202782,
+          "name": "cudy-tr3600-v1-1.1.0-rc2-sysupgrade.bin",
+          "size": 50043155,
+          "digest": "sha256:aabd2ed69c74d1ed4001811a4e7ec64dae84c1e8864888c292e489bde5e9f382"
+        },
+        {
+          "id": 648202873,
+          "name": "feed-commits.txt",
+          "size": 566,
+          "digest": "sha256:cba798acf35719d9c98b04112608b429b62b498051f9c5aec04fb56b28ca9f02"
+        },
+        {
+          "id": 648202901,
+          "name": "image-metadata.json",
+          "size": 251,
+          "digest": "sha256:18478f41e04e0dbb9e67db0cf7ed5b78b2976646a3126a40d212da596266db8a"
+        },
+        {
+          "id": 648202494,
+          "name": "QUANTUM-SOURCE-1.1.0-rc2.tar.gz",
+          "size": 21412182,
+          "digest": "sha256:7a611d43b543b74c821d8e8db755066094d1b6dc301f523b0ab3cdab8d966794"
+        },
+        {
+          "id": 648202563,
+          "name": "README.txt",
+          "size": 8264,
+          "digest": "sha256:e39a965f90fe766aaa6b2a7a540d98a3a5ec5b9bd996ae982c3e5bca54694491"
+        },
+        {
+          "id": 648202608,
+          "name": "RELEASE-1.1.0-rc2.txt",
+          "size": 2585,
+          "digest": "sha256:a8ad3ced21651e2ba5b853f864d8db82598b69a4b402a50eda7571d3d9ffd829"
+        },
+        {
+          "id": 648202653,
+          "name": "RELEASE-NOTES.txt",
+          "size": 2585,
+          "digest": "sha256:a8ad3ced21651e2ba5b853f864d8db82598b69a4b402a50eda7571d3d9ffd829"
+        },
+        {
+          "id": 648202920,
+          "name": "resolved.config",
+          "size": 299675,
+          "digest": "sha256:f5a014cc8d28424d9c27e264efa021fe54e8b5d3226d25f14e2ebe2a593f82fc"
+        },
+        {
+          "id": 648202675,
+          "name": "SHA256SUMS",
+          "size": 1423,
+          "digest": "sha256:9f1823bab12a35496f8845cd35f08c0b1c86bcfa6f907411c3500bf81f9a066f"
+        },
+        {
+          "id": 648202701,
+          "name": "SOURCE-1.1.0-rc2.zip",
+          "size": 4421828,
+          "digest": "sha256:b6a94d09d711951c1456ac42f047af49caf0ca35b99645b027d0d6eaf065640a"
+        },
+        {
+          "id": 648202743,
+          "name": "SOURCE-PROVENANCE-1.1.0-rc2.json",
+          "size": 669,
+          "digest": "sha256:85b3f7d099e8407227d91c410ea4ab4544e307e89b1556ddaf873cfa0143ca5f"
+        },
+        {
+          "id": 648202941,
+          "name": "ss-validation.json",
+          "size": 310,
+          "digest": "sha256:30e6be1f3f41012d1317f2ffea06185a1ea7fd70fce4b3bf01a4bb9707c2627b"
+        },
+        {
+          "id": 648202963,
+          "name": "tr3600-source.json",
+          "size": 1430,
+          "digest": "sha256:1dff0ae316cc52a92e58c233b46e243f542ea7796ca9819cc116524ba3b32615"
+        },
+        {
+          "id": 648203023,
+          "name": "tr3600-verification.json",
+          "size": 4081,
+          "digest": "sha256:864394cedbdcd5687c01bf22d66c3dc5acf0f75745d82d7a7e8125580758996c"
+        },
+        {
+          "id": 648203046,
+          "name": "webfiles-build.json",
+          "size": 1798,
+          "digest": "sha256:8cf237bcd820a65c410dca12c6e99eb5212bd06a3ea36d0fc8d802d41a86a9dd"
+        },
+        {
+          "id": 648203062,
+          "name": "webfiles-image-verification.json",
+          "size": 520,
+          "digest": "sha256:09bdf6a4bf591fe0ddb44e97528572e5b40eb34ff20deaa4541fb492cc29a714"
+        }
+      ],
+      "tagRef": {
+        "sha": "5fd9e9641aeb2b5415ecd3516c6add0c39f1c6af",
+        "type": "commit",
+        "url": "https://api.github.com/repos/liuyong2027/mt300n-v2-openwrt/git/commits/5fd9e9641aeb2b5415ecd3516c6add0c39f1c6af"
+      }
+    },
+    {
+      "id": 415062026,
+      "tag_name": "tr3600-v1.1.0-rc1",
+      "target_commitish": "ad2f821a69a86ba7edf8e2f631e5e6dba279d7fb",
+      "name": "Cudy TR3600 V1.0 — 1.1.0-rc1 WebFiles + DDNS",
+      "body": "<!-- cudy-webfiles-rc1-runtime-hash-defect -->\n> **2026-10-16 实机验收发现：本 rc1 的 WebFiles 无法正常启动，请等待修正版。**\n>\n> 重新编译的 Quantum 与 WebFiles 内置的旧校验值不一致，启动检查会拒绝运行。此前 CI 的文件清单校验没有覆盖这一运行检查，因此不能将构建通过视为 WebFiles 实机验收通过。\n>\n> 修复分支：`codex/tr3600-webfiles-runtime-hash-fix`。修复保留启动校验，并将实际编译结果绑定到管理程序，同时增加真实 ARM64 校验及篡改拒绝测试。本条说明不代表新固件已发布或已完成手机端验收。已刷设备无需因此恢复出厂；请保留配置并等待修正版。\n\n固件下载：[cudy-tr3600-v1-1.1.0-rc1-sysupgrade.bin](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/download/tr3600-v1.1.0-rc1/cudy-tr3600-v1-1.1.0-rc1-sysupgrade.bin)\n\n下载文件名已加入版本号；固件二进制内容及 SHA256 保持不变，相关校验清单已同步更新。\n\nCudy TR3600 V1.0 / R126 — 1.1.0-rc1 测试版\n\n新增 Cudy webpage（WebFiles）、标准 LuCI DDNS及ZeroTier直连修正；沿用1.0.0的USB共享、Xray/Mango、ZeroTier、SS、Wi-Fi和LED基线。本版不包含PPTP或L2TP/IPsec服务端。\n\nWebFiles提供LuCI启停、最多16个独立账号及读写权限、HTTPS、可选ZeroTier与公网入口。沿用Quantum随机JWT jti修正。首次安装服务关闭、未选择USB卷、只读，ZeroTier和公网入口关闭；没有预置个人账号、CA、域名或网络ID。新安装的网页入口默认使用LAN地址的8080端口。\n\n恢复标准DDNS及Dynu等服务商定义。保留配置升级不再删除DDNS配置；WebFiles的账号加密密钥、账号和TLS目录列入保留清单。保留配置时沿用原端口、授权卷、密码、CA和访问开关；完整新镜像的升级恢复仍需实机验证。\n\n软件包保留Go已精简可执行文件的原始字节，避免二次strip破坏内置校验值；最终镜像哈希比较继续强制执行。Mango首次启动只创建缺失的自有防火墙区段，保留已有策略、地址伪装范围和停用规则。按用户要求，新机mangozt默认入站/出站/区域内转发均接受、IPv4地址伪装开启。\n\nZeroTier纳入固定UDP端口、按当前WAN网关限制的UPnP响应，以及防火墙重载/WAN事件/服务启停恢复。保留已有local.conf和规则，不包含个人网络ID；未将短时保活试验设为常驻，也未启用低带宽模式。不能保证所有NAT条件均直连，远端弱性能设备的首包延迟仍可能出现。首次从旧固件升级前，须把 /etc/zerotier-stable-ports.json 和 /etc/cudy-webfiles/ 加入旧固件 /etc/sysupgrade.conf，并核实备份中确有这些文件；新镜像中的保留清单不能替旧固件完成首次备份。\n\n仅适用于匹配的TR3600 V1.0定制OpenWrt。刷机前阅读README.txt和RELEASE-NOTES.txt，备份设置并校验SHA256SUMS。此sysupgrade镜像不是原厂通用升级包。本次构建和发布均不自动刷写路由器。\n\n验证范围：CI代码回归、目标ARM64程序与库检查、最终镜像内容／架构／元数据／容量校验通过。新完整镜像尚未刷机验收。旧固件上WebFiles功能及重启测试的结果不能代替本镜像验收。\n\n已有设备上曾记录WAN短断及FAT32未正常卸载提示；本版没有宣称修复。长期稳定性、此镜像上的手机文件操作、物理断链恢复等仍待测试。发布为Prerelease，不替代已验收稳定版本。\n\n\nSource: `ad2f821a69a86ba7edf8e2f631e5e6dba279d7fb`\nBuild: https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/38902566288",
+      "draft": false,
+      "prerelease": true,
+      "assets": [
+        {
+          "id": 647607624,
+          "name": "actual-kernel.config",
+          "size": 135435,
+          "digest": "sha256:4ea125ec52b3ba43c20eafc2023d7f548229e3c46dacd6a6772250f5a5de33ae"
+        },
+        {
+          "id": 647607704,
+          "name": "cudy-tr3600-v1-1.1.0-rc1-sysupgrade.bin",
+          "size": 50043155,
+          "digest": "sha256:56ab6eda573eb5e873b679a2d8c5992a8a7a549b958f5b18798e20f2fb18e7f5"
+        },
+        {
+          "id": 647607652,
+          "name": "feed-commits.txt",
+          "size": 566,
+          "digest": "sha256:cba798acf35719d9c98b04112608b429b62b498051f9c5aec04fb56b28ca9f02"
+        },
+        {
+          "id": 647607682,
+          "name": "image-metadata.json",
+          "size": 251,
+          "digest": "sha256:18478f41e04e0dbb9e67db0cf7ed5b78b2976646a3126a40d212da596266db8a"
+        },
+        {
+          "id": 647607293,
+          "name": "QUANTUM-SOURCE-1.1.0-rc1.tar.gz",
+          "size": 21412040,
+          "digest": "sha256:2801e48ac6c253e420512d8a69c31fb13ee6b80a234fd1fe5d220ed64abdd55f"
+        },
+        {
+          "id": 647607420,
+          "name": "README.txt",
+          "size": 7544,
+          "digest": "sha256:d5d1f50d4a607cb7c62016ed58a5b06a1b68d9e09579b10fe703251c29adce3e"
+        },
+        {
+          "id": 647607447,
+          "name": "RELEASE-1.1.0-rc1.txt",
+          "size": 2544,
+          "digest": "sha256:d47bf6153bcf729906bafbc99c009ef15f741c4a32e3f4d930d48946be6d775e"
+        },
+        {
+          "id": 647607472,
+          "name": "RELEASE-NOTES.txt",
+          "size": 3322,
+          "digest": "sha256:8d1ba8f3cfd3dc403a2675542f92937b4c2399caf6a5d63bc575cb62b88c9599"
+        },
+        {
+          "id": 647607821,
+          "name": "resolved.config",
+          "size": 299675,
+          "digest": "sha256:f5a014cc8d28424d9c27e264efa021fe54e8b5d3226d25f14e2ebe2a593f82fc"
+        },
+        {
+          "id": 647691013,
+          "name": "SHA256SUMS",
+          "size": 1423,
+          "digest": "sha256:a1336059aec4cdd072f10ed45ae76305b25c4a5f90c871dc83406a5585696fa1"
+        },
+        {
+          "id": 647607552,
+          "name": "SOURCE-1.1.0-rc1.zip",
+          "size": 4399539,
+          "digest": "sha256:063049b3ef1b704f9687d4769f00df3ce2cdb7d8e2c7d93a5dd1dca397d15b08"
+        },
+        {
+          "id": 647607593,
+          "name": "SOURCE-PROVENANCE-1.1.0-rc1.json",
+          "size": 669,
+          "digest": "sha256:0e489f11f476090f2baf8f2e9b4b330e01cba3c2af65708f330803fae1624ac8"
+        },
+        {
+          "id": 647607855,
+          "name": "ss-validation.json",
+          "size": 310,
+          "digest": "sha256:30e6be1f3f41012d1317f2ffea06185a1ea7fd70fce4b3bf01a4bb9707c2627b"
+        },
+        {
+          "id": 647607907,
+          "name": "tr3600-source.json",
+          "size": 1435,
+          "digest": "sha256:4902a83db20f7f914950f8745e92f7b157335155771cb94722b3bd2709ca4f2e"
+        },
+        {
+          "id": 647690952,
+          "name": "tr3600-verification.json",
+          "size": 4137,
+          "digest": "sha256:7ec21a2006586100133a42d4ea7a1b5ea996990b7e071deacfab952eac9e1d75"
+        },
+        {
+          "id": 647607975,
+          "name": "webfiles-build.json",
+          "size": 1652,
+          "digest": "sha256:780c3298d8daf46949ccd66c946f55a1c70bbdbcdaef4d87340480a5b3667579"
+        },
+        {
+          "id": 647608024,
+          "name": "webfiles-image-verification.json",
+          "size": 475,
+          "digest": "sha256:871e83f44c4f046556759553ba8222f7fba28100bd20e9e9e5d2520286b0bd2a"
+        }
+      ],
+      "tagRef": {
+        "sha": "ad2f821a69a86ba7edf8e2f631e5e6dba279d7fb",
+        "type": "commit",
+        "url": "https://api.github.com/repos/liuyong2027/mt300n-v2-openwrt/git/commits/ad2f821a69a86ba7edf8e2f631e5e6dba279d7fb"
+      }
+    }
+  ]
+}
