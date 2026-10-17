@@ -11,6 +11,7 @@ start_service() {
     config_get_bool rw main read_write 0
     helper=/usr/lib/cudy-webfiles/bin/cudy-webfiles
     [ -x "$helper" ] || return 1
+    /usr/bin/lua /usr/lib/cudy-webfiles/prepare-storage.lua || return 1
     "$helper" reset >/dev/null 2>&1 || return 1
     procd_open_instance
     if [ "$rw" = 1 ]; then
@@ -24,3 +25,4 @@ start_service() {
     # Guard failures remain stopped until the administrator explicitly starts again.
     procd_close_instance
 }
+
