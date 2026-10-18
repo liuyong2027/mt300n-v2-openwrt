@@ -1,0 +1,4 @@
+#!/bin/sh
+case "$ACTION:$INTERFACE" in
+    ifup:wan|ifupdate:wan|ifdown:wan) /usr/libexec/mango-zt-direct ;;
+esac

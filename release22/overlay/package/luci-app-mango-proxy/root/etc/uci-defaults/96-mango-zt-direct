@@ -1,0 +1,28 @@
+#!/bin/sh
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'glinet,gl-mt300n-v2' ] || exit 0
+# Preserve existing local.conf exactly, including the verified on-device fix.
+task_path=$(uci -q get zerotier.global.local_conf_path)
+if [ -z "$task_path" ]; then
+    if [ ! -e /etc/zerotier-stable-ports.json ]; then
+        (umask 077; printf '%s\n' '{"settings":{"secondaryPort":48170,"tertiaryPort":20089,"portMappingEnabled":true}}' > /etc/zerotier-stable-ports.json) || exit 1
+    fi
+    uci set zerotier.global.local_conf_path='/etc/zerotier-stable-ports.json'
+    uci commit zerotier || exit 1
+fi
+# Do not overwrite another include occupying this name.
+task_type=$(uci -q get firewall.mango_zt_direct)
+task_include=$(uci -q get firewall.mango_zt_direct.path)
+if [ -n "$task_type" ] && { [ "$task_type" != include ] || [ "$task_include" != /usr/libexec/mango-zt-direct ]; }; then
+    logger -t mango-zt-direct 'Conflicting firewall include; left unchanged'
+    exit 1
+fi
+if [ -n "$task_type" ]; then
+    # Keep owner choices, including an explicitly disabled include.
+    exit 0
+fi
+uci set firewall.mango_zt_direct=include
+uci set firewall.mango_zt_direct.type='script'
+uci set firewall.mango_zt_direct.path='/usr/libexec/mango-zt-direct'
+uci set firewall.mango_zt_direct.fw4_compatible='1'
+uci commit firewall || exit 1
+exit 0
