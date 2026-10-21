@@ -1,0 +1,17 @@
+{
+  "gateway_matches_current_wan": true,
+  "direct_udp": "passed",
+  "board": "glinet,gl-mt300n-v2",
+  "date": "2026-10-21",
+  "repeated_refresh": "passed",
+  "full_new_image_hardware_acceptance": "pending",
+  "helper_sha256": "bda24368ea471e02e48508b81b1d2d3a8c3786cfd8b677cf7283d3de3657de91",
+  "firewall_reload": "passed",
+  "configuration_hashes": "unchanged",
+  "zerotier_and_xray_pids": "unchanged",
+  "image_version": "22",
+  "owned_jump_count": 1,
+  "upnp_discovery": "passed",
+  "cross_public_internet_direct_connectivity": "not tested",
+  "scope": "Release 22 device with the single ubus timeout hotfix; not the new full Release 23 image"
+}
