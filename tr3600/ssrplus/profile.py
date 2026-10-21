@@ -9,7 +9,7 @@ import sys
 
 ROOT=Path(__file__).resolve().parents[2]
 PROFILE=Path(__file__).resolve().parent
-SSR_COMMIT='11e0a48737097f8b0e0ec0dd080350ea7fd08d94'
+SSR_COMMIT='80d7bfff625b33db8afe80934638d96d214ceadc'
 
 def replace(path,old,new,count=1):
     text=path.read_text(encoding='utf-8')
@@ -37,15 +37,17 @@ find package/luci-app-cudy-* package/cudy-webfiles -type f -exec sh -c 'head -c 
 '''+text[end:]
     # Source package dependency resolution uses this exact feed, including its Xray.
     text=text.replace('./scripts/feeds update -a','printf \'%s\\n\' \'src-git helloworld https://github.com/fw876/helloworld.git^'+SSR_COMMIT+'\' >> feeds.conf.default\n./scripts/feeds update -a')
-    text=text.replace('./scripts/feeds install -a','./scripts/feeds install -a\n./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks')
+    # Install selected helloworld packages first: -f does not replace a package
+    # already linked from another feed. The following -a preserves these links.
     text=text.replace('./scripts/feeds install -a', '''git clone --depth 1 --no-checkout --filter=blob:none https://github.com/openwrt/packages.git "$kit/work-go-feed"
 git -C "$kit/work-go-feed" sparse-checkout set lang/golang
 git -C "$kit/work-go-feed" fetch --depth 1 origin 2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67
 git -C "$kit/work-go-feed" checkout --detach FETCH_HEAD
 rm -rf feeds/packages/lang/golang
 cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
-./scripts/feeds install -a''')
-    text=text.replace('./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks', './scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks\npython3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"')
+./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks
+./scripts/feeds install -a
+python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
     text=re.sub(r'^python3 "\$kit/scripts/build-profile.py".*\n','',text,flags=re.M)
     text=text.replace(' luci-app-mango-proxy','').replace(' mango-tcpcheck','')
@@ -163,6 +165,9 @@ return M
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
         'base':'tr3600-v1.1.1','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
+        'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
+        'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
+        'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',
         'private_ss':'independent Xray namespace; same SSR Plus+ client policy',
         'hardware_validation':'pending'},indent=2)+'\n')
     print('Prepared SSR Plus+ build; no router was modified.')

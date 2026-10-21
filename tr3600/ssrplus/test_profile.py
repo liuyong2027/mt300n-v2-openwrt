@@ -43,7 +43,9 @@ class ProfileTests(unittest.TestCase):
         self.assertNotIn('cp -R "$kit/package/luci-app-mango-proxy"',prepare)
         self.assertNotIn('ss-integration.py',prepare)
         self.assertIn('patch-ssr.py',prepare)
-        self.assertIn('11e0a48737097f8b0e0ec0dd080350ea7fd08d94',prepare)
+        self.assertIn('80d7bfff625b33db8afe80934638d96d214ceadc',prepare)
+        self.assertLess(prepare.index('./scripts/feeds install -f -p helloworld'),
+            prepare.index('./scripts/feeds install -a'))
 
     def test_all_installed_lua_compiles(self):
         lua=self.lua()
@@ -177,6 +179,59 @@ assert(state.shadowsocksr.access_control.Interface[2]=='cudy_ss')
         self.assertNotIn('/etc/init.d/mango_',text)
         self.assertIn("uci -q delete firewall.mango_proxy",text)
         self.assertIn("if ! uci -q get firewall.mango_zt",text)
+
+class SourceSelectionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(prefix='ssrplus-source-tests-',dir=REPO.parent)
+        self.addCleanup(self.tmp.cleanup)
+        self.root=Path(self.tmp.name)
+        self.feed=self.root/'openwrt/feeds/helloworld/xray-core'
+        self.feed.mkdir(parents=True)
+        (self.feed/'Makefile').write_text('PKG_VERSION:=26.10.21\nPKG_RELEASE:=1\n')
+        self.package=self.root/'openwrt/package/feeds/helloworld/xray-core'
+        self.package.parent.mkdir(parents=True)
+        self.link(self.feed,self.package)
+        spec=importlib.util.spec_from_file_location('check_config',PROFILE/'check_config.py')
+        self.check=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.check)
+        self.config='# CONFIG_XRAY_CORE_NAIVE is not set\n'
+
+    def link(self,target,path):
+        if os.name=='nt':
+            # Junctions exercise the same resolved directory identity on Windows.
+            quote=lambda value:"'"+str(value).replace("'","''")+"'"
+            subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+                'New-Item -ItemType Junction -Path '+quote(path)+' -Target '+quote(target)+' | Out-Null'],check=True)
+        else:path.symlink_to(target,target_is_directory=True)
+
+    def test_matching_xray_source_is_accepted(self):
+        self.check.check_xray_source(self.root,self.config)
+
+    def test_old_packages_feed_is_rejected(self):
+        if os.name=='nt':self.package.rmdir()
+        else:self.package.unlink()
+        old=self.root/'openwrt/feeds/packages/net/xray-core';old.mkdir(parents=True)
+        (old/'Makefile').write_text('PKG_VERSION:=26.3.27\nPKG_RELEASE:=1\n')
+        self.link(old,self.package)
+        with self.assertRaisesRegex(AssertionError,'Wrong Xray feed'):
+            self.check.check_xray_source(self.root,self.config)
+
+    def test_duplicate_xray_package_is_rejected(self):
+        duplicate=self.root/'openwrt/package/feeds/packages/xray-core'
+        duplicate.parent.mkdir(parents=True)
+        self.link(self.feed,duplicate)
+        with self.assertRaisesRegex(AssertionError,'Expected one Xray source'):
+            self.check.check_xray_source(self.root,self.config)
+
+    def test_wrong_version_is_rejected(self):
+        (self.feed/'Makefile').write_text('PKG_VERSION:=26.3.27\nPKG_RELEASE:=1\n')
+        with self.assertRaisesRegex(AssertionError,'Wrong Xray version'):
+            self.check.check_xray_source(self.root,self.config)
+
+    def test_missing_or_enabled_cronet_option_is_rejected(self):
+        for config in ('','CONFIG_XRAY_CORE_NAIVE=y\n',self.config+'CONFIG_XRAY_CORE_NAIVE=y\n'):
+            with self.assertRaises(AssertionError):
+                self.check.check_xray_source(self.root,config)
+
 
 if __name__=='__main__':unittest.main(verbosity=2)
 

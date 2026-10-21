@@ -10,6 +10,8 @@ import tarfile
 import tempfile
 
 repo=Path(__file__).resolve().parents[2]
+source=json.loads((repo/'reports/ssrplus-source.json').read_text())
+assert source['xray_version']=='26.10.21',source
 images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
 assert len(images)==1,images
 image=images[0]
@@ -43,6 +45,9 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
     for name in ['usr/bin/xray','bin/busybox','usr/sbin/smbd','usr/bin/zerotier-one']:
         data=(root/name).read_bytes()
         assert data[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<H',data,18)[0]==183,name
+    xray_command=['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/xray')]
+    xray_version=subprocess.check_output(xray_command+['version'],text=True).splitlines()[0]
+    assert xray_version.split()[:2]==['Xray',source['xray_version']],xray_version
     metadata=repo/'reports/image-metadata.json'
     subprocess.run([str(repo/'openwrt/staging_dir/host/bin/fwtool'),'-i',str(metadata),str(image)],check=True)
     devices=json.loads(metadata.read_text())['supported_devices']
@@ -85,14 +90,34 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
             'settings':{'method':cipher,'password':'synthetic-test-password-only-12345','network':'tcp,udp'}}],
             'outbounds':[{'protocol':'freedom','settings':{'domainStrategy':'UseIPv4'}}]}
         path=temp/'test.json';path.write_text(json.dumps(cfg))
-        subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/xray'),'run','-test','-config',str(path)],check=True)
+        subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
+    # A stock Xray build lacks these feed-provided protocols. Parse each actual
+    # outbound with synthetic settings before accepting the packaged core.
+    enhanced_outbounds={
+        'shadowsocksr':{'address':'127.0.0.1','port':8388,'method':'aes-128-cfb',
+            'password':'synthetic-test-password-only-12345','protocol':'origin','obfs':'plain'},
+        'anytls':{'address':'127.0.0.1','port':443,'password':'synthetic-test-password-only-12345'},
+        'tuic':{'address':'127.0.0.1','port':443,'version':5,
+            'uuid':'00000000-0000-4000-8000-000000000001','password':'synthetic-test-password-only-12345',
+            'serverName':'example.com','congestionControl':'bbr','udpRelayMode':'native'},
+        'snell':{'address':'127.0.0.1','port':8388,'psk':'synthetic-test-password-only-12345','version':4}
+    }
+    for protocol,settings in enhanced_outbounds.items():
+        outbound={'protocol':protocol,'settings':settings,'streamSettings':{'network':'raw'}}
+        if protocol=='anytls':
+            outbound['streamSettings'].update(security='tls',tlsSettings={'serverName':'example.com'})
+        path=temp/('test-'+protocol+'.json')
+        path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
+        subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
     name='cudy-tr3600-v1-ssrplus-1.2.0-test1-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
     proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.1.1',
-        'mango_proxy_installed':False,'ssrplus_commit':'11e0a48737097f8b0e0ec0dd080350ea7fd08d94',
+        'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
+        'actual_xray_version':xray_version,
+        'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
         'private_ss':'preserved configuration and isolated network namespace',
         'actual_arm64_server_ciphers_tested':3,'actual_installed_syntax_checks':syntax,
         'hardware_flash_or_boot_tested':False}
