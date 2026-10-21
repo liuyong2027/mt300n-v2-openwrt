@@ -26,3 +26,14 @@ for name in ['etc/init.d/shadowsocksr','usr/bin/ssr-rules']:
     source='https://raw.githubusercontent.com/fw876/helloworld/2abdc9aa9e19607774dc9789709212b70b8607c6/luci-app-ssr-plus/root/'+name
     with urllib.request.urlopen(source,timeout=60) as response:
         dest.write_bytes(response.read())
+
+url='https://raw.githubusercontent.com/fw876/helloworld/2abdc9aa9e19607774dc9789709212b70b8607c6/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua'
+with urllib.request.urlopen(url,timeout=60) as response:
+    text=response.read().decode()
+tree=ast.parse(Path('trial/transform.py').read_text())
+assignment=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='udp_fallback' for t in n.targets))
+block=ast.literal_eval(assignment.value)
+assert text.count(block)==1
+text=text.replace(block,'')
+assert 'nping --' not in text
+Path('validation-input/controller.lua').write_text(text)

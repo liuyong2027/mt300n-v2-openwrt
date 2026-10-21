@@ -80,6 +80,16 @@ subprocess.run(['git','-C',str(vendor),'checkout','--detach','FETCH_HEAD'],check
 assert subprocess.check_output(['git','-C',str(vendor),'rev-parse','HEAD'],text=True).strip()==SSR_COMMIT
 for name in ['luci-app-ssr-plus','dns2tcp','lua-neturl','microsocks','tcping']:
     shutil.copytree(vendor/name, ROOT/'package'/name, symlinks=True)
+# The selected protocols use TCP endpoints; keep TCP/ICMP GUI probes.
+# The standalone UDP nping fallback is only useful for the omitted UDP-only cores.
+replace('package/luci-app-ssr-plus/Makefile', '+curl +nping', '+curl')
+replace('package/luci-app-ssr-plus/Makefile', 'PKG_RELEASE:=3\n', 'PKG_RELEASE:=4\n')
+controller = ROOT/'package/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua'
+text=controller.read_text()
+udp_fallback = "\t\tif not e.ping then\n\t\t\tlocal udp_cmd = string.format(\"nping --udp -c 1 -p %d %s 2>/dev/null | grep -o 'Avg rtt: [0-9.]*ms' | awk '{print $3}' | sed 's/ms//' | head -1\", port, domain)\n\t\t\tlocal udp_res = luci.sys.exec(udp_cmd)\n\t\t\tif udp_res and udp_res ~= \"\" then\n\t\t\t\tlocal ping_num = tonumber(udp_res)\n\t\t\t\tif ping_num then e.ping = math.floor(ping_num) end\n\t\t\tend\n\t\tend\n"
+assert text.count(udp_fallback)==1
+text=text.replace(udp_fallback,'').replace('tcping -> ping -> nping(udp)','tcping -> ping')
+controller.write_text(text,encoding='utf-8',newline='\n')
 # SSR Plus+ needs only ssr-check, a standalone libc TCP/HTTP probe.
 # Do not pull the unused SSR protocol's crypto/event libraries into a one-core image.
 check = ROOT/'package/shadowsocksr-libev-check'

@@ -43,7 +43,7 @@
         },
         {
           "name": "Prepare target and pinned SSR generator",
-          "run": "tar -xzf baseline/reports/target-debug.tar.gz\npython3 validation/prepare.py"
+          "run": "tar -xzf baseline/reports/target-debug.tar.gz\npython3 validation/prepare.py\nluac5.1 -p validation-input/controller.lua"
         },
         {
           "name": "Run actual MIPS Lua and Xray",

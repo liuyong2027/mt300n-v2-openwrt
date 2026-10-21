@@ -20,7 +20,7 @@ installed={line.split()[0] for line in manifest.read_text().splitlines() if line
 required={'xray-core','luci-app-ssr-plus','mango-zerotier-support','zerotier','luci-app-zerotier-mini',
 'dnsmasq-full','luci-lua-runtime','kmod-nft-tproxy','kmod-nft-socket','shadowsocksr-libev-ssr-check'}
 forbidden={'luci-app-mango-proxy','mango-tcpcheck','dnsmasq','v2ray-core','sing-box','mihomo',
-'hysteria','tuic-client','trojan','naiveproxy','shadowsocks-rust-sslocal','shadowsocks-libev-ss-local',
+'nping','hysteria','tuic-client','trojan','naiveproxy','shadowsocks-rust-sslocal','shadowsocks-libev-ss-local',
 'shadowsocksr-libev-ssr-local','shadowsocksr-libev-ssr-redir','v2ray-geoip','v2ray-geosite'}
 assert not required-installed,sorted(required-installed)
 assert not forbidden&installed,sorted(forbidden&installed)
