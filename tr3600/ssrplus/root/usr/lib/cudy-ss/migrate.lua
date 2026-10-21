@@ -37,7 +37,7 @@ u:foreach('mango_proxy','node',function(n)
 end)
 local active=u:get('mango_proxy','main','node')
 -- Existing SSR Plus+ settings take precedence when this profile is upgraded.
-if not u:get('shadowsocksr',g,'global_server') then
+if fs.access('/etc/cudy-ssrplus/seeded-config') or not u:get('shadowsocksr',g,'global_server') then
     u:set('shadowsocksr',g,'global_server',mode=='direct' and 'nil' or (mapped[active] or 'nil'))
 end
 local runmode=({split='router',global='all',gfw='gfw',direct='router'})[mode]
@@ -46,14 +46,26 @@ u:set('shadowsocksr',g,'run_mode',runmode)
 u:set('shadowsocksr',g,'udp_relay_server','same')
 u:set('shadowsocksr',g,'prefer_nft','1')
 u:set('shadowsocksr',g,'default_node_local_port','1234')
+u:set('shadowsocksr',g,'dports','3')
+u:set('shadowsocksr',g,'custom_ports','1-65535')
 -- No unencrypted fallback when the active relay supports UDP.
 u:set('shadowsocksr',g,'router_proxy','1')
 local ac=u:get_first('shadowsocksr','access_control')
 if not ac then ac=u:section('shadowsocksr','access_control','access_control',{}) end
+local interfaces=u:get('shadowsocksr',ac,'Interface') or {'lan'}
+if type(interfaces)=='string' then interfaces={interfaces} end
+local interface_present=false
+for _,v in ipairs(interfaces) do if v=='cudy_ss' then interface_present=true end end
+if not interface_present then interfaces[#interfaces+1]='cudy_ss' end
+u:set('shadowsocksr',ac,'Interface',interfaces)
+u:set('shadowsocksr',ac,'router_proxy','1')
 local bypass=u:get('shadowsocksr',ac,'wan_bp_ips') or {}
 if type(bypass)=='string' then bypass={bypass} end
 local present=false;for _,v in ipairs(bypass) do if v=='198.18.255.0/30' then present=true end end
 if not present then bypass[#bypass+1]='198.18.255.0/30' end
+local old_bypass=u:get('mango_proxy','main','bypass4') or {}
+if type(old_bypass)=='string' then old_bypass={old_bypass} end
+for _,v in ipairs(old_bypass) do bypass[#bypass+1]=v end
 u:set('shadowsocksr',ac,'wan_bp_ips',bypass)
 local dns
 u:foreach('dhcp','dnsmasq',function(s) if not dns then dns=s['.name'] end end)
@@ -75,4 +87,5 @@ u:delete('firewall','mango_mark')
 for _,name in ipairs({'shadowsocksr','dhcp','firewall'}) do assert(u:commit(name)) end
 assert(fs.writefile('/etc/cudy-ssrplus/migration-v1.done','1\n'))
 assert(fs.chmod('/etc/cudy-ssrplus/migration-v1.done','600'))
+fs.remove('/etc/cudy-ssrplus/seeded-config')
 

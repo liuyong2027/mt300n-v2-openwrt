@@ -100,6 +100,51 @@ class ProfileTests(unittest.TestCase):
         self.assertIn('ssr-ready',gate)
         self.assertIn('iifname "css-host" counter drop',gate)
 
+    def test_node_migration_preserves_private_service_and_is_retryable(self):
+        lua=self.lua()
+        lua.execute('''
+state={shadowsocksr={global={['.type']='global',global_server='nil'}},
+ mango_proxy={main={['.type']='policy',mode='global',node='primary'},
+ primary={['.name']='primary',['.type']='node',protocol='vless',address='relay.example',
+ port='443',uuid='00000000-0000-4000-8000-000000000001',public_key='synthetic-public-key',sni='example.com'}},
+ cudy_ss={main={password='private-existing-key',port='8388',listen='10.42.0.2'}},
+ dhcp={dns={['.type']='dnsmasq',server={'127.0.0.1#1053','9.9.9.9'}}},
+ firewall={mango_proxy={path='/usr/libexec/mango-fw'},owner_rule={target='REJECT'}}}
+files={['/etc/cudy-ssrplus/seeded-config']=true}
+u={}
+function u:get(c,s,k) local a=state[c] and state[c][s]; if not a then return end;return k and a[k] or a['.type'] end
+function u:get_all(c,s) return state[c] and state[c][s] end
+function u:get_first(c,t,k) for s,a in pairs(state[c] or {}) do if a['.type']==t then return k and a[k] or s end end end
+function u:section(c,t,s,a) state[c]=state[c] or {};state[c][s]=a or {};state[c][s]['.type']=t;state[c][s]['.name']=s;return s end
+function u:set(c,s,k,v) assert(state[c] and state[c][s]);state[c][s][k]=v;return true end
+function u:delete(c,s,k) if k then state[c][s][k]=nil else state[c][s]=nil end;return true end
+function u:foreach(c,t,fn) for s,a in pairs(state[c] or {}) do if a['.type']==t then a['.name']=s;fn(a) end end end
+function u:commit(c) return true end
+f={access=function(p) return files[p] or false end,
+ writefile=function(p,v) if interrupt_marker then error('simulated interrupted marker') end;files[p]=v;return true end,
+ chmod=function() return true end,remove=function(p) files[p]=nil;return true end}
+package.loaded['nixio.fs']=f
+package.loaded['uci']={cursor=function() return u end}
+interrupt_marker=true
+''')
+        source=(PROFILE/'root/usr/lib/cudy-ss/migrate.lua').read_text()
+        with self.assertRaises(Exception):lua.execute(source)
+        lua.execute('interrupt_marker=false')
+        lua.execute(source)
+        lua.execute('''
+assert(state.shadowsocksr.global.global_server=='migrated_primary')
+assert(state.shadowsocksr.global.run_mode=='all')
+assert(state.shadowsocksr.migrated_primary.reality=='1')
+assert(state.shadowsocksr.migrated_primary.vmess_id==state.mango_proxy.primary.uuid)
+assert(state.cudy_ss.main.password=='private-existing-key')
+assert(state.cudy_ss.main.listen=='10.42.0.2')
+assert(state.firewall.owner_rule.target=='REJECT')
+assert(state.firewall.mango_proxy==nil)
+assert(state.dhcp.dns.server[1]=='9.9.9.9')
+assert(state.shadowsocksr.access_control.Interface[2]=='cudy_ss')
+''')
+        lua.execute(source)  # Completed migrations are a no-op.
+
     def test_namespace_ownership_and_collision_checks(self):
         helper=(PROFILE/'root/usr/libexec/cudy-ss-netns').read_text()
         self.assertIn('owned ||',helper)

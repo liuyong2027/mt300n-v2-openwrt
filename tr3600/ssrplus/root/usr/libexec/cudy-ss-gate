@@ -28,7 +28,8 @@ trap 'rm -f "$temp"' EXIT HUP INT TERM
     echo 'chain gate { type filter hook prerouting priority -312; policy accept;'
     echo 'iifname "css-host" ct direction reply return'
     [ "$action" != close ] || echo 'iifname "css-host" counter drop'
-    echo '}}'
+    echo '}'
+    echo '}'
 } > "$temp"
 nft -c -f "$temp"
 nft -f "$temp"

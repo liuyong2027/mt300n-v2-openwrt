@@ -12,8 +12,17 @@ for name in mango_proxy dhcp firewall; do
         chmod 600 "/etc/cudy-ssrplus/$name.before-migration"
     fi
 done
-[ -s /etc/config/shadowsocksr ] || cp /usr/share/shadowsocksr/shadowsocksr.config /etc/config/shadowsocksr
+if [ ! -s /etc/config/shadowsocksr ]; then
+    cp /usr/share/shadowsocksr/shadowsocksr.config /etc/config/shadowsocksr
+    touch /etc/cudy-ssrplus/seeded-config
+fi
 lua /usr/lib/cudy-ss/migrate.lua
+uci -q batch <<'UCI'
+set network.cudy_ss=interface
+set network.cudy_ss.proto='none'
+set network.cudy_ss.device='css-host'
+commit network
+UCI
 # Old init scripts and binaries are not copied into the new image. These are
 # only stale rcS links and a known legacy marker, never user firewall sections.
 for service in mango_proxy mango_watchdog; do
@@ -46,6 +55,11 @@ set firewall.cudy_ss_route_guard=include
 set firewall.cudy_ss_route_guard.type='nftables'
 set firewall.cudy_ss_route_guard.position='ruleset-pre'
 set firewall.cudy_ss_route_guard.path='/etc/cudy-ss/route-guard.nft'
+set firewall.cudy_zt_ipv6_guard=rule
+set firewall.cudy_zt_ipv6_guard.src='mangozt'
+set firewall.cudy_zt_ipv6_guard.dest='*'
+set firewall.cudy_zt_ipv6_guard.family='ipv6'
+set firewall.cudy_zt_ipv6_guard.target='DROP'
 commit firewall
 UCI
 /usr/libexec/cudy-ss-gate close

@@ -19,7 +19,10 @@ start() {
     /usr/libexec/cudy-ss-gate close || return 1
     start_without_cudy_gate "$@"
     cudy_result=$?
-    if [ "$cudy_result" = 0 ]; then /usr/libexec/cudy-ss-gate started || return 1; fi
+    if [ "$cudy_result" = 0 ]; then
+        /usr/libexec/cudy-ss-ssr-interfaces || return 1
+        /usr/libexec/cudy-ss-gate started || return 1
+    fi
     return "$cudy_result"
 }
 """

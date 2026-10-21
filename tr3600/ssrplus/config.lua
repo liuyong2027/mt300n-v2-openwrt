@@ -54,7 +54,8 @@ function M.bridge(old,new)
             s[#s+1]=e..' ip saddr != '..c.subnet..' counter drop'
         end
     end
-    s[#s+1]='}}'
+    s[#s+1]='}'
+    s[#s+1]='}'
     return table.concat(s,'\n')..'\n'
 end
 return M

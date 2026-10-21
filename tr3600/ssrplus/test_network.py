@@ -70,6 +70,8 @@ def inside():
             lua='local n=dofile('+json.dumps(str(HERE/'config.lua'))+');io.write(n.guard({listen="10.42.0.2",subnet="10.42.0.0/24",interface="ztfixture",port=8388}))'
             rules=run('lua5.1','-e',lua,capture_output=True).stdout
             run('nft','-f','-',input=rules)
+            bridge=lua.replace('io.write(n.guard(', 'io.write(n.bridge(nil,')
+            run('nft','-c','-f','-',input=run('lua5.1','-e',bridge,capture_output=True).stdout)
             launch('cudy-ss',8388,'SS')
             launch('ssr-wan-test',19001,'DIRECT')
             launch(None,19002,'PROXY')
@@ -83,7 +85,8 @@ def inside():
             run('nft','-f','-',input='''table inet fixture_policy {
 chain capture { type nat hook prerouting priority -100; policy accept;
 iifname "css-host" ip daddr 203.0.113.2 meta l4proto { tcp, udp } th dport 19001 redirect to :19002
-}}
+}
+}
 ''')
             for proto in ['tcp','udp']:
                 request('cudy-ss',proto,'203.0.113.2',19001,'PROXY')
@@ -91,7 +94,8 @@ iifname "css-host" ip daddr 203.0.113.2 meta l4proto { tcp, udp } th dport 19001
 chain gate { type filter hook prerouting priority -312; policy accept;
 iifname "css-host" ct direction reply return
 iifname "css-host" drop
-}}
+}
+}
 ''')
             for proto in ['tcp','udp']:
                 request('cudy-ss',proto,'203.0.113.2',19001,None)
