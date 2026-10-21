@@ -29,7 +29,7 @@
         },
         {
           "name": "Install emulation",
-          "run": "sudo apt-get update\nsudo apt-get install -y qemu-user-static lua5.1"
+          "run": "sudo apt-get update\nsudo apt-get install -y qemu-user-static lua5.1 nftables iproute2"
         },
         {
           "name": "Download exact baseline core and Lua",
@@ -48,6 +48,10 @@
         {
           "name": "Run actual MIPS Lua and Xray",
           "run": "roots=(openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nmkdir -p validation-output\nqemu-mipsel-static -L \"$root\" \"$root/usr/bin/lua\" validation/generator.lua \"$root\" \"$PWD/trial\" \"$PWD/validation-output\"\nfor file in validation-output/*.json; do\n qemu-mipsel-static -L \"$root\" \"$root/usr/bin/xray\" run -test -config \"$file\"\ndone\nqemu-mipsel-static -L \"$root\" \"$root/usr/bin/xray\" version > validation-output/xray-version.txt\npython3 - <<'PY'\nimport hashlib,json\nfrom pathlib import Path\np=Path('validation-output')\ncore=next(Path('openwrt/build_dir').glob('target-*/root-ramips/usr/bin/xray'))\nconfigs=sorted(x.name for x in p.glob('*.json'))\nassert len(configs)==11,len(configs)\nassert hashlib.sha256(core.read_bytes()).hexdigest()=='b66cfbc4dcd16ce80ee4fe14f78464fb124025391fb6cee6e59695b1e1758b0d'\n(p/'PROTOCOL-VALIDATION.json').write_text(json.dumps({'status':'passed','configs':configs,'core_sha256':hashlib.sha256(core.read_bytes()).hexdigest(),'uci_roundtrip':'actual target libuci passed','scope':'actual baseline MIPS core and Lua; exact trial SSR generator; fixture nodes only','hardware_acceptance':'pending'},indent=2)+'\\n')\nPY"
+        },
+        {
+          "name": "Verify DNS startup and real nft TCP redirect",
+          "run": "lua5.1 trial/test-migration.lua trial\nlua5.1 trial/test-migration-runner.lua trial\nsudo unshare --net -- python3 validation/test-backend.py"
         },
         {
           "name": "Upload protocol evidence",

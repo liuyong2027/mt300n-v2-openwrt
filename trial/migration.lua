@@ -75,7 +75,7 @@ function M.plan(policy,nodes)
         dports='2',pdnsd_enable='1',prefer_nft='1',tunnel_forward='1.1.1.1:53',
         monitor_enable='1',enable_switch=policy.failover=='1' and '1' or '0',
         switch_time='60',switch_timeout='5',switch_try_count='3',shunt_dns='0',
-        chinadns_forward='none',mango_migrated='1',mango_mode=mode,
+        chinadns_forward='',mango_migrated='1',mango_mode=mode,
         mango_direct_socks=mode=='direct' and policy.socks_server=='1' and '1' or '0'}
     local subscribe={proxy='0',auto_update='0',ss_type='v2ray',filter_words='',
         user_agent='v2rayN/9.99',url_test_url='https://www.google.com/generate_204'}
@@ -83,7 +83,7 @@ function M.plan(policy,nodes)
         subscribe.subscribe_url={policy.subscription_url}
     end
     local access={lan_ac_mode='0',router_proxy='1',Interface={'lan','zt+'},
-        wan_bp_ips=values(policy.bypass4)}
+        wan_bp_ips=values(policy.bypass4),wan_fw_ips={'1.1.1.1','8.8.8.8'}}
     local socks={server='same',enabled=mode=='direct' and '0' or '1',local_port=policy.socks_server=='1' and (policy.socks_port or '10810') or '10808',
         socks5_auth='noauth',mango_expose=policy.socks_server=='1' and '1' or '0'}
     local out={{type='global',name='global',options=g},
