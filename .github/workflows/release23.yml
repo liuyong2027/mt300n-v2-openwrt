@@ -19,6 +19,69 @@
     "cancel-in-progress": true
   },
   "jobs": {
+    "target_preflight": {
+      "name": "Preflight target verification against pinned compiled target",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 15,
+      "permissions": {
+        "contents": "read",
+        "actions": "read"
+      },
+      "defaults": {
+        "run": {
+          "shell": "bash",
+          "working-directory": "source23"
+        }
+      },
+      "steps": [
+        {
+          "name": "Checkout recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Prepare locked source",
+          "run": "python3 release23/prepare.py",
+          "working-directory": "."
+        },
+        {
+          "name": "Install target emulator",
+          "run": "sudo apt-get update\nsudo apt-get install -y qemu-user-static"
+        },
+        {
+          "name": "Download immutable prior target for preflight only",
+          "uses": "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+          "with": {
+            "name": "23-production-diagnostics-1",
+            "path": "source23",
+            "run-id": 39610261566,
+            "repository": "liuyong2027/mt300n-v2-openwrt",
+            "github-token": "${{ secrets.GITHUB_TOKEN }}"
+          }
+        },
+        {
+          "name": "Restore checksum-pinned diagnostic target",
+          "run": "python3 ../release23/restore-target.py reports/target-debug.tar.gz ."
+        },
+        {
+          "name": "Preflight actual MIPS helpers, dependencies and shell lookup",
+          "run": "python3 scripts/verify-zt-target.py 2>&1 | tee reports/zt-target-preflight.log"
+        },
+        {
+          "name": "Preserve preflight result",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "23-target-preflight-${{ github.run_number }}",
+            "path": "source23/reports/zt*",
+            "retention-days": 7,
+            "if-no-files-found": "warn"
+          }
+        }
+      ]
+    },
     "build": {
       "runs-on": "ubuntu-24.04",
       "timeout-minutes": 330,
@@ -169,7 +232,8 @@
       },
       "permissions": {
         "contents": "read"
-      }
+      },
+      "needs": "target_preflight"
     },
     "publish": {
       "name": "Publish verified Release 23",

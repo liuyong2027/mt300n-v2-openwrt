@@ -40,10 +40,13 @@ print('MIPS Lua helper and installed module loading passed')
 subprocess.run(command + [str(syntax), str(rootfs)], cwd=ROOT, check=True)
 
 # Verify actual installed dependencies, not host executables hidden by a fixture.
+spec_paths = importlib.util.spec_from_file_location('zt_target_paths', ROOT / 'scripts/zt_target_paths.py')
+module_paths = importlib.util.module_from_spec(spec_paths)
+spec_paths.loader.exec_module(module_paths)
 installed_commands = {}
 for name in ('ubus', 'nft', 'flock', 'lua', 'sh'):
     candidates = [rootfs / folder / name for folder in ('bin', 'sbin', 'usr/bin', 'usr/sbin')]
-    executable = next((p for p in candidates if p.is_file() and os.access(p, os.X_OK)), None)
+    executable = next((p for p in candidates if module_paths.resolve_in_root(rootfs, p).is_file() and os.access(module_paths.resolve_in_root(rootfs, p), os.X_OK)), None)
     assert executable is not None, 'Missing target command: ' + name
     installed_commands[name] = executable.relative_to(rootfs).as_posix()
 ubus = rootfs / installed_commands['ubus']
