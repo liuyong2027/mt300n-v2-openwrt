@@ -10,7 +10,7 @@ import urllib.request
 assert Path('/proc/self/ns/net').readlink()!=Path('/proc/1/ns/net').readlink()
 BASE='https://raw.githubusercontent.com/fw876/helloworld/2abdc9aa9e19607774dc9789709212b70b8607c6/luci-app-ssr-plus/root/'
 def fetch(name):
-    with urllib.request.urlopen(BASE+name,timeout=60) as response:return response.read().decode()
+    return (Path('validation-input')/name).read_text()
 init=fetch('etc/init.d/shadowsocksr')
 rules=fetch('usr/bin/ssr-rules')
 start_dns=init[init.index('start_dns() {'):init.index('\ngen_service_file() {')]

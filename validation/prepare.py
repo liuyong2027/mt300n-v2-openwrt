@@ -19,3 +19,10 @@ for item in tree.body:
     assert text.count(before)==count,(before,text.count(before))
     text=text.replace(before,after)
 path.write_text(text)
+
+for name in ['etc/init.d/shadowsocksr','usr/bin/ssr-rules']:
+    dest=Path('validation-input')/name
+    dest.parent.mkdir(parents=True,exist_ok=True)
+    source='https://raw.githubusercontent.com/fw876/helloworld/2abdc9aa9e19607774dc9789709212b70b8607c6/luci-app-ssr-plus/root/'+name
+    with urllib.request.urlopen(source,timeout=60) as response:
+        dest.write_bytes(response.read())
