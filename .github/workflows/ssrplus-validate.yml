@@ -1,0 +1,66 @@
+{
+  "name": "SSR Plus+ independent MIPS protocol validation",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/mt300n-v2-ssrplus-validation"
+      ],
+      "paths": [
+        "validation/**",
+        ".github/workflows/ssrplus-validate.yml"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "jobs": {
+    "validate": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "name": "Checkout trial and protocol fixtures",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Install emulation",
+          "run": "sudo apt-get update\nsudo apt-get install -y qemu-user-static lua5.1"
+        },
+        {
+          "name": "Download exact baseline core and Lua",
+          "uses": "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+          "with": {
+            "name": "22-production-diagnostics-4",
+            "run-id": 39040787854,
+            "github-token": "${{ secrets.GITHUB_TOKEN }}",
+            "path": "baseline"
+          }
+        },
+        {
+          "name": "Prepare target and pinned SSR generator",
+          "run": "tar -xzf baseline/reports/target-debug.tar.gz\npython3 validation/prepare.py"
+        },
+        {
+          "name": "Run actual MIPS Lua and Xray",
+          "run": "roots=(openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nmkdir -p validation-output\nqemu-mipsel-static -L \"$root\" \"$root/usr/bin/lua\" validation/generator.lua \"$root\" \"$PWD/trial\" \"$PWD/validation-output\"\nfor file in validation-output/*.json; do\n qemu-mipsel-static -L \"$root\" \"$root/usr/bin/xray\" run -test -config \"$file\"\ndone\nqemu-mipsel-static -L \"$root\" \"$root/usr/bin/xray\" version > validation-output/xray-version.txt\npython3 - <<'PY'\nimport hashlib,json\nfrom pathlib import Path\np=Path('validation-output')\ncore=next(Path('openwrt/build_dir').glob('target-*/root-ramips/usr/bin/xray'))\nconfigs=sorted(x.name for x in p.glob('*.json'))\nassert len(configs)==11,len(configs)\nassert hashlib.sha256(core.read_bytes()).hexdigest()=='b66cfbc4dcd16ce80ee4fe14f78464fb124025391fb6cee6e59695b1e1758b0d'\n(p/'PROTOCOL-VALIDATION.json').write_text(json.dumps({'status':'passed','configs':configs,'core_sha256':hashlib.sha256(core.read_bytes()).hexdigest(),'uci_roundtrip':'actual target libuci passed','scope':'actual baseline MIPS core and Lua; exact trial SSR generator; fixture nodes only','hardware_acceptance':'pending'},indent=2)+'\\n')\nPY"
+        },
+        {
+          "name": "Upload protocol evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "ssrplus-protocol-validation",
+            "path": "validation-output/",
+            "if-no-files-found": "warn",
+            "retention-days": 30
+          }
+        }
+      ]
+    }
+  }
+}
