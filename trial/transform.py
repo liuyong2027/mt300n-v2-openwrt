@@ -125,9 +125,9 @@ replace(init, 'TMP_DNSMASQ_PATH="\u0024{DNSMASQ_CONF_DIR%*/}/dnsmasq-ssrplus.d"'
 gen = 'package/luci-app-ssr-plus/root/usr/share/shadowsocksr/gen_config.lua'
 replace(gen, 'if os.date("%Y.%m.%d") < "2026.06.01" then', 'if true then')
 replace(gen, '-- 获取 Xray 版本号', '-- 获取 Xray 版本号')
-replace(gen, '\t\tprotocol = "socks",\n\t\tport = tonumber(socks_port),',
-    '\t\tprotocol = "socks",\n\t\tlisten = socks_server.mango_expose == "1" and "0.0.0.0" or "127.0.0.1",\n\t\tport = tonumber(socks_port),')
-replace(gen, "\t\t\tudp = true,\n\t\t\tmixed =", "\t\t\tudp = socks_server.mango_expose ~= '1',\n\t\t\tmixed =")
+replace(gen, 'port = tonumber(socks_port),',
+    'listen = socks_server.mango_expose == "1" and "0.0.0.0" or "127.0.0.1",\n        port = tonumber(socks_port),')
+replace(gen, 'udp = true,', "udp = socks_server.mango_expose ~= '1',")
 # Resolve netifd's actual device, and accept all dynamic ZeroTier devices without UCI changes.
 rules = 'package/luci-app-ssr-plus/root/usr/bin/ssr-rules'
 p = ROOT/rules

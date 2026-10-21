@@ -4,6 +4,13 @@ package.path=root..'/usr/lib/lua/?.lua;'..root..'/usr/lib/lua/?/init.lua;'..pack
 package.cpath=root..'/usr/lib/lua/?.so;'..package.cpath
 local json=require('luci.jsonc')
 local M=dofile(recipe..'/migration.lua')
+local quoted_path=assert(io.open(output..'/quoting','w'))
+assert(quoted_path:write(M.encode({{type='test',name='owner',options={value="a' b $"..string.char(34,96)}}})))
+assert(quoted_path:close())
+-- Round-trip the migration's quoting through the actual target libuci parser.
+local real_uci=require('uci').cursor(output,output)
+assert(real_uci:load('quoting'))
+assert(real_uci:get('quoting','owner','value')=="a' b $"..string.char(34,96))
 local output_json
 luci={sys={exec=function(cmd)
  if cmd:find('xray version',1,true) then return 'Xray 26.3.27\n' end

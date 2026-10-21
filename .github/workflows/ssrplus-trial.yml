@@ -62,6 +62,11 @@
           "continue-on-error": true
         },
         {
+          "name": "Preserve compiled target for independent validation",
+          "if": "steps.compile.outcome == 'success'",
+          "run": "roots=(source23/openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\ntar -czf source23/reports/target-debug.tar.gz \"${roots[0]}\""
+        },
+        {
           "name": "Validate actual MIPS Lua generator and Xray protocols",
           "id": "protocols",
           "if": "steps.compile.outcome == 'success'",
