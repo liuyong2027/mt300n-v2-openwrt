@@ -38,7 +38,7 @@ find package/luci-app-cudy-* package/cudy-webfiles -type f -exec sh -c 'head -c 
     # Source package dependency resolution uses this exact feed, including its Xray.
     text=text.replace('./scripts/feeds update -a','printf \'%s\\n\' \'src-git helloworld https://github.com/fw876/helloworld.git^'+SSR_COMMIT+'\' >> feeds.conf.default\n./scripts/feeds update -a')
     text=text.replace('./scripts/feeds install -a','./scripts/feeds install -a\n./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks')
-    text=text.replace('./scripts/feeds install -a', '''git clone --no-checkout --filter=blob:none https://github.com/openwrt/packages.git "$kit/work-go-feed"
+    text=text.replace('./scripts/feeds install -a', '''git clone --depth 1 --no-checkout --filter=blob:none https://github.com/openwrt/packages.git "$kit/work-go-feed"
 git -C "$kit/work-go-feed" sparse-checkout set lang/golang
 git -C "$kit/work-go-feed" fetch --depth 1 origin 2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67
 git -C "$kit/work-go-feed" checkout --detach FETCH_HEAD
@@ -150,10 +150,14 @@ return M
     a=s.index("    local report=M.capture('/usr/libexec/mango-connectivity-probe")
     b=s.index('    local after=M.snapshot()',a)
     s=s[:a]+"""    local target=direct and 'https://www.baidu.com/' or 'https://www.google.com/generate_204'
-    local report=M.capture("curl -4 -I -sS --connect-timeout 4 --max-time 10 -o /dev/null -w '%{http_code}' "..target)
-    local code=tonumber(report);local ok=code and code>=200 and code<400 or false
+    local report=M.capture('/usr/libexec/cudy-connectivity-probe '..before.mode.." && printf '\\\\nCUDY_PROBE_OK'")
+    local ok=report:match('\\nCUDY_PROBE_OK$')~=nil
 """+s[b:]
     led.write_text(s,encoding='utf-8',newline='\n')
+    probe=(ROOT/'tr3600/led-probe/mango-connectivity-probe').read_text(encoding='utf-8')
+    probe=probe.replace(' --proxy socks5h://127.0.0.1:10809','')
+    probe=probe.replace('/tmp/mango-connectivity-error.','/tmp/cudy-connectivity-error.')
+    (ROOT/'tr3600/luci-app-cudy-led/root/usr/libexec/cudy-connectivity-probe').write_text(probe,encoding='utf-8',newline='\n')
     # Retain upgrade LED suspend/resume separately from the retired Mango probe.
     replace(p,'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"',
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')

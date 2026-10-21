@@ -76,7 +76,7 @@ local retained={}
 for _,v in ipairs(servers) do if v~='127.0.0.1#1053' then retained[#retained+1]=v end end
 if #retained==0 then retained={'223.5.5.5','119.29.29.29'} end
 u:set('dhcp',dns,'server',retained)
-u:set('dhcp',dns,'filter_aaaa','1')
+u:set('dhcp',dns,'filter_aaaa',mode=='direct' and '0' or '1')
 -- Retire exactly the known Mango script include, never delete arbitrary hooks.
 local include=u:get_all('firewall','mango_proxy')
 if include then

@@ -1,9 +1,11 @@
 """Verify the packed image, not just the build tree, before publishing an artifact."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
+import struct
 import tarfile
 import tempfile
 
@@ -11,15 +13,23 @@ repo=Path(__file__).resolve().parents[2]
 images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
 assert len(images)==1,images
 image=images[0]
+assert image.stat().st_size < 237824*1024
 with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
     temp=Path(temp)
     with tarfile.open(image) as archive:
         roots=[m for m in archive.getmembers() if m.isfile() and m.name.endswith('/root')]
         assert len(roots)==1
+        kernels=[m for m in archive.getmembers() if m.isfile() and m.name.endswith('/kernel')]
+        assert len(kernels)==1
+        assert archive.extractfile(kernels[0]).read(4)==bytes.fromhex('d00dfeed')
         payload=temp/'root.squashfs'
         payload.write_bytes(archive.extractfile(roots[0]).read())
+        header=payload.read_bytes()[:96]
+        assert header[:4]==b'hsqs' and struct.unpack_from('<I',header,12)[0]==1048576
+        assert struct.unpack_from('<H',header,20)[0]==4
     root=temp/'rootfs'
-    subprocess.run(['unsquashfs','-d',str(root),str(payload)],check=True)
+    subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
+    subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
     assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test1'
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw','usr/share/luci/menu.d/luci-app-mango-proxy.json']:
         assert not (root/absent).exists(),absent
@@ -29,6 +39,28 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
         'etc/init.d/cudy_ss_core','usr/lib/cudy-webfiles/bin/cudy-webfiles',
         'usr/lib/cudy-webfiles/bin/filebrowser','usr/sbin/smbd','usr/bin/zerotier-one']:
         assert (root/required).is_file(),required
+    assert (root/'lib/upgrade/cudy-tr3600.sh').read_bytes()==(repo/'tr3600/cudy-upgrade.sh').read_bytes()
+    for name in ['usr/bin/xray','bin/busybox','usr/sbin/smbd','usr/bin/zerotier-one']:
+        data=(root/name).read_bytes()
+        assert data[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<H',data,18)[0]==183,name
+    metadata=repo/'reports/image-metadata.json'
+    subprocess.run([str(repo/'openwrt/staging_dir/host/bin/fwtool'),'-i',str(metadata),str(image)],check=True)
+    devices=json.loads(metadata.read_text())['supported_devices']
+    assert 'cudy,tr3600-v1' in devices and 'R126' in devices
+    kernels=list((repo/'openwrt/build_dir').glob('target-*/linux-mediatek_filogic/linux-6.12.*'))
+    assert len(kernels)==1
+    symbols=(kernels[0]/'System.map').read_text()
+    assert '__param_dual_boot' in symbols and '__param_rootfs_volume' in symbols
+    assert not (root/'etc/cudy-webfiles').exists()
+    assert not (root/'etc/cudy-ss').exists()
+    ss_defaults=(root/'etc/config/cudy_ss').read_text()
+    assert "option enabled '0'" in ss_defaults
+    for key in ['password','listen','subnet','network_id','interface']:
+        assert 'option '+key not in ss_defaults,key
+    manifest=json.loads((root/'usr/lib/cudy-webfiles/manifest.json').read_text())
+    assert manifest==json.loads((repo/'tr3600/cudy-webfiles/build-output/manifest.json').read_text())
+    assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/cudy-webfiles').read_bytes()).hexdigest()==manifest['helperSHA256']
+    assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/filebrowser').read_bytes()).hexdigest()==manifest['quantum']['sha256']
     config=(repo/'openwrt/.config').read_text()
     for package in ['luci-app-ssr-plus','dnsmasq-full','kmod-nft-socket','kmod-nft-tproxy','kmod-veth','luci-compat','luci-app-cudy-ss','zerotier']:
         assert 'CONFIG_PACKAGE_'+package+'=y' in config,package
