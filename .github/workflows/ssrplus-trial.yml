@@ -1,0 +1,91 @@
+{
+  "name": "MT300N-V2 SSR Plus+ single Xray capacity trial",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/mt300n-v2-ssrplus-trial"
+      ],
+      "paths": [
+        "trial/**",
+        ".github/workflows/ssrplus-trial.yml"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "ssrplus-trial-${{ github.ref }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "build": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 330,
+      "defaults": {
+        "run": {
+          "shell": "bash"
+        }
+      },
+      "steps": [
+        {
+          "name": "Checkout isolated trial recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Install build and test dependencies",
+          "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 nftables iproute2 iputils-ping qemu-user-static\nmkdir -p source23/reports"
+        },
+        {
+          "name": "Convert locked Release 23 to SSR Plus+ trial",
+          "run": "python3 release23/prepare.py\npython3 trial/transform.py source23\nlua5.1 trial/test-migration.lua trial\npython3 -m py_compile trial/*.py\nbash -n source23/scripts/prepare.sh\nfind source23/package/mango-zerotier-support/root -type f -name '*.sh' -exec sh -n {} \\;"
+        },
+        {
+          "name": "Test preserved ZeroTier rules",
+          "run": "cd source23\nlua5.1 tests/zt-json.lua\nlua5.1 tests/zt-direct.lua\nlua5.1 tests/zt-direct-runner.lua\npython3 tests/test_zt_command_integration.py\nsudo unshare --net -- python3 tests/test_zt_direct_nft.py"
+        },
+        {
+          "name": "Prepare pinned OpenWrt, feeds and minimal packages",
+          "run": "cd source23\nbash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 scripts/kernel-profile.py configure --tree openwrt --profile production\nmake -C openwrt defconfig\ncp openwrt/.config reports/resolved.config\n(cd openwrt && ./scripts/diffconfig.sh) > reports/diffconfig.txt"
+        },
+        {
+          "name": "Download selected sources",
+          "run": "cd source23/openwrt\nmake download -j4 2>&1 | tee ../download.log"
+        },
+        {
+          "name": "Compile firmware",
+          "id": "compile",
+          "run": "cd source23/openwrt\nmake -j4 V=s 2>&1 | tee ../build.log",
+          "continue-on-error": true
+        },
+        {
+          "name": "Verify compiled target and capacity",
+          "id": "verify",
+          "if": "steps.compile.outcome == 'success'",
+          "run": "python3 trial/verify.py source23",
+          "continue-on-error": true
+        },
+        {
+          "name": "Upload trial evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "ssrplus-trial-${{ github.run_number }}",
+            "path": "source23/trial-artifacts/\nsource23/reports/\nsource23/prepare.log\nsource23/download.log\nsource23/build.log",
+            "retention-days": 30,
+            "include-hidden-files": true,
+            "if-no-files-found": "warn"
+          }
+        },
+        {
+          "name": "Require compilation and capacity gates",
+          "if": "always()",
+          "run": "test '${{ steps.compile.outcome }}' = success\ntest '${{ steps.verify.outcome }}' = success"
+        }
+      ]
+    }
+  }
+}
