@@ -27,4 +27,10 @@ start() {
 }
 """
 p.write_text(s,newline='\n')
+rules=root/'feeds/helloworld/luci-app-ssr-plus/root/usr/bin/ssr-rules'
+s=rules.read_text()
+anchor='\tEOF\n\tchmod +x "$FWI"\n}'
+assert s.count(anchor)==1,'Pinned nft include generator changed'
+s=s.replace(anchor,'\t\t/usr/libexec/cudy-ss-ssr-interfaces\n'+anchor)
+rules.write_text(s,newline='\n')
 

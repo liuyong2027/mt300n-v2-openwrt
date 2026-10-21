@@ -2,6 +2,13 @@
 # Use the existing SSR decision chains for the retained ZeroTier gateway.
 # No second routing policy, DNS resolver or proxy core is introduced here.
 set -eu
+for spec in 'inet ss_spec ss_spec_prerouting' 'ip ss_spec_mangle prerouting'; do
+    set -- $spec
+    for handle in $(nft -a list chain "$1" "$2" "$3" 2>/dev/null | awk '/comment "Cudy ZeroTier gateway"/ { print $NF }'); do
+        case "$handle" in ''|*[!0-9]*) exit 1;; esac
+        nft delete rule "$1" "$2" "$3" handle "$handle"
+    done
+done
 [ "$(uci -q get firewall.mango_zt_wan.enabled)" = 1 ] || exit 0
 nft list chain inet ss_spec ss_spec_wan_ac >/dev/null 2>&1 || exit 0
 if ! nft list chain inet ss_spec ss_spec_prerouting | grep -q 'Cudy ZeroTier gateway'; then
