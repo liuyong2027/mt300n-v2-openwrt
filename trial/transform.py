@@ -185,6 +185,9 @@ CONFIG_PACKAGE_mango-zerotier-support=y
 # CONFIG_PACKAGE_dnsmasq is not set
 CONFIG_PACKAGE_dnsmasq-full=y
 CONFIG_PACKAGE_dnsmasq_full_nftset=y
+# CONFIG_PACKAGE_dnsmasq_full_dnssec is not set
+# CONFIG_PACKAGE_dnsmasq_full_auth is not set
+# CONFIG_PACKAGE_dnsmasq_full_conntrack is not set
 CONFIG_PACKAGE_luci-app-ssr-plus_Nftables_Transparent_Proxy=y
 # CONFIG_PACKAGE_luci-app-ssr-plus_Iptables_Transparent_Proxy is not set
 CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Xray=y

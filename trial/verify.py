@@ -24,6 +24,10 @@ forbidden={'luci-app-mango-proxy','mango-tcpcheck','dnsmasq','v2ray-core','sing-
 'shadowsocksr-libev-ssr-local','shadowsocksr-libev-ssr-redir','v2ray-geoip','v2ray-geosite'}
 assert not required-installed,sorted(required-installed)
 assert not forbidden&installed,sorted(forbidden&installed)
+resolved=(root/'openwrt/.config').read_text().splitlines()
+for option in ['dnssec','auth','conntrack']:
+    assert 'CONFIG_PACKAGE_dnsmasq_full_'+option+'=y' not in resolved
+
 proof=json.loads((reports/'trial-source.json').read_text())
 support=root/'package/mango-zerotier-support/root'
 for path,digest in proof['zerotier_source_hashes'].items():

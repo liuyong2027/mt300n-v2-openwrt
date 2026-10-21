@@ -52,6 +52,15 @@
           "run": "cd source23\nbash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 scripts/kernel-profile.py configure --tree openwrt --profile production\nmake -C openwrt defconfig\ncp openwrt/.config reports/resolved.config\n(cd openwrt && ./scripts/diffconfig.sh) > reports/diffconfig.txt"
         },
         {
+          "name": "Restore pinned host tools and toolchain",
+          "id": "cache",
+          "uses": "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
+          "with": {
+            "key": "ssrplus-toolchain-f0a60eee-5caa62e0-ubuntu24-v1",
+            "path": "source23/openwrt/dl\nsource23/openwrt/staging_dir/host\nsource23/openwrt/staging_dir/hostpkg\nsource23/openwrt/staging_dir/toolchain-*\nsource23/openwrt/build_dir/host\nsource23/openwrt/build_dir/hostpkg\nsource23/openwrt/build_dir/toolchain-*"
+          }
+        },
+        {
           "name": "Download selected sources",
           "run": "cd source23/openwrt\nmake download -j4 2>&1 | tee ../download.log"
         },
@@ -79,6 +88,15 @@
           "if": "steps.compile.outcome == 'success'",
           "run": "python3 trial/verify.py source23",
           "continue-on-error": true
+        },
+        {
+          "name": "Cache completed host tools for further capacity trials",
+          "if": "always() && steps.cache.outputs.cache-hit != 'true' && steps.compile.outcome != 'skipped'",
+          "uses": "actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830",
+          "with": {
+            "key": "ssrplus-toolchain-f0a60eee-5caa62e0-ubuntu24-v1",
+            "path": "source23/openwrt/dl\nsource23/openwrt/staging_dir/host\nsource23/openwrt/staging_dir/hostpkg\nsource23/openwrt/staging_dir/toolchain-*\nsource23/openwrt/build_dir/host\nsource23/openwrt/build_dir/hostpkg\nsource23/openwrt/build_dir/toolchain-*"
+          }
         },
         {
           "name": "Upload trial evidence",
