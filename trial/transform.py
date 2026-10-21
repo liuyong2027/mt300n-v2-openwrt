@@ -86,7 +86,8 @@ check = ROOT/'package/shadowsocksr-libev-check'
 (check/'src').mkdir(parents=True)
 check_source=(vendor/'shadowsocksr-libev/src/server/check.c').read_text()
 check_source=check_source.replace('fd = socket(AF_INET, SOCK_STREAM, 0);',
-    'if (argc < 3 || strlen(argv[1]) > 80) return 2;\n        fd = socket(AF_INET, SOCK_STREAM, 0);')
+    'if (argc < 3 || strlen(argv[1]) > 253) return 2;\n        fd = socket(AF_INET, SOCK_STREAM, 0);')
+check_source=check_source.replace('char http_url[100]', 'char http_url[512]')
 (check/'src/check.c').write_text(check_source)
 (check/'Makefile').write_text('''include $(TOPDIR)/rules.mk
 PKG_NAME:=shadowsocksr-libev-check
