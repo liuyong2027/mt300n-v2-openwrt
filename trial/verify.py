@@ -2,6 +2,7 @@
 """Inspect the compiled target, never install or flash it."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -39,6 +40,9 @@ ztinit=(target/'etc/init.d/zerotier').read_text()
 assert ztinit.count('/usr/libexec/mango-zt-direct')==3
 ssrinit=(target/'etc/init.d/shadowsocksr').read_text()
 assert 'GOMEMLIMIT=48MiB' in ssrinit
+ssrconfig=(target/'etc/config/shadowsocksr').read_text()
+assert "option chinadns_forward 'none'" not in ssrconfig
+assert "list wan_fw_ips '1.1.1.1'" in ssrconfig
 assert not (target/'etc/init.d/mango_proxy').exists()
 assert not (target/'etc/init.d/mango_watchdog').exists()
 assert (target/'etc/mango-build-variant').read_text().strip()=='23-ssrplus-trial'
@@ -71,7 +75,7 @@ for image in images:
     shutil.copy2(image,out/'mt300n-v2-23-ssrplus-trial-sysupgrade.bin')
 # Even a successful build may have omitted an oversized image. Preserve the rootfs measurement.
 squash=list((root/'openwrt/build_dir').glob('target-*/linux-ramips_mt76x8/root.squashfs'))
-result={'variant':'23-ssrplus-trial','firmware_images':entries,
+result={'variant':'23-ssrplus-trial','build_commit':os.environ.get('GITHUB_SHA'),'firmware_images':entries,
     'capacity_pass':bool(entries) and all(x['passes_1MiB_reserve'] for x in entries),
     'baseline_release22_bytes':14942502,
     'required_packages_present':sorted(required),'other_proxy_cores':[],
