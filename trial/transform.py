@@ -59,7 +59,7 @@ define Package/mango-zerotier-support
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Release 23 ZeroTier direct UDP and gateway support
-  DEPENDS:=+zerotier +lua +libuci-lua +nftables-json
+  DEPENDS:=+zerotier +lua +libuci-lua +nftables-json +flock
 endef
 define Build/Compile
 endef
@@ -220,8 +220,8 @@ for core in v2ray-core sing-box mihomo hysteria tuic-client shadowsocks-rust-ssl
 done
 '''
 write('scripts/prepare.sh',prepare)
-for name in ['zt-direct.lua','zt-direct-runner.lua','test_zt_command_integration.py','test_zt_direct_nft.py']:
-    path=ROOT/'tests'/name
+for path in (ROOT/'tests').glob('*'):
+    if not path.is_file(): continue
     s=path.read_text().replace('package/luci-app-mango-proxy/root','package/mango-zerotier-support/root')
     path.write_text(s,encoding='utf-8',newline='\n')
 write('files/etc/mango-build-variant','23-ssrplus-trial\n')
