@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+mkdir -p /var/lock
+if [ "${CUDY_SS_OPERATION_LOCK:-}" = 1 ] &&
+   [ "$(readlink /proc/$$/fd/9 2>/dev/null)" = "$(readlink -f /var/lock/cudy-ss-operation.lock)" ]; then
+    exec "$@"
+fi
+exec 9>/var/lock/cudy-ss-operation.lock
+flock -w 90 9
+export CUDY_SS_OPERATION_LOCK=1
+exec "$@"
+

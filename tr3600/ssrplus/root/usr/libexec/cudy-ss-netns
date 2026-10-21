@@ -1,0 +1,52 @@
+#!/bin/sh
+set -eu
+umask 077
+ns=cudy-ss
+host=css-host
+peer=css-peer
+dir=/var/run/cudy-ss
+mkdir -p "$dir" /var/lock
+chmod 700 "$dir"
+exec 5>/var/lock/cudy-ss-netns.lock
+flock -w 10 5
+owned() {
+    [ -f "$dir/namespace-owner" ] &&
+    [ "$(cat /sys/class/net/$host/ifalias 2>/dev/null)" = cudy-ss-managed-v1 ] &&
+    ip netns exec "$ns" test -f /proc/net/route
+}
+case "${1:-}" in
+ start)
+    if ip netns list | awk '{print $1}' | grep -qx "$ns"; then
+        owned || { echo 'Existing namespace is not owned by Cudy SS' >&2; exit 1; }
+        exit 0
+    fi
+    [ ! -e "/sys/class/net/$host" ] && [ ! -e "/sys/class/net/$peer" ]
+    # Refuse a collision rather than changing existing routes or addresses.
+    lua /usr/lib/cudy-ss/check-prefix.lua
+    ip netns add "$ns"
+    trap 'ip link del "$host" 2>/dev/null || :; ip netns del "$ns" 2>/dev/null || :' EXIT HUP INT TERM
+    ip link add "$host" type veth peer name "$peer"
+    ip link set "$host" alias cudy-ss-managed-v1
+    ip link set "$peer" netns "$ns"
+    ip address add 198.18.255.1/30 dev "$host"
+    ip link set "$host" up
+    ip netns exec "$ns" ip link set lo up
+    ip netns exec "$ns" ip address add 198.18.255.2/30 dev "$peer"
+    ip netns exec "$ns" ip link set "$peer" up
+    ip netns exec "$ns" ip route add default via 198.18.255.1
+    # The old private service was IPv4-only; never introduce an IPv6 bypass.
+    ip netns exec "$ns" sh -c 'echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6'
+    printf '%s\n' cudy-ss-managed-v1 > "$dir/namespace-owner"
+    trap - EXIT HUP INT TERM
+    ;;
+ stop)
+    if ! ip netns list | awk '{print $1}' | grep -qx "$ns"; then exit 0; fi
+    owned || { echo 'Refusing to remove an unowned namespace' >&2; exit 1; }
+    [ -z "$(ip netns pids "$ns")" ] || { echo 'SS process has not stopped' >&2; exit 1; }
+    ip link del "$host"
+    ip netns del "$ns"
+    rm -f "$dir/namespace-owner"
+    ;;
+ *) exit 2;;
+esac
+
