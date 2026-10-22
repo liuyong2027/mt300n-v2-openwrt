@@ -67,7 +67,7 @@
         },
         {
           "name": "Validate replacement and private SS migration",
-          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8\n.test-venv/bin/python tr3600/ssrplus/test_profile.py"
+          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8\n.test-venv/bin/python tr3600/ssrplus/test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py"
         },
         {
           "name": "Test actual namespace routing and private scope",
@@ -109,7 +109,7 @@
           "name": "Upload checked test firmware",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "cudy-tr3600-ssrplus-test2-${{ github.sha }}",
+            "name": "cudy-tr3600-ssrplus-test3-${{ github.sha }}",
             "path": "ssrplus-assets/",
             "if-no-files-found": "error",
             "retention-days": 30

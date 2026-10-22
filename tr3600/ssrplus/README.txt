@@ -1,41 +1,48 @@
-Cudy TR3600 V1.0 / R126 - SSR Plus+ 1.2.0 test2
+Cudy TR3600 V1.0 / R126 - SSR Plus+ 1.2.0 test3
 Based on the tr3600-v1.1.1 device and application recipe.
 
-Mango's proxy package, firewall helper and watchdog are removed from the image.
-SSR Plus+ is the sole transparent proxy (nftables, Xray).
-The exact helloworld revision is recorded in SOURCE.json.
-A new Go package subtree is pinned separately for the matching Xray build.
+SSR Plus+ is the sole transparent proxy (nftables, Xray). Mango's proxy,
+firewall helper and watchdog are removed. SOURCE.json records pinned sources.
 
-ZeroTier private SS is retained with its existing LuCI page, approved private
-network, port, cipher and password. It runs in a private network namespace.
-Decrypted TCP and UDP re-enter the host through css-host, so SSR Plus+ applies
-the same client routing rules as for ordinary clients. Never exclude this
-interface/address from SSR Plus+ if it must use the proxy.
-198.18.255.0/30 is reserved for this service. Existing overlapping routes cause
-a closed failure instead of being changed. No private owner values are baked in.
-Only the approved ZeroTier interface and /24 source subnet can reach the server.
-Private SS pauses during SSR restarts. Disabling the selected SSR upstream
-allows direct operation; stopping an enabled upstream does not select fallback.
+SS servers are managed in SSR Plus+ > Server Settings. The Xray SS server
+uses the selected ss_method, ss_password and ss_network fields. Access scope
+is enforced by listener and firewall rules; public access requires an explicit
+selection. New and unscoped configurations default to router-only access.
+Unsupported ciphers or invalid SS2022 keys fail validation rather than being
+silently replaced. The SS server list displays its cipher and access scope.
 
-Wi-Fi, USB/Samba, WebFiles, DDNS and ZeroTier device support are retained.
-LED status now probes through SSR Plus+, independently of its failover timer.
-Old Mango automatic failover history and per-node testing state are not copied.
-Existing supported VLESS/SS/VMess node fields are translated once, preserving
-the original private configuration for manual rollback in /etc/cudy-ssrplus/.
-Check the migrated nodes and routing settings after boot.
-No NaiveProxy/Cronet build is selected in this test profile.
+The old ZeroTier private SS entry is migrated once to the reserved SSR Plus+
+server row cudy_zt_private. Port, password, cipher, enabled state and approved
+ZeroTier interface/address/subnet/network ID are preserved. It still requires
+both the server global switch and its row switch. Migration never turns on
+the server global switch. The old cudy_ss config is retained as an inert
+backup, not a second live credential source. The duplicate SS management
+page and its old configuration-writing API are removed.
 
-Only flash on a matching Cudy TR3600 V1.0/R126 custom OpenWrt installation.
-This sysupgrade file is not a stock-Cudy migration image.
-Save a system backup and the current image before upgrading.
-Do not force a device mismatch. Keep private SS and ZeroTier identity files
-in the old firmware's backup archive before a keep-settings upgrade.
-Verify SHA256SUMS. Build and QEMU checks do not replace hardware acceptance.
-This test image has not been flashed or booted on your router.
+The private row runs internally in an isolated network namespace. Decrypted
+TCP and UDP re-enter the host through css-host and use the same SSR Plus+
+client policy. Do not exclude this interface/address from that policy.
+198.18.255.0/30 is reserved internally; overlapping owner routes fail closed.
+Only the approved ZeroTier interface and private /24 source subnet can reach
+it. Missing approval, incomplete migration or invalid configuration closes
+access. Private SS remains IPv4-only. This image does not claim complete
+IPv6 transparent-proxy support.
 
+Private SS pauses during SSR restarts. A selected but stopped upstream fails
+closed; choosing no upstream explicitly allows direct operation. Existing
+server/client/global configuration is preserved on retry. Private backup
+files are kept on the router under /etc/cudy-ssrplus/ with restricted access.
+No owner credentials or ZeroTier identity are included in this image.
 
-Test2 fixes native-UCI compatibility in first-boot migration and the LED adapter.
-It preserves a node selected after flashing when retrying an incomplete migration.
-Packed-image verification now exercises the actual ARM64 UCI/nixio modules with
-synthetic migration fixtures. Test1 users need the native-UCI fix; the original
-test1 image alone may leave retired Mango DNS settings active.
+Wi-Fi, USB/Samba, WebFiles, DDNS, ZeroTier and LED support are retained.
+Supported old Mango VLESS/SS/VMess node fields are translated once. Failover
+history and per-node test state are not copied. Test2's native-UCI migration
+and LED fixes are included. No NaiveProxy/Cronet build is selected.
+
+Use only on a matching Cudy TR3600 V1.0/R126 custom OpenWrt installation.
+This sysupgrade file is not a stock-Cudy migration image. Back up the system,
+SS and ZeroTier configuration/identity before a keep-settings upgrade.
+Verify SHA256SUMS, and do not force a device mismatch. BUILD-VERIFICATION.json
+states the actual build and software test scope. Build/QEMU/network-namespace
+checks do not replace hardware acceptance. This image has not been flashed
+or booted on your router by the build process.

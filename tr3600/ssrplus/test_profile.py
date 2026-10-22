@@ -76,7 +76,7 @@ class ProfileTests(unittest.TestCase):
     def test_private_service_is_namespace_bound(self):
         lua=self.lua();n=lua.globals().dofile('/usr/lib/cudy-ss/config.lua')
         c=lua.table_from(dict(listen='10.42.0.2',subnet='10.42.0.0/24',interface='ztabcdef',
-            port=8388,method='aes-256-gcm',password='test-password-which-is-long'))
+            port=8388,method='aes-256-gcm',password='test-password-which-is-long',network='tcp,udp'))
         config=n.config(c)
         self.assertEqual(config.inbounds[1].listen,'0.0.0.0')
         self.assertEqual(config.inbounds[1].settings.network,'tcp,udp')
@@ -248,13 +248,17 @@ state.shadowsocksr={};assert(M.snapshot().mode=='direct')
             else:
                 with self.assertRaises(Exception):lua.execute(source)
 
-    def test_atomic_ss_transaction_retained(self):
-        worker=(self.ss/'root/usr/libexec/cudy-ss-worker').read_text(encoding='utf-8')
-        for action in ('snapshot=','protect=','commit=','rollback_guard=','rollback_verify='):
-            self.assertIn(action,worker)
-        self.assertIn('/etc/init.d/cudy_ss_core restart',worker)
-        self.assertIn('/usr/bin/xray run -test',worker)
-        self.assertNotIn('mango',worker)
+    def test_private_ss_has_one_management_and_credential_source(self):
+        for relative in ('usr/libexec/cudy-ss-worker','usr/libexec/cudy-ss-job',
+            'usr/libexec/rpcd/cudy.ss','usr/share/luci/menu.d/luci-app-cudy-ss.json',
+            'usr/share/rpcd/acl.d/luci-app-cudy-ss.json'):
+            self.assertFalse((self.ss/'root'/relative).exists(),relative)
+        self.assertFalse((self.ss/'htdocs').exists())
+        defaults=(self.ss/'root/etc/uci-defaults/95-cudy-ss').read_text()
+        self.assertNotIn('cudy_ss.main',defaults)
+        self.assertNotIn('cudy-ss-worker',defaults)
+        self.assertIn('/usr/libexec/cudy-ss-zt-guard',defaults)
+        self.assertIn('ss-server-migrate.lua',(PROFILE/'migration.sh').read_text())
 
     def test_zt_defaults_remove_old_service_enable(self):
         text=(self.ss/'root/etc/uci-defaults/94-cudy-zt-zone').read_text()

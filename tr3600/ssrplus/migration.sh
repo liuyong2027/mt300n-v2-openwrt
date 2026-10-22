@@ -6,7 +6,7 @@ umask 077
 mkdir -p /etc/cudy-ss /etc/cudy-ssrplus /var/lock
 chmod 700 /etc/cudy-ss /etc/cudy-ssrplus
 # Retain a private, owner-readable copy of old configuration for manual rollback.
-for name in mango_proxy dhcp firewall; do
+for name in mango_proxy dhcp firewall shadowsocksr cudy_ss; do
     if [ -f "/etc/config/$name" ] && [ ! -f "/etc/cudy-ssrplus/$name.before-migration" ]; then
         cp -p "/etc/config/$name" "/etc/cudy-ssrplus/$name.before-migration"
         chmod 600 "/etc/cudy-ssrplus/$name.before-migration"
@@ -17,6 +17,7 @@ if [ ! -s /etc/config/shadowsocksr ]; then
     touch /etc/cudy-ssrplus/seeded-config
 fi
 lua /usr/lib/cudy-ss/migrate.lua
+lua -e "dofile('/usr/lib/cudy-ss/ss-server-migrate.lua').run()"
 uci -q batch <<'UCI'
 set network.cudy_ss=interface
 set network.cudy_ss.proto='none'

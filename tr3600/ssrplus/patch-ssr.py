@@ -19,7 +19,11 @@ s+="""
 # Cudy SS only uses this lifecycle gate; it has no independent upstream policy.
 stop() {
     /usr/libexec/cudy-ss-gate close || return 1
+    /etc/init.d/cudy_ss stop || return 1
     stop_without_cudy_gate "$@"
+    cudy_stop_result=$?
+    /usr/libexec/cudy-ssr-server-firewall stop || return 1
+    return "$cudy_stop_result"
 }
 start() {
     /usr/libexec/cudy-ss-gate close || return 1
@@ -28,6 +32,7 @@ start() {
     if [ "$cudy_result" = 0 ]; then
         /usr/libexec/cudy-ss-ssr-interfaces || return 1
         /usr/libexec/cudy-ss-gate started || return 1
+        /etc/init.d/cudy_ss restart || return 1
     fi
     return "$cudy_result"
 }

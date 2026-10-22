@@ -48,7 +48,8 @@ cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
 ./scripts/feeds update -i packages
 ./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks
 ./scripts/feeds install -a
-python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"''')
+python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"
+python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
     text=re.sub(r'^python3 "\$kit/scripts/build-profile.py".*\n','',text,flags=re.M)
     text=text.replace(' luci-app-mango-proxy','').replace(' mango-tcpcheck','')
@@ -87,6 +88,7 @@ CONFIG_PACKAGE_v2ray-geosite=y
         shutil.move(str(lib/'mango'/name),str(lib/'cudy-ss'/name))
     (lib/'mango').rmdir()
     shutil.copy2(PROFILE/'config.lua',lib/'cudy-ss/config.lua')
+    shutil.copy2(PROFILE/'ss-server-migrate.lua',lib/'cudy-ss/ss-server-migrate.lua')
     for path in (ss/'root').rglob('*'):
         if not path.is_file():continue
         s=path.read_text(encoding='utf-8')
@@ -101,6 +103,7 @@ CONFIG_PACKAGE_v2ray-geosite=y
     s=s.replace('function M.bridge(old,candidate)\n','function M.legacy_bridge(old,candidate)\n')
     s=s.replace('return M\n',"""local N=dofile('/usr/lib/cudy-ss/config.lua')
 M.guard=N.guard
+M.matches=N.matches
 M.bridge=function(old,new) return N.bridge(M.validate(old),M.validate(new)) end
 return M
 """)
@@ -119,9 +122,21 @@ return M
     s=s.replace("local core=dofile", "if r.enabled~='1' then return true end\n        local core=dofile")
     worker.write_text(s,encoding='utf-8',newline='\n')
     shutil.copytree(PROFILE/'root',ss/'root',dirs_exist_ok=True)
+    # Private SS is an SSR Plus+ server row. Retain the internal namespace
+    # runtime but remove the second management API and its legacy write path.
+    for relative in (
+        'usr/share/luci/menu.d/luci-app-cudy-ss.json',
+        'usr/share/rpcd/acl.d/luci-app-cudy-ss.json',
+        'usr/libexec/rpcd/cudy.ss', 'usr/libexec/cudy-ss-worker',
+        'usr/libexec/cudy-ss-job', 'usr/lib/cudy-ss/ss-transaction.lua',
+    ):
+        (ss/'root'/relative).unlink()
+    shutil.rmtree(ss/'htdocs')
+    replace(ss/'Makefile', 'Cudy private ZeroTier Shadowsocks server',
+        'SSR Plus+ private ZeroTier server runtime')
     defaults=ss/'root/etc/uci-defaults/95-cudy-ss'
-    replace(defaults,"local M=dofile('/usr/lib/cudy-ss/ss-zt.lua')",
-        "local M=dofile('/usr/lib/cudy-ss/ss-zt.lua')")
+    defaults.write_text((PROFILE/'ss-server-defaults.sh').read_text(encoding='utf-8'),
+        encoding='utf-8',newline='\n')
     # Independent ZeroTier firewall defaults, preserving existing owner sections.
     replace(ROOT/'tr3600/zt-firewall-defaults.py',
         "path=Path(sys.argv[1])/'package/luci-app-mango-proxy/root/etc/uci-defaults/95-mango-proxy'",
@@ -143,7 +158,7 @@ return M
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
-    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test2\n')
+    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test3\n')
     shutil.copy2(PROFILE/'migration.sh',files/'etc/uci-defaults/90-cudy-ssrplus-migrate')
     # Keep the same LED state machine, replace its proxy-specific adapter.
     led=ROOT/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua'
@@ -169,7 +184,9 @@ return M
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',
-        'private_ss':'independent Xray namespace; same SSR Plus+ client policy',
+        'private_ss':'SSR Plus+ server_config row; isolated Xray namespace; same client policy',
+        'ss_server_config_revision':3,
+        'private_ss_ipv6':False,
         'hardware_validation':'pending'},indent=2)+'\n')
     print('Prepared SSR Plus+ build; no router was modified.')
 

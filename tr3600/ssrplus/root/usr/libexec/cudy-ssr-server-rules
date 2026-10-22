@@ -1,0 +1,41 @@
+#!/usr/bin/lua
+local u=require('uci').cursor()
+local fs=require('nixio.fs')
+local json=require('luci.jsonc')
+local model=require('cudy.ssr-server')
+local command=arg[1]
+if command=='validate' then
+    local sid=arg[2]
+    assert(type(sid)=='string' and sid:match('^[%w_]+$'), 'Invalid server section')
+    assert(u:get('shadowsocksr',sid)=='server_config', 'Missing server_config')
+    local raw=assert(u:get_all('shadowsocksr',sid));raw['.name']=sid
+    model.normalize(raw)
+    return
+end
+assert(command=='rules', 'Invalid rules command')
+local active_file=arg[2]
+assert(active_file=='/var/run/ssrplus/server-access.active', 'Invalid active server state path')
+local active={}
+for sid in (fs.readfile(active_file) or ''):gmatch('[^\n]+') do
+    assert(sid:match('^[%w_]+$'), 'Invalid active server state')
+    active[sid]=true
+end
+local enabled=false
+u:foreach('shadowsocksr','server_global',function(s) if s.enable_server=='1' then enabled=true end end)
+local rows={}
+if enabled then
+    u:foreach('shadowsocksr','server_config',function(s) rows[#rows+1]=s end)
+end
+local lan={}
+local pipe=io.popen('ubus call network.interface.lan status 2>/dev/null')
+if pipe then
+    local status=json.parse(pipe:read('*a') or '');pipe:close()
+    if type(status)=='table' and status.up then
+        lan.device=status.l3_device or status.device
+        lan.addresses={}
+        for _,address in ipairs(status['ipv4-address'] or {}) do
+            if model.ipv4(address.address) then lan.addresses[#lan.addresses+1]=address.address end
+        end
+    end
+end
+io.write(model.rules(rows,lan,active))

@@ -67,7 +67,7 @@ def inside():
             helper=helper.replace('/usr/lib/cudy-ss/check-prefix.lua',str(HERE/'root/usr/lib/cudy-ss/check-prefix.lua'))
             path=temp/'netns';path.write_text(helper)
             run('sh',str(path),'start');created.append('cudy-ss')
-            lua='local n=dofile('+json.dumps(str(HERE/'config.lua'))+');io.write(n.guard({listen="10.42.0.2",subnet="10.42.0.0/24",interface="ztfixture",port=8388}))'
+            lua='local n=dofile('+json.dumps(str(HERE/'config.lua'))+');io.write(n.guard({listen="10.42.0.2",subnet="10.42.0.0/24",interface="ztfixture",port=8388,network="tcp,udp"}))'
             rules=run('lua5.1','-e',lua,capture_output=True).stdout
             run('nft','-f','-',input=rules)
             bridge=lua.replace('io.write(n.guard(', 'io.write(n.bridge(nil,')
