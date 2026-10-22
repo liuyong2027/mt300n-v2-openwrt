@@ -331,7 +331,10 @@ def inside(args):
  }
 }
 ''')
-            options = ['-4', '--noproxy', '*', '--connect-timeout', '1', '--max-time', '3',
+            # Match the production resolver's 4/8-second budgets. Packed curl
+            # uses its SIGALRM resolver, which rejects a remaining deadline
+            # below one whole second before attempting the synthetic request.
+            options = ['-4', '--noproxy', '*', '--connect-timeout', '4', '--max-time', '8',
                        '--cacert', str(cert), '--resolve', 'fixture.invalid:443:' + TARGET_IP,
                        '-fsS', 'https://fixture.invalid/']
             unbound = run(['/usr/bin/curl'] + options).stdout.strip()

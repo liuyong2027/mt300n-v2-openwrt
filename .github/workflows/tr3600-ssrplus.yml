@@ -125,7 +125,7 @@
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
             "name": "tr3600-ssrplus-diagnostics-${{ github.run_number }}",
-            "path": "reports/\nprepare.log\ndownload.log\nbuild.log",
+            "path": "reports/\nprepare.log\ndownload.log\nbuild.log\nopenwrt/bin/targets/mediatek/filogic/*cudy_tr3600-v1*squashfs-sysupgrade.bin",
             "retention-days": 14,
             "if-no-files-found": "warn"
           }
