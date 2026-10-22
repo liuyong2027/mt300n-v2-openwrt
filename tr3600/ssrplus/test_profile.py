@@ -46,6 +46,10 @@ class ProfileTests(unittest.TestCase):
         self.assertIn('80d7bfff625b33db8afe80934638d96d214ceadc',prepare)
         self.assertLess(prepare.index('./scripts/feeds install -f -p helloworld'),
             prepare.index('./scripts/feeds install -a'))
+        self.assertLess(prepare.index('cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/'),
+            prepare.index('./scripts/feeds update -i packages'))
+        self.assertLess(prepare.index('./scripts/feeds update -i packages'),
+            prepare.index('./scripts/feeds install -f -p helloworld'))
 
     def test_all_installed_lua_compiles(self):
         lua=self.lua()
@@ -187,7 +191,8 @@ class SourceSelectionTests(unittest.TestCase):
         self.root=Path(self.tmp.name)
         self.feed=self.root/'openwrt/feeds/helloworld/xray-core'
         self.feed.mkdir(parents=True)
-        (self.feed/'Makefile').write_text('PKG_VERSION:=26.10.21\nPKG_RELEASE:=1\n')
+        (self.feed/'Makefile').write_text('PKG_VERSION:=26.10.21\nPKG_RELEASE:=1\n'
+            '\t$(GO_BIN_PATH) python3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go go --out $(PKG_BUILD_DIR)/.eip93-overlay\n')
         self.package=self.root/'openwrt/package/feeds/helloworld/xray-core'
         self.package.parent.mkdir(parents=True)
         self.link(self.feed,self.package)
@@ -227,10 +232,82 @@ class SourceSelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError,'Wrong Xray version'):
             self.check.check_xray_source(self.root,self.config)
 
+    def test_obsolete_overlay_go_path_is_rejected(self):
+        p=self.feed/'Makefile'
+        p.write_text(p.read_text().replace('$(GO_BIN_PATH) python3','python3').replace('--go go','--go $(STAGING_DIR_HOSTPKG)/bin/go'))
+        with self.assertRaisesRegex(AssertionError,'Xray overlay must use the selected Go compiler'):
+            self.check.check_xray_source(self.root,self.config)
+
+    def go_sources(self):
+        for name in ('golang','golang1.27'):
+            source=self.root/'openwrt/feeds/packages/lang/golang'/name
+            source.mkdir(parents=True)
+            (source/'Makefile').write_text('PKG_NAME:='+name+'\n')
+            package=self.root/'openwrt/package/feeds/packages'/name
+            package.parent.mkdir(parents=True,exist_ok=True)
+            self.link(source,package)
+
+    def test_matching_go_host_sources_are_accepted(self):
+        self.go_sources()
+        self.check.check_go_sources(self.root)
+
+    def test_missing_versioned_go_host_package_is_rejected(self):
+        self.go_sources()
+        package=self.root/'openwrt/package/feeds/packages/golang1.27'
+        if os.name=='nt':package.rmdir()
+        else:package.unlink()
+        with self.assertRaisesRegex(AssertionError,'Missing or duplicate Go host package'):
+            self.check.check_go_sources(self.root)
+
+    def test_wrong_go_host_source_is_rejected(self):
+        self.go_sources()
+        package=self.root/'openwrt/package/feeds/packages/golang1.27'
+        if os.name=='nt':package.rmdir()
+        else:package.unlink()
+        self.link(self.feed,package)
+        with self.assertRaisesRegex(AssertionError,'Wrong Go feed'):
+            self.check.check_go_sources(self.root)
+
     def test_missing_or_enabled_cronet_option_is_rejected(self):
         for config in ('','CONFIG_XRAY_CORE_NAIVE=y\n',self.config+'CONFIG_XRAY_CORE_NAIVE=y\n'):
             with self.assertRaises(AssertionError):
                 self.check.check_xray_source(self.root,config)
+
+
+class OverlayPatchTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(prefix='ssrplus-overlay-tests-',dir=REPO.parent)
+        self.addCleanup(self.tmp.cleanup)
+        self.root=Path(self.tmp.name)
+        self.makefile=self.root/'feeds/helloworld/xray-core/Makefile'
+        self.makefile.parent.mkdir(parents=True)
+        self.command='\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay\n'
+        self.makefile.write_text(self.command)
+        self.init=self.root/'feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr'
+        self.init.parent.mkdir(parents=True)
+        self.init.write_text('start() {\n :\n}\nstop() {\n :\n}\n')
+        rules=self.root/'feeds/helloworld/luci-app-ssr-plus/root/usr/bin/ssr-rules'
+        rules.parent.mkdir(parents=True)
+        rules.write_text('gen_include_nft() {\n\tcat <<-EOF >>"$FWI"\n\t\ttrue\n\tEOF\n\tchmod +x "$FWI"\n}\n')
+
+    def run_patch(self):
+        return subprocess.run([sys.executable,str(PROFILE/'patch-ssr.py'),str(self.root)],capture_output=True,text=True)
+
+    def test_overlay_uses_standard_go_path(self):
+        result=self.run_patch()
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('$(GO_BIN_PATH) python3',self.makefile.read_text())
+        self.assertIn('--go go --out',self.makefile.read_text())
+        self.assertNotIn('$(STAGING_DIR_HOSTPKG)/bin/go',self.makefile.read_text())
+        self.assertIn('/usr/libexec/cudy-ss-gate started',self.init.read_text())
+
+    def test_changed_or_duplicate_overlay_command_is_rejected(self):
+        for command in ('',self.command+self.command):
+            self.makefile.write_text(command)
+            result=self.run_patch()
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('Pinned Xray overlay command changed',result.stderr)
+            self.assertEqual(self.makefile.read_text(),command)
 
 
 if __name__=='__main__':unittest.main(verbosity=2)

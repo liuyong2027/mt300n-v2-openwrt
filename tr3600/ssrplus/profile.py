@@ -45,6 +45,7 @@ git -C "$kit/work-go-feed" fetch --depth 1 origin 2a5d2301904f84ff61615dd4e4d1db
 git -C "$kit/work-go-feed" checkout --detach FETCH_HEAD
 rm -rf feeds/packages/lang/golang
 cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
+./scripts/feeds update -i packages
 ./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks
 ./scripts/feeds install -a
 python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"''')

@@ -3,6 +3,12 @@ from pathlib import Path
 import re
 import sys
 root=Path(sys.argv[1])
+p=root/'feeds/helloworld/xray-core/Makefile'
+s=p.read_text()
+anchor='\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay'
+assert s.count(anchor)==1,'Pinned Xray overlay command changed'
+s=s.replace(anchor,'\t$(GO_BIN_PATH) python3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go go --out $(PKG_BUILD_DIR)/.eip93-overlay')
+p.write_text(s,newline='\n')
 p=root/'feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr'
 s=p.read_text()
 for name in ('start','stop'):

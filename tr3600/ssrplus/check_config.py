@@ -12,8 +12,20 @@ def check_xray_source(root,config):
     makefile=(expected/'Makefile').read_text()
     assert re.search(r'^PKG_VERSION:=26\.10\.21$',makefile,re.M),'Wrong Xray version'
     assert re.search(r'^PKG_RELEASE:=1$',makefile,re.M),'Wrong Xray release'
+    assert '$(GO_BIN_PATH) python3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go go --out ' in makefile,'Xray overlay must use the selected Go compiler'
+    assert '--go $(STAGING_DIR_HOSTPKG)/bin/go' not in makefile,'Xray overlay uses the obsolete Go path'
     assert '# CONFIG_XRAY_CORE_NAIVE is not set' in config,'Expected visible, disabled Cronet option'
     assert 'CONFIG_XRAY_CORE_NAIVE=y' not in config,'Cronet must remain disabled'
+
+
+def check_go_sources(root):
+    openwrt=root/'openwrt'
+    for name in ('golang','golang1.27'):
+        packages=list((openwrt/'package/feeds').glob('*/'+name))
+        expected=openwrt/'feeds/packages/lang/golang'/name
+        assert len(packages)==1,('Missing or duplicate Go host package',name,packages)
+        assert packages[0].resolve(strict=True)==expected.resolve(strict=True),('Wrong Go feed',name)
+        assert (expected/'Makefile').is_file(),('Missing Go package Makefile',name)
 
 
 def main():
@@ -29,6 +41,7 @@ def main():
     assert 'CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3600-v1=y' in config
     assert 'CONFIG_KERNEL_NET_NS=y' in config
     check_xray_source(root,config)
+    check_go_sources(root)
     for name in ('cudy-webfiles','filebrowser','manifest.json'):
         source=root/'tr3600/cudy-webfiles/build-output'/name
         packaged=root/'openwrt/package/cudy-webfiles/build-output'/name
