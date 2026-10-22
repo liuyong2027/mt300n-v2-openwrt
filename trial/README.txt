@@ -63,3 +63,10 @@ otherwise a rotating endpoint or a direct outbound can feed back into Xray.
 Kernel socket tests verify unmarked interception and marked bypass, including
 cache reload. Cache keys include the rules implementation hash. Bound the HTTP
 bootstrap resolver so a failed DNS fallback cannot hold the service lock forever.
+Resolve the selected node before generating the shared Xray process. Pass that
+address only through the startup environment, using it for the runtime connection
+and firewall rules, so the DNS tunnel does not depend on repeated endpoint-domain
+lookups. The saved node domain, TLS/REALITY server name, WebSocket host and all
+credentials stay unchanged. Explicit per-node DNS resolvers retain priority.
+Native generator cases cover address substitution, invalid/mismatched bootstrap
+inputs, custom resolvers and preserved TLS/REALITY identities.

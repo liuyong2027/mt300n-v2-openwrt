@@ -6,6 +6,7 @@ import sys
 root=Path(sys.argv[1])/'package/luci-app-ssr-plus/root'
 init=root/'etc/init.d/shadowsocksr'
 rules=root/'usr/bin/ssr-rules'
+generator=root/'usr/share/shadowsocksr/gen_config.lua'
 
 def once(text,before,after):
     assert text.count(before)==1,(before,text.count(before))
@@ -21,6 +22,17 @@ s=once(s,'PERSIST_DIR="/usr/share/nftables.d/ruleset-post"','PERSIST_DIR="/tmp/s
 s=once(s,'BACKUP_DIR="/etc/ssrplus/ssrplus-persist"','BACKUP_DIR="/tmp/ssrplus-nft-backup"')
 s=once(s,'curl -sSL "http://119.29.29.29/d?dn=$host"',
        'curl --connect-timeout 3 --max-time 5 -sSL "http://119.29.29.29/d?dn=$host"')
+s=once(s,'\tUDP_RELAY_SERVER=$(uci_get_by_type global udp_relay_server nil)', '''\t# Resolve the selected endpoint before starting the DNS tunnel that depends on it.
+\tSSRPLUS_RUNTIME_NODE="$GLOBAL_SERVER"
+\tSSRPLUS_RUNTIME_IP=$(get_host_ip "$GLOBAL_SERVER")
+\texport SSRPLUS_RUNTIME_NODE SSRPLUS_RUNTIME_IP
+\tUDP_RELAY_SERVER=$(uci_get_by_type global udp_relay_server nil)''')
+s=once(s,'\tlocal server=$(get_host_ip $GLOBAL_SERVER)', '''\tlocal server
+\tif [ "$SSRPLUS_RUNTIME_NODE" = "$GLOBAL_SERVER" ] && [ -n "$SSRPLUS_RUNTIME_IP" ]; then
+\t\tserver="$SSRPLUS_RUNTIME_IP"
+\telse
+\t\tserver=$(get_host_ip "$GLOBAL_SERVER")
+\tfi''')
 s=once(s,'\t\tstart_rules 9>&-\n\t\tstart_dns\n', '''		if ! start_dns; then
 			echolog "DNS startup failed; refusing to report a successful start."
 			unset_lock
@@ -41,6 +53,21 @@ s=once(s,'\t\t\tln_start_bin $(first_type dns2tcp) dns2tcp -L 127.0.0.1#$dns_por
 			fi
 			pdnsd_enable_flag=1''')
 init.write_text(s,encoding='utf-8',newline='\n')
+
+s=generator.read_text(encoding='utf-8')
+s=once(s,'local node_id = server_section', '''local node_id = server_section
+-- Bootstrap only the connection address; leave the saved domain and TLS/REALITY identity intact.
+local endpoint_address = server.server
+local bootstrap_ip = os.getenv("SSRPLUS_RUNTIME_IP") or ""
+if os.getenv("SSRPLUS_RUNTIME_NODE") == node_id and not server.domain_resolver
+    and bootstrap_ip:match("^%d+%.%d+%.%d+%.%d+$") and datatypes.ip4addr(bootstrap_ip) then
+    endpoint_address = bootstrap_ip
+end''')
+prefix,suffix=s.split('local outbound = {}',1)
+assert prefix.count('address = server.server,')==4
+prefix=prefix.replace('address = server.server,','address = endpoint_address,')
+s=prefix+'local outbound = {}'+suffix
+generator.write_text(s,encoding='utf-8',newline='\n')
 
 s=rules.read_text(encoding='utf-8')
 s=once(s,'NFT="nft -nn"','NFT="nft -nn -t"')

@@ -53,15 +53,39 @@ for _,cipher in ipairs({'aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305'}) d
  port='443',method=cipher,password='fixture-only'}
 end
 local original_print=print
+local original_getenv=os.getenv
+for _,index in ipairs({1,3,4}) do
+ local copy={};for key,value in pairs(cases[index]) do copy[key]=value end
+ copy.name=copy.name..'-bootstrap-ip';copy.bootstrap_ip='203.0.113.7';copy.expected_ip='203.0.113.7'
+ cases[#cases+1]=copy
+end
+for _,kind in ipairs({'wrong-node','invalid-ip','custom-resolver'}) do
+ local copy={};for key,value in pairs(cases[1]) do copy[key]=value end
+ copy.name=copy.name..'-bootstrap-'..kind
+ copy.bootstrap_ip=kind=='invalid-ip' and '999.999.1.1' or '203.0.113.7'
+ copy.bootstrap_node=kind=='wrong-node' and 'other-node' or 'fixture'
+ copy.custom_resolver=kind=='custom-resolver'
+ cases[#cases+1]=copy
+end
 for _,node in ipairs(cases)do
  node['.name']='fixture'
  current=M.node(node);socks={socks5_auth='noauth',server='same',mango_expose='0'}
+ if node.custom_resolver then current.domain_resolver='udp';current.domain_resolver_dns='223.5.5.5' end
+ os.getenv=function(name)
+  if name=='SSRPLUS_RUNTIME_NODE' then return node.bootstrap_ip and (node.bootstrap_node or 'fixture') end
+  if name=='SSRPLUS_RUNTIME_IP' then return node.bootstrap_ip end
+  return original_getenv(name)
+ end
  arg={'fixture','tcp,udp','12345','10808'}
  print=function(text)
   local file=assert(io.open(output..'/'..node.name..'.json','w'));file:write(text);file:close()
  end
  dofile(root..'/usr/share/shadowsocksr/gen_config.lua')
  assert(output_json.outbounds[1].protocol==node.protocol)
+ local primary=output_json.outbounds[1]
+ local endpoint=assert((primary.settings.vnext or primary.settings.servers)[1])
+ assert(endpoint.address==(node.expected_ip or node.address),'Unexpected bootstrap endpoint')
+ assert(current.server==node.address,'Saved node domain was modified')
  local found=false
  for _,inbound in ipairs(output_json.inbounds)do
   if inbound.protocol=='socks' then found=true;assert(inbound.listen=='127.0.0.1')end
@@ -69,8 +93,14 @@ for _,node in ipairs(cases)do
  assert(found,'Missing shared SOCKS inbound')
  if node.protocol=='vless' then
   assert(output_json.outbounds[1].settings.vnext[1].users[1].flow=='xtls-rprx-vision')
+  assert(primary.streamSettings.realitySettings.serverName==node.sni,'REALITY identity changed')
  end
- if node.tls=='tls' then assert(output_json.outbounds[1].streamSettings.tlsSettings.allowInsecure==false)end
+ if node.tls=='tls' then
+  assert(primary.streamSettings.tlsSettings.allowInsecure==false)
+  assert(primary.streamSettings.tlsSettings.serverName==node.sni,'TLS identity changed')
+  assert(primary.streamSettings.wsSettings.host==node.ws_host,'WebSocket host changed')
+ end
 end
+os.getenv=original_getenv
 print=original_print
-print('Actual SSR generator: six migrated VLESS/VMess/SS configurations generated')
+print('Actual SSR generator: '..#cases..' VLESS/VMess/SS configurations including bootstrap address and identity checks generated')
