@@ -1,0 +1,50 @@
+{
+  "name": "Withdraw defective Release 22",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/withdraw-release22"
+      ],
+      "paths": [
+        ".github/workflows/withdraw-release22.yml"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "withdraw-release22",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "withdraw": {
+      "name": "Unpublish only v22.0.0 and verify v23.0.0 remains latest",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 5,
+      "permissions": {
+        "contents": "write"
+      },
+      "steps": [
+        {
+          "name": "Convert Release 22 to draft without deleting assets or tags",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "python3 - <<'PY'\nimport json\nimport os\nfrom pathlib import Path\nimport urllib.error\nimport urllib.request\n\nrepo = 'liuyong2027/mt300n-v2-openwrt'\nassert os.environ['GITHUB_REPOSITORY'] == repo\nassert os.environ['GITHUB_REF'] == 'refs/heads/codex/withdraw-release22'\napi_root = 'https://api.github.com/repos/' + repo\nheaders = {'Accept': 'application/vnd.github+json', 'User-Agent': 'release22-withdrawal', 'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'X-GitHub-Api-Version': '2022-11-28'}\n\ndef api(path, method='GET', payload=None, authenticated=True):\n    active_headers = headers if authenticated else {k:v for k,v in headers.items() if k != 'Authorization'}\n    data = None if payload is None else json.dumps(payload).encode()\n    request = urllib.request.Request(api_root + path, headers=active_headers, data=data, method=method)\n    with urllib.request.urlopen(request, timeout=30) as response:\n        return json.load(response)\n\ndef fingerprint(release):\n    return sorted((a['id'], a['name'], a['size'], a['digest'], a['state']) for a in release['assets'])\n\nrecord_dir = Path('withdrawal-record')\nrecord_dir.mkdir(exist_ok=True)\nlatest = api('/releases/latest')\nassert latest['id'] == 419785618 and latest['tag_name'] == 'v23.0.0'\nassert not latest['draft'] and not latest['prerelease']\nbefore = api('/releases/415891952')\nassert before['id'] == 415891952 and before['tag_name'] == 'v22.0.0'\nassert not before['immutable']\nassert len(before['assets']) == 8\nassert any(a['name'] == 'mt300n-v2-22-production-sysupgrade.bin' and a['digest'] == 'sha256:94a4d85b0cdadd8a73ec818701ad6da2d3d95facff80390c95e229ad0107d09d' for a in before['assets'])\ntag_before = api('/git/ref/tags/v22.0.0')\nassert tag_before['object']['sha'] == 'b58f524d70b1c7ab37a279cdadbddb2685af04ca'\n(record_dir / 'before.json').write_text(json.dumps(before, indent=2, ensure_ascii=False) + '\\n')\nnotice = ('已撤回：Release 22 的 ZeroTier 辅助程序调用了固件中不存在的 timeout 命令，可能缺少 UPnP discovery 规则。'\n          '请使用已修复的 Release 23：https://github.com/' + repo + '/releases/tag/v23.0.0\\n\\n')\nbody = before['body'] or ''\nif not body.startswith('已撤回：'):\n    body = notice + body\nupdated = api('/releases/415891952', method='PATCH', payload={'draft': True, 'make_latest': 'false', 'name': '[已撤回] Release 22 — GL-MT300N-V2', 'body': body})\nassert updated['draft'] and updated['id'] == before['id']\nafter = api('/releases/415891952')\ntag_after = api('/git/ref/tags/v22.0.0')\nlatest_after = api('/releases/latest')\nassert after['draft'] and fingerprint(after) == fingerprint(before)\nassert tag_after['object'] == tag_before['object']\nassert latest_after['id'] == latest['id'] and not latest_after['draft']\nassert fingerprint(latest_after) == fingerprint(latest)\ntry:\n    api('/releases/415891952', authenticated=False)\nexcept urllib.error.HTTPError as exc:\n    assert exc.code == 404, exc.code\nelse:\n    raise AssertionError('Release 22 remains publicly visible')\n(record_dir / 'after.json').write_text(json.dumps(after, indent=2, ensure_ascii=False) + '\\n')\nresult = {'release22_id': after['id'], 'release22_draft': after['draft'], 'public_release22_status': 404, 'release22_assets_preserved': len(after['assets']), 'release22_tag_preserved': tag_after['object']['sha'], 'latest_release': latest_after['tag_name'], 'release23_assets_unchanged': True}\n(record_dir / 'verification.json').write_text(json.dumps(result, indent=2) + '\\n')\nprint(json.dumps(result, indent=2))\nwith open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:\n    stream.write('## Release 22 withdrawn\\n\\nConverted v22.0.0 to a draft; public release returns 404. All eight assets and the original tag are preserved. Release 23 remains the latest official release, with its assets unchanged.\\n')\nPY\n"
+        },
+        {
+          "name": "Preserve withdrawal verification",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "release22-withdrawal-verification",
+            "path": "withdrawal-record/",
+            "if-no-files-found": "error",
+            "retention-days": 90
+          }
+        }
+      ]
+    }
+  }
+}
