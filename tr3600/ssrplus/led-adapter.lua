@@ -7,9 +7,12 @@ function M.identity()
 end
 function M.snapshot()
     local u=uci.cursor()
-    local active=u:get_first('shadowsocksr','global','global_server') or 'nil'
-    local runmode=u:get_first('shadowsocksr','global','run_mode') or 'router'
-    local mode=active=='nil' and 'direct' or ({router='split',all='global',gfw='gfw'})[runmode] or 'global'
+    local global
+    u:foreach('shadowsocksr','global',function(s) if not global then global=s end end)
+    global=global or {}
+    local active=global.global_server or 'nil'
+    local runmode=global.run_mode or 'router'
+    local mode=(active=='nil' or active=='') and 'direct' or ({router='split',all='global',gfw='gfw'})[runmode] or 'global'
     local routes=M.capture('ip -4 route show table main default')
     local uplink=routes=='' and 1 or 0
     return {board=M.board(),now=M.now(),id=M.identity(),mode=mode,

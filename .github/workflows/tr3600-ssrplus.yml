@@ -109,7 +109,7 @@
           "name": "Upload checked test firmware",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "cudy-tr3600-ssrplus-test1-${{ github.sha }}",
+            "name": "cudy-tr3600-ssrplus-test2-${{ github.sha }}",
             "path": "ssrplus-assets/",
             "if-no-files-found": "error",
             "retention-days": 30

@@ -106,7 +106,7 @@ class ProfileTests(unittest.TestCase):
         self.assertIn('ssr-ready',gate)
         self.assertIn('iifname "css-host" counter drop',gate)
 
-    def test_node_migration_preserves_private_service_and_is_retryable(self):
+    def migration_lua(self):
         lua=self.lua()
         lua.execute('''
 state={shadowsocksr={global={['.type']='global',global_server='nil'}},
@@ -118,11 +118,16 @@ state={shadowsocksr={global={['.type']='global',global_server='nil'}},
  firewall={mango_proxy={path='/usr/libexec/mango-fw'},owner_rule={target='REJECT'}}}
 files={['/etc/cudy-ssrplus/seeded-config']=true}
 u={}
-function u:get(c,s,k) local a=state[c] and state[c][s]; if not a then return end;return k and a[k] or a['.type'] end
+function u:get(c,s,k) local a=state[c] and state[c][s]; if not a then return end;if k then return a[k] else return a['.type'] end end
 function u:get_all(c,s) return state[c] and state[c][s] end
-function u:get_first(c,t,k) for s,a in pairs(state[c] or {}) do if a['.type']==t then return k and a[k] or s end end end
-function u:section(c,t,s,a) state[c]=state[c] or {};state[c][s]=a or {};state[c][s]['.type']=t;state[c][s]['.name']=s;return s end
-function u:set(c,s,k,v) assert(state[c] and state[c][s]);state[c][s][k]=v;return true end
+-- Native libuci intentionally has neither get_first nor section.
+function u:set(c,s,k,v)
+ if v==nil then
+  state[c]=state[c] or {};state[c][s]=state[c][s] or {}
+  state[c][s]['.type']=k;state[c][s]['.name']=s
+ else assert(state[c] and state[c][s]);state[c][s][k]=v end
+ return true
+end
 function u:delete(c,s,k) if k then state[c][s][k]=nil else state[c][s]=nil end;return true end
 function u:foreach(c,t,fn) for s,a in pairs(state[c] or {}) do if a['.type']==t then a['.name']=s;fn(a) end end end
 function u:commit(c) return true end
@@ -131,8 +136,13 @@ f={access=function(p) return files[p] or false end,
  chmod=function() return true end,remove=function(p) files[p]=nil;return true end}
 package.loaded['nixio.fs']=f
 package.loaded['uci']={cursor=function() return u end}
-interrupt_marker=true
+interrupt_marker=false
 ''')
+        return lua
+
+    def test_node_migration_preserves_private_service_and_is_retryable(self):
+        lua=self.migration_lua()
+        lua.execute('interrupt_marker=true;assert(u.get_first==nil and u.section==nil)')
         source=(PROFILE/'root/usr/lib/cudy-ss/migrate.lua').read_text()
         with self.assertRaises(Exception):lua.execute(source)
         lua.execute('interrupt_marker=false')
@@ -150,6 +160,74 @@ assert(state.dhcp.dns.server[1]=='9.9.9.9')
 assert(state.shadowsocksr.access_control.Interface[2]=='cudy_ss')
 ''')
         lua.execute(source)  # Completed migrations are a no-op.
+
+    def test_native_uci_creates_missing_global_and_access_control_sections(self):
+        lua=self.migration_lua()
+        lua.execute('state.shadowsocksr={}')
+        lua.execute((PROFILE/'root/usr/lib/cudy-ss/migrate.lua').read_text())
+        lua.execute('''
+assert(state.shadowsocksr.global['.type']=='global')
+assert(state.shadowsocksr.global.global_server=='migrated_primary')
+assert(state.shadowsocksr.access_control['.type']=='access_control')
+assert(files['/etc/cudy-ssrplus/migration-v1.done'])
+''')
+
+    def test_leftover_seed_preserves_imported_nodes_and_current_settings(self):
+        lua=self.migration_lua()
+        lua.execute('''
+local g=state.shadowsocksr.global
+g.global_server='cfg024a8f';g.run_mode='gfw';g.udp_relay_server='custom-udp'
+g.prefer_nft='0';g.router_proxy='0';g.custom_ports='80,443'
+state.shadowsocksr.cfg024a8f={['.type']='servers',server='owner-relay.example',password='owner-imported-key'}
+state.shadowsocksr.cfg_second={['.type']='servers',server='second-relay.example'}
+state.shadowsocksr.access_control={['.type']='access_control',Interface={'lan'},router_proxy='0',wan_bp_ips={'203.0.113.7'}}
+state.mango_proxy.main.bypass4={'198.51.100.7'}
+state.dhcp.dns.filter_aaaa='0'
+''')
+        lua.execute((PROFILE/'root/usr/lib/cudy-ss/migrate.lua').read_text())
+        lua.execute('''
+local g=state.shadowsocksr.global
+assert(g.global_server=='cfg024a8f' and g.run_mode=='gfw')
+assert(g.udp_relay_server=='custom-udp' and g.prefer_nft=='0' and g.router_proxy=='0' and g.custom_ports=='80,443')
+assert(state.shadowsocksr.cfg024a8f.password=='owner-imported-key')
+assert(state.shadowsocksr.cfg_second.server=='second-relay.example')
+local ac=state.shadowsocksr.access_control
+assert(ac.router_proxy=='0' and ac.Interface[2]=='cudy_ss')
+assert(#ac.wan_bp_ips==2 and ac.wan_bp_ips[1]=='203.0.113.7' and ac.wan_bp_ips[2]=='198.18.255.0/30')
+assert(state.dhcp.dns.filter_aaaa=='0' and state.dhcp.dns.server[1]=='9.9.9.9')
+assert(files['/etc/cudy-ssrplus/seeded-config']==nil)
+''')
+
+    def test_retry_preserves_changes_to_an_already_migrated_node(self):
+        lua=self.migration_lua()
+        source=(PROFILE/'root/usr/lib/cudy-ss/migrate.lua').read_text()
+        lua.execute('interrupt_marker=true')
+        with self.assertRaises(Exception):lua.execute(source)
+        lua.execute("interrupt_marker=false;state.shadowsocksr.migrated_primary.server='owner-edited.example';state.shadowsocksr.global.run_mode='gfw'")
+        lua.execute(source)
+        lua.execute("assert(state.shadowsocksr.migrated_primary.server=='owner-edited.example');assert(state.shadowsocksr.global.run_mode=='gfw')")
+
+    def test_led_snapshot_uses_native_uci_and_handles_direct_mode(self):
+        lua=self.migration_lua()
+        lua.execute('''
+uci=package.loaded['uci'];fs=f;M={dir='/var/run/cudy-led'}
+function M.board() return 'cudy,tr3600-v1' end
+function M.now() return 123 end
+function M.capture() return 'default via 192.0.2.1' end
+function M.blocked() return false end
+os.execute=function() return 0 end
+''')
+        lua.execute((PROFILE/'led-adapter.lua').read_text())
+        lua.execute('''
+M.identity=function() return 'synthetic-identity' end
+state.shadowsocksr.global.global_server='cfg024a8f';state.shadowsocksr.global.run_mode='gfw'
+assert(M.snapshot().mode=='gfw' and M.snapshot().ready)
+state.shadowsocksr.global.run_mode='all';assert(M.snapshot().mode=='global')
+state.shadowsocksr.global.run_mode='router';assert(M.snapshot().mode=='split')
+state.shadowsocksr.global.global_server='nil';assert(M.snapshot().mode=='direct')
+state.shadowsocksr.global.global_server='';assert(M.snapshot().mode=='direct')
+state.shadowsocksr={};assert(M.snapshot().mode=='direct')
+''')
 
     def test_namespace_ownership_and_collision_checks(self):
         helper=(PROFILE/'root/usr/libexec/cudy-ss-netns').read_text()

@@ -143,7 +143,7 @@ return M
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
-    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test1\n')
+    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test2\n')
     shutil.copy2(PROFILE/'migration.sh',files/'etc/uci-defaults/90-cudy-ssrplus-migrate')
     # Keep the same LED state machine, replace its proxy-specific adapter.
     led=ROOT/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua'

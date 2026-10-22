@@ -16,7 +16,7 @@ images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*
 assert len(images)==1,images
 image=images[0]
 assert image.stat().st_size < 237824*1024
-with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
+with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as temp:
     temp=Path(temp)
     with tarfile.open(image) as archive:
         roots=[m for m in archive.getmembers() if m.isfile() and m.name.endswith('/root')]
@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test1'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test2'
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw','usr/share/luci/menu.d/luci-app-mango-proxy.json']:
         assert not (root/absent).exists(),absent
     assert not list((root/'usr/libexec').glob('mango-*'))
@@ -83,6 +83,25 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
                         'assert(loadfile('+json.dumps(str(path))+'))'],check=True);syntax+=1
             elif text.startswith('#!') and ('cudy' in path.name or path.name=='shadowsocksr'):
                 subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'bin/busybox'),'sh','-n',str(path)],check=True);syntax+=1
+    # Exercise native libuci/nixio from the packed image. A Lua-only mock can
+    # accidentally supply cursor helpers that the installed native API lacks.
+    for name in ['usr/bin/lua','usr/lib/lua/uci.so','usr/lib/lua/nixio.so','usr/lib/lua/nixio/fs.lua']:
+        assert (root/name).is_file(),name
+    native_environment=os.environ.copy()
+    native_environment['LUA_PATH']=str(root/'usr/lib/lua/?.lua')+';'+str(root/'usr/lib/lua/?/init.lua')
+    native_environment['LUA_CPATH']=str(root/'usr/lib/lua/?.so')
+    native_sandbox=temp/'native-uci'
+    assert not native_sandbox.exists()
+    native_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
+        str(repo/'tr3600/ssrplus/test-native-uci.lua'),str(root/'usr/lib/cudy-ss/migrate.lua'),str(native_sandbox)],
+        env=native_environment,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    (repo/'reports/native-uci-packed-verification.log').write_text(native_result.stdout)
+    print(native_result.stdout,end='')
+    native_result.check_returncode()
+    native_cases=['seeded_nil','missing_global_access_control','preserve_user_selection']
+    for case in native_cases:
+        assert 'PASS '+case+': native UCI, private SS preserved, repeat no-op' in native_result.stdout,case
+    assert 'PASS all synthetic native-UCI migration checks; no production configuration used' in native_result.stdout
     # Test all three preserved server ciphers with the actual compiled ARM64 Xray.
     for cipher in ['aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305']:
         cfg={'log':{'loglevel':'warning'},'dns':{'queryStrategy':'UseIPv4','servers':['198.18.255.1']},
@@ -110,7 +129,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-1.2.0-test1-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-1.2.0-test2-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
@@ -118,6 +137,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-') as temp:
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
         'actual_xray_version':xray_version,
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
+        'actual_arm64_native_uci_migration_cases_passed':len(native_cases),
         'private_ss':'preserved configuration and isolated network namespace',
         'actual_arm64_server_ciphers_tested':3,'actual_installed_syntax_checks':syntax,
         'hardware_flash_or_boot_tested':False}

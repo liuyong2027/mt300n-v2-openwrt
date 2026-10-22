@@ -1,9 +1,23 @@
 local fs=require('nixio.fs')
 local u=require('uci').cursor()
 if fs.access('/etc/cudy-ssrplus/migration-v1.done') then return end
-local g=u:get_first('shadowsocksr','global')
-if not g then g=u:section('shadowsocksr','global','global',{}) end
+-- Use the native libuci API available during early boot.
+local function first(config,kind)
+    local name
+    u:foreach(config,kind,function(s) if not name then name=s['.name'] end end)
+    return name
+end
+local function section(config,kind,name,values)
+    assert(u:set(config,name,kind))
+    for key,value in pairs(values) do assert(u:set(config,name,key,value)) end
+    return name
+end
+local g=first('shadowsocksr','global')
+if not g then g=section('shadowsocksr','global','global',{}) end
 local mode=u:get('mango_proxy','main','mode') or 'direct'
+local selected=u:get('shadowsocksr',g,'global_server')
+local initialize=not selected or selected=='' or
+    (selected=='nil' and fs.access('/etc/cudy-ssrplus/seeded-config'))
 local mapped={}
 local fields={
     address='server',port='server_port',uuid='vmess_id',sni='tls_host',
@@ -19,51 +33,52 @@ u:foreach('mango_proxy','node',function(n)
     local proto=n.protocol or 'vless'
     assert(proto=='vless' or proto=='shadowsocks' or proto=='vmess','Unsupported old node')
     if not existing then
-        assert(u:section('shadowsocksr','servers',id,{type='v2ray',v2ray_protocol=proto,
-            alias=n.label or n['.name'],local_port='1234',cudy_migration_source=n['.name']}))
-    end
-    for old,new in pairs(fields) do if n[old] then assert(u:set('shadowsocksr',id,new,n[old])) end end
-    if proto=='vless' then
-        u:set('shadowsocksr',id,'transport','raw')
-        u:set('shadowsocksr',id,'reality','1')
-        u:set('shadowsocksr',id,'tls','0')
-        u:set('shadowsocksr',id,'tls_flow','xtls-rprx-vision')
-    elseif proto=='vmess' then
-        u:set('shadowsocksr',id,'transport',n.network or 'raw')
-        u:set('shadowsocksr',id,'tls',n.tls=='tls' and '1' or '0')
-        u:set('shadowsocksr',id,'alter_id','0')
+        section('shadowsocksr','servers',id,{type='v2ray',v2ray_protocol=proto,
+            alias=n.label or n['.name'],local_port='1234',cudy_migration_source=n['.name']})
+        for old,new in pairs(fields) do if n[old] then assert(u:set('shadowsocksr',id,new,n[old])) end end
+        if proto=='vless' then
+            u:set('shadowsocksr',id,'transport','raw')
+            u:set('shadowsocksr',id,'reality','1')
+            u:set('shadowsocksr',id,'tls','0')
+            u:set('shadowsocksr',id,'tls_flow','xtls-rprx-vision')
+        elseif proto=='vmess' then
+            u:set('shadowsocksr',id,'transport',n.network or 'raw')
+            u:set('shadowsocksr',id,'tls',n.tls=='tls' and '1' or '0')
+            u:set('shadowsocksr',id,'alter_id','0')
+        end
     end
     mapped[n['.name']]=id
 end)
 local active=u:get('mango_proxy','main','node')
--- Existing SSR Plus+ settings take precedence when this profile is upgraded.
-if fs.access('/etc/cudy-ssrplus/seeded-config') or not u:get('shadowsocksr',g,'global_server') then
+-- A leftover seed marker must never replace a node selected after flashing.
+-- Preserve existing global settings, including routing mode, on a retry.
+if initialize then
     u:set('shadowsocksr',g,'global_server',mode=='direct' and 'nil' or (mapped[active] or 'nil'))
+    local runmode=({split='router',global='all',gfw='gfw',direct='router'})[mode]
+    assert(runmode,'Unknown old proxy mode')
+    u:set('shadowsocksr',g,'run_mode',runmode)
+    u:set('shadowsocksr',g,'udp_relay_server','same')
+    u:set('shadowsocksr',g,'prefer_nft','1')
+    u:set('shadowsocksr',g,'default_node_local_port','1234')
+    u:set('shadowsocksr',g,'dports','3')
+    u:set('shadowsocksr',g,'custom_ports','1-65535')
+    -- No unencrypted fallback when the active relay supports UDP.
+    u:set('shadowsocksr',g,'router_proxy','1')
 end
-local runmode=({split='router',global='all',gfw='gfw',direct='router'})[mode]
-assert(runmode,'Unknown old proxy mode')
-u:set('shadowsocksr',g,'run_mode',runmode)
-u:set('shadowsocksr',g,'udp_relay_server','same')
-u:set('shadowsocksr',g,'prefer_nft','1')
-u:set('shadowsocksr',g,'default_node_local_port','1234')
-u:set('shadowsocksr',g,'dports','3')
-u:set('shadowsocksr',g,'custom_ports','1-65535')
--- No unencrypted fallback when the active relay supports UDP.
-u:set('shadowsocksr',g,'router_proxy','1')
-local ac=u:get_first('shadowsocksr','access_control')
-if not ac then ac=u:section('shadowsocksr','access_control','access_control',{}) end
+local ac=first('shadowsocksr','access_control')
+if not ac then ac=section('shadowsocksr','access_control','access_control',{}) end
 local interfaces=u:get('shadowsocksr',ac,'Interface') or {'lan'}
 if type(interfaces)=='string' then interfaces={interfaces} end
 local interface_present=false
 for _,v in ipairs(interfaces) do if v=='cudy_ss' then interface_present=true end end
 if not interface_present then interfaces[#interfaces+1]='cudy_ss' end
 u:set('shadowsocksr',ac,'Interface',interfaces)
-u:set('shadowsocksr',ac,'router_proxy','1')
+if not u:get('shadowsocksr',ac,'router_proxy') then u:set('shadowsocksr',ac,'router_proxy','1') end
 local bypass=u:get('shadowsocksr',ac,'wan_bp_ips') or {}
 if type(bypass)=='string' then bypass={bypass} end
 local present=false;for _,v in ipairs(bypass) do if v=='198.18.255.0/30' then present=true end end
 if not present then bypass[#bypass+1]='198.18.255.0/30' end
-local old_bypass=u:get('mango_proxy','main','bypass4') or {}
+local old_bypass=initialize and u:get('mango_proxy','main','bypass4') or {}
 if type(old_bypass)=='string' then old_bypass={old_bypass} end
 for _,v in ipairs(old_bypass) do bypass[#bypass+1]=v end
 u:set('shadowsocksr',ac,'wan_bp_ips',bypass)
@@ -76,7 +91,7 @@ local retained={}
 for _,v in ipairs(servers) do if v~='127.0.0.1#1053' then retained[#retained+1]=v end end
 if #retained==0 then retained={'223.5.5.5','119.29.29.29'} end
 u:set('dhcp',dns,'server',retained)
-u:set('dhcp',dns,'filter_aaaa',mode=='direct' and '0' or '1')
+if initialize then u:set('dhcp',dns,'filter_aaaa',mode=='direct' and '0' or '1') end
 -- Retire exactly the known Mango script include, never delete arbitrary hooks.
 local include=u:get_all('firewall','mango_proxy')
 if include then
