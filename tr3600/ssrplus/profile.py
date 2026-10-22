@@ -32,6 +32,7 @@ cp -R "$kit/tr3600/luci-app-cudy-usb" package/
 cp -R "$kit/tr3600/luci-app-cudy-ss" package/
 cp -R "$kit/tr3600/cudy-webfiles" package/
 cp -R "$kit/tr3600/luci-app-cudy-webfiles" package/
+cp -R "$kit/tr3600/ssrplus/cudy-ddns-direct" package/
 python3 "$kit/tr3600/usb-integration.py" "$PWD"
 find package/luci-app-cudy-* package/cudy-webfiles -type f -exec sh -c 'head -c 2 "$1" | grep -q "#!" && chmod +x "$1" || :' sh {} \\;
 '''+text[end:]
@@ -51,6 +52,8 @@ cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
 python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"
 python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
+    text=text.replace('cp -R "$kit/files" .', '''cp -R "$kit/files" .
+python3 "$kit/tr3600/ssrplus/patch-ddns.py" --framework feeds/packages/net/ddns-scripts/files/usr/lib/ddns/dynamic_dns_functions.sh --resolver files/usr/libexec/cudy-dynu-resolve''')
     text=re.sub(r'^python3 "\$kit/scripts/build-profile.py".*\n','',text,flags=re.M)
     text=text.replace(' luci-app-mango-proxy','').replace(' mango-tcpcheck','')
     text=text.replace('! grep -qx \'CONFIG_PACKAGE_v2ray-geoip=y\' .config\n','').replace('! grep -qx \'CONFIG_PACKAGE_v2ray-geosite=y\' .config\n','')
@@ -69,6 +72,7 @@ CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks_NONE_Client=y
 # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Mihomo is not set
 # CONFIG_XRAY_CORE_NAIVE is not set
 CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_cudy-ddns-direct=y
 CONFIG_PACKAGE_dnsmasq-full=y
 CONFIG_PACKAGE_dnsmasq_full_nftset=y
 # CONFIG_PACKAGE_dnsmasq is not set
@@ -185,6 +189,11 @@ return M
     zone=importlib.util.module_from_spec(zone_spec);zone_spec.loader.exec_module(zone)
     (ss/'root/etc/uci-defaults/94-cudy-zt-zone').write_text(zone.patch(source),encoding='utf-8',newline='\n')
     files=ROOT/'files'
+    # Keep owner DDNS configuration, not program files from an older image.
+    # The package's first-boot hook recognizes and upgrades the known old
+    # keep-settings resolver overlay without replacing custom owner code.
+    (files/'lib/upgrade/keep.d/cudy-dynu-ddns').write_text('/etc/config/ddns\n',
+        encoding='utf-8',newline='\n')
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
@@ -216,6 +225,7 @@ return M
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',
         'private_ss':'SSR Plus+ server_config row; isolated Xray namespace; same client policy',
         'ss_server_config_revision':3,
+        'ddns_direct':'Dynu HTTPS curl sockets marked 255; WAN binding and TLS retained',
         'private_ss_ipv6':False,
         'hardware_validation':'pending'},indent=2)+'\n')
     print('Prepared SSR Plus+ build; no router was modified.')

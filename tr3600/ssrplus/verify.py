@@ -44,11 +44,15 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'usr/lib/cudy-ss/migrate.lua','usr/lib/cudy-ss/config.lua','usr/libexec/cudy-ss-gate',
         'usr/lib/cudy-ss/ss-server-migrate.lua','usr/lib/lua/cudy/ssr-server.lua',
         'usr/share/shadowsocksr/gen_cudy_ss_server.lua','usr/libexec/cudy-ssr-server-firewall',
+        'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct','usr/libexec/cudy-ddns-curl',
+        'etc/uci-defaults/80-cudy-ddns-direct',
         'etc/init.d/cudy_ss_core','usr/lib/cudy-webfiles/bin/cudy-webfiles',
         'usr/lib/cudy-webfiles/bin/filebrowser','usr/sbin/smbd','usr/bin/zerotier-one']:
         assert (root/required).is_file(),required
     assert (root/'lib/upgrade/cudy-tr3600.sh').read_bytes()==(repo/'tr3600/cudy-upgrade.sh').read_bytes()
-    for name in ['usr/bin/xray','bin/busybox','usr/sbin/smbd','usr/bin/zerotier-one']:
+    assert (root/'lib/upgrade/keep.d/cudy-dynu-ddns').read_text()=='/etc/config/ddns\n'
+    for name in ['usr/bin/xray','bin/busybox','usr/sbin/smbd','usr/bin/zerotier-one',
+        'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct']:
         data=(root/name).read_bytes()
         assert data[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<H',data,18)[0]==183,name
     xray_command=['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/xray')]
@@ -128,6 +132,10 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_ss_server.py'),
         '--root',str(root),'--report',str(server_report)],check=True)
     server_checks=json.loads(server_report.read_text())
+    ddns_report=repo/'reports/ddns-direct-packed-verification.json'
+    subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_ddns_direct.py'),
+        '--root',str(root),'--report',str(ddns_report)],check=True)
+    ddns_checks=json.loads(ddns_report.read_text())
     # Test all three preserved server ciphers with the actual compiled ARM64 Xray.
     for cipher in ['aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305']:
         cfg={'log':{'loglevel':'warning'},'dns':{'queryStrategy':'UseIPv4','servers':['198.18.255.1']},
@@ -169,6 +177,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
         'private_ss':'SSR Plus+ server row with preserved scope and isolated network namespace',
         'ss_server_end_to_end_checks':server_checks,
+        'ddns_direct_socket_checks':ddns_checks,
         'private_ss_ipv6_supported':False,
         'actual_arm64_server_ciphers_tested':3,'actual_installed_syntax_checks':syntax,
         'hardware_flash_or_boot_tested':False}

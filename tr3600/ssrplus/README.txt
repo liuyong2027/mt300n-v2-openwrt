@@ -39,6 +39,10 @@ files are kept on the router under /etc/cudy-ssrplus/ with restricted access.
 No owner credentials or ZeroTier identity are included in this image.
 
 Wi-Fi, USB/Samba, WebFiles, DDNS, ZeroTier and LED support are retained.
+The built-in Dynu HTTPS DDNS provider bypasses SSR on its own curl sockets
+while retaining WAN binding and certificate checks. Public IP detection,
+encrypted provider DNS resolution and HTTPS updates use this path; ordinary
+router traffic and other DDNS providers keep their existing policy.
 Supported old Mango VLESS/SS/VMess node fields are translated once. Failover
 history and per-node test state are not copied. Test2's native-UCI migration
 and LED fixes are included. No NaiveProxy/Cronet build is selected.
