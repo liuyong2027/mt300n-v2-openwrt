@@ -97,6 +97,36 @@ CONFIG_PACKAGE_v2ray-geosite=y
         path.write_text(s,encoding='utf-8',newline='\n')
     model=lib/'cudy-ss/ss-zt.lua'
     replace(model,'found.listen==c.listen','found.listen=="0.0.0.0"')
+    # The UI and runtime use exactly the same original private credential rules.
+    replace(model, '''function M.validate(raw)
+    if not raw or raw.enabled~='1' then return nil end
+    local c=M.scope(raw)
+    local port=tonumber(raw.port)
+    assert(port and port==math.floor(port) and port>=1024 and port<=65535 and not ({[1053]=true,[10808]=true,[10809]=true,[10810]=true,[12345]=true})[port],'Invalid or reserved port')
+    assert(raw.method=='aes-128-gcm' or raw.method=='aes-256-gcm' or raw.method=='chacha20-ietf-poly1305','An authenticated SS cipher is required')
+    assert(type(raw.password)=='string' and #raw.password>=24 and #raw.password<=128 and not raw.password:find('[%c]'),'A strong generated password is required')
+    c.port=port; c.method=raw.method; c.password=raw.password
+    return c
+end''', '''function M.private_port(value)
+    local port=tonumber(value)
+    assert(port and port==math.floor(port) and port>=1024 and port<=65535 and not ({[1053]=true,[10808]=true,[10809]=true,[10810]=true,[12345]=true})[port],'Invalid or reserved port')
+    return port
+end
+function M.private_credentials(raw,allow_empty_password)
+    local port=M.private_port(raw.port)
+    assert(raw.method=='aes-128-gcm' or raw.method=='aes-256-gcm' or raw.method=='chacha20-ietf-poly1305','An authenticated SS cipher is required')
+    if not allow_empty_password or (raw.password~=nil and raw.password~='') then
+        assert(type(raw.password)=='string' and #raw.password>=24 and #raw.password<=128 and not raw.password:find('[%c]'),'A strong generated password is required')
+    end
+    return {port=port,method=raw.method,password=raw.password}
+end
+function M.validate(raw)
+    if not raw or raw.enabled~='1' then return nil end
+    local c=M.scope(raw)
+    local credentials=M.private_credentials(raw)
+    c.port=credentials.port; c.method=credentials.method; c.password=credentials.password
+    return c
+end''')
     # Keep existing validation, approval scope and transaction logic.
     s=model.read_text(encoding='utf-8')
     s=s.replace('function M.guard(c)\n', 'function M.legacy_guard(c)\n')

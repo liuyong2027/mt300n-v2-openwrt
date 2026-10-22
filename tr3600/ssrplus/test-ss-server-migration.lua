@@ -13,25 +13,36 @@ for part in root:match('^(.*)/[^/]+$'):gmatch('[^/]+') do
 end
 local migration=assert(dofile(migrate_path))
 local config=assert(dofile(config_path))
+-- The generated validator loads this exact module once at its final bridge.
+-- A temporary native fixture must not load a different installed/live copy.
+local original_dofile=dofile
+dofile=function(path)
+    if path=='/usr/lib/cudy-ss/config.lua' then return config end
+    return original_dofile(path)
+end
 local validator=assert(dofile(arg[4] or '/usr/lib/cudy-ss/ss-zt.lua'))
+dofile=original_dofile
 local function mkdir(path) assert(fs.mkdir(path));assert(fs.chmod(path,'700')) end
 local function write(path,data) assert(fs.writefile(path,data));assert(fs.chmod(path,'600')) end
 mkdir(root)
 local cases={{name='disabled_preserved',enabled='0',global='0'},
     {name='enabled_global_off',enabled='1',global='0'},
-    {name='enabled_global_on',enabled='1',global='1'}}
+    {name='enabled_global_on',enabled='1',global='1'},
+    {name='fresh_disabled',enabled='0',global='0',fresh=true}}
 for _,case in ipairs(cases) do
     local dir=root..'/'..case.name
     mkdir(dir);mkdir(dir..'/config');mkdir(dir..'/saved')
     local legacy="config server 'main'\n option enabled '"..case.enabled.."'\n"..[[
  option port '8386'
  option method 'aes-256-gcm'
+]]
+    if not case.fresh then legacy=legacy..[[
  option password 'synthetic-private-existing-password'
  option listen '10.42.0.2'
  option subnet '10.42.0.0/24'
  option interface 'ztabcdef'
  option network_id '0123456789abcdef'
-]]
+]] end
     write(dir..'/config/cudy_ss',legacy)
     write(dir..'/config/shadowsocksr',"config server_global 'server_global'\n option enable_server '"..case.global.."'\n"..[[
 config global 'global'
@@ -62,17 +73,24 @@ config servers 'owner_node'
     assert(row['.type']=='server_config' and row.type=='shadowsocks')
     assert(row.cudy_private=='1' and row.cudy_access=='zerotier')
     assert(row.enable==case.enabled and row.server_port=='8386')
-    assert(row.ss_password=='synthetic-private-existing-password' and row.ss_method=='aes-256-gcm')
+    assert(row.ss_method=='aes-256-gcm')
     assert(row.ss_network=='tcp,udp')
-    assert(row.cudy_zt_network_id=='0123456789abcdef' and row.cudy_zt_interface=='ztabcdef')
-    assert(row.cudy_zt_listen=='10.42.0.2' and row.cudy_zt_subnet=='10.42.0.0/24')
+    if case.fresh then
+        for _,field in ipairs({'ss_password','cudy_zt_network_id','cudy_zt_interface','cudy_zt_listen','cudy_zt_subnet'}) do
+            assert(row[field]==nil,'Fresh disabled row was configured or approved automatically: '..field)
+        end
+    else
+        assert(row.ss_password=='synthetic-private-existing-password')
+        assert(row.cudy_zt_network_id=='0123456789abcdef' and row.cudy_zt_interface=='ztabcdef')
+        assert(row.cudy_zt_listen=='10.42.0.2' and row.cudy_zt_subnet=='10.42.0.0/24')
+    end
     assert(c:get('shadowsocksr','server_global','enable_server')==case.global)
     assert(c:get('shadowsocksr','global','global_server')=='owner_node')
     assert(c:get('shadowsocksr','global','run_mode')=='gfw')
     local raw=config.raw(c)
     assert(raw.enabled==((case.enabled=='1' and case.global=='1') and '1' or '0'))
     assert(raw.port=='8386' and raw.password==row.ss_password and raw.subnet==row.cudy_zt_subnet)
-    for _,network in ipairs({'tcp','udp','tcp,udp'}) do
+    if not case.fresh then for _,network in ipairs({'tcp','udp','tcp,udp'}) do
         assert(c:set('shadowsocksr','cudy_zt_private','ss_network',network))
         local selected=config.raw(c)
         assert(selected.network==network)
@@ -92,7 +110,7 @@ config servers 'owner_node'
         end
         generated.inbounds[1].settings.network=network=='tcp' and 'udp' or 'tcp'
         assert(not config.matches(generated,active,true),'Transport drift was accepted')
-    end
+    end end
     for _,invalid in ipairs({'udp,tcp','tcp,udp,icmp','all',''}) do
         assert(c:set('shadowsocksr','cudy_zt_private','ss_network',invalid))
         assert(not pcall(config.raw,c),'Invalid transport was accepted')
@@ -118,4 +136,4 @@ config servers 'owner_node'
     assert(not pcall(config.raw,c),'Duplicate private row was accepted');c:close()
     print('PASS '..case.name..': native UCI private-row migration and edited-row preservation')
 end
-print('PASS all 3 native private SS server_config migration cases; TCP/UDP/both and invalid transports')
+print('PASS all 4 native private SS server_config migration cases; fresh disabled preserved; TCP/UDP/both and invalid transports')

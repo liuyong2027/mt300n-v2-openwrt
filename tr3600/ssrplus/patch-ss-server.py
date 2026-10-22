@@ -81,6 +81,9 @@ function o.validate(self, value, section)
     if cudy_ss_private and value ~= 'aes-128-gcm' and value ~= 'aes-256-gcm' and value ~= 'chacha20-ietf-poly1305' then
         return nil, translate('The approved private service supports its original three AEAD methods')
     end
+    -- The private page validates the complete submitted candidate using the
+    -- namespace runtime's shared credential helper, including fresh/off rows.
+    if cudy_ss_private then return value end
     local valid, result = pcall(cudy_ss_model.method, value, password)
     if not valid then return nil, tostring(result) end
     return value

@@ -67,7 +67,7 @@
         },
         {
           "name": "Validate replacement and private SS migration",
-          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8\n.test-venv/bin/python tr3600/ssrplus/test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py"
+          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8\n.test-venv/bin/python tr3600/ssrplus/test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py"
         },
         {
           "name": "Test actual namespace routing and private scope",

@@ -18,6 +18,10 @@ both the server global switch and its row switch. Migration never turns on
 the server global switch. The old cudy_ss config is retained as an inert
 backup, not a second live credential source. The duplicate SS management
 page and its old configuration-writing API are removed.
+If private SS was never configured, it stays disabled without credentials or
+approval. Its unified editing page requires an explicit connected private
+ZeroTier IPv4 /24 selection for first approval; it never approves a network
+automatically. The private page shares runtime port/password/cipher checks.
 
 The private row runs internally in an isolated network namespace. Decrypted
 TCP and UDP re-enter the host through css-host and use the same SSR Plus+

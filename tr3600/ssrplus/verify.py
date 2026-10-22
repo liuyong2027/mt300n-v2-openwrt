@@ -123,7 +123,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     (repo/'reports/private-ss-migration-packed-verification.log').write_text(private_migration_result.stdout)
     print(private_migration_result.stdout,end='')
     private_migration_result.check_returncode()
-    assert 'PASS all 3 native private SS server_config migration cases' in private_migration_result.stdout
+    assert 'PASS all 4 native private SS server_config migration cases' in private_migration_result.stdout
     server_report=repo/'reports/ss-server-packed-verification.json'
     subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_ss_server.py'),
         '--root',str(root),'--report',str(server_report)],check=True)
@@ -164,7 +164,9 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'actual_xray_version':xray_version,
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
         'actual_arm64_native_uci_migration_cases_passed':len(native_cases),
-        'actual_arm64_private_ss_row_migration_cases_passed':3,
+        'actual_arm64_private_ss_row_migration_cases_passed':4,
+        'build_recipe_commit':os.environ.get('GITHUB_SHA'),
+        'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
         'private_ss':'SSR Plus+ server row with preserved scope and isolated network namespace',
         'ss_server_end_to_end_checks':server_checks,
         'private_ss_ipv6_supported':False,

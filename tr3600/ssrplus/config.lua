@@ -9,6 +9,11 @@ local function transport(network)
     assert(network=='tcp' or network=='udp' or network=='tcp,udp','Invalid private SS transport')
     return network=='tcp,udp' and '{ tcp, udp }' or network
 end
+function M.server_raw(row)
+    return {enabled=row.enable,port=row.server_port,method=row.ss_method,password=row.ss_password,
+        network=row.ss_network,network_id=row.cudy_zt_network_id,interface=row.cudy_zt_interface,
+        listen=row.cudy_zt_listen,subnet=row.cudy_zt_subnet}
+end
 function M.raw(u)
     u=u or require('uci').cursor()
     local row=u:get_all('shadowsocksr',M.section)
@@ -27,11 +32,10 @@ function M.raw(u)
     local global
     u:foreach('shadowsocksr','server_global',function(s) if not global then global=s end end)
     local global_enabled=global and global.enable_server or '0'
-    return {enabled=(row.enable=='1' and global_enabled=='1') and '1' or '0',
-        requested_enabled=row.enable,global_enabled=global_enabled,
-        port=row.server_port,method=row.ss_method,password=row.ss_password,network=row.ss_network,
-        network_id=row.cudy_zt_network_id,interface=row.cudy_zt_interface,
-        listen=row.cudy_zt_listen,subnet=row.cudy_zt_subnet}
+    local raw=M.server_raw(row)
+    raw.enabled=(row.enable=='1' and global_enabled=='1') and '1' or '0'
+    raw.requested_enabled=row.enable;raw.global_enabled=global_enabled
+    return raw
 end
 function M.validate(raw,validate)
     if raw then transport(raw.network) end
