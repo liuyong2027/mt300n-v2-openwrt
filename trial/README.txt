@@ -36,4 +36,14 @@ make -C openwrt defconfig
 make -C openwrt download -j4
 make -C openwrt -j4 V=s
 python3 ../trial/verify.py .
-Hardware acceptance and actual post-flash overlay free space are pending.
+The original 8a969945 capacity image was flashed on 2026-10-22. On-device
+compatibility fixes below passed node, traffic, DNS, ZeroTier and LuCI checks.
+The original image does not include these fixes; a new capacity build is required.
+
+On-device corrections, 2026-10-22:
+Use nixio symbolic file modes and native UCI cursor:set section creation.
+Reference immutable SquashFS defaults when backing up migration inputs.
+Include luci-compat; load actual runtime Lua dependencies before generator fixtures.
+Serialize init actions with a stable lock inode; prevent daemon lock inheritance.
+Use numeric nft dumps and quote logger messages. Real node migration and traffic
+acceptance are recorded separately from the original capacity-only build.

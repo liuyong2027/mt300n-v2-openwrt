@@ -3,6 +3,11 @@ local root,recipe,output=arg[1],arg[2],arg[3]
 package.path=root..'/usr/lib/lua/?.lua;'..root..'/usr/lib/lua/?/init.lua;'..package.path
 package.cpath=root..'/usr/lib/lua/?.so;'..package.cpath
 local json=require('luci.jsonc')
+-- Load real runtime dependencies before the command/UCI fixtures; a stub must not hide a missing package.
+assert(require('luci.sys'))
+assert(require('luci.model.uci'))
+local datatypes=require('luci.cbi.datatypes')
+assert(type(datatypes.hostname)=='function')
 local M=dofile(recipe..'/migration.lua')
 local quoted_path=assert(io.open(output..'/quoting','w'))
 assert(quoted_path:write(M.encode({{type='test',name='owner',options={value="a' b $"..string.char(34,96)}}})))
@@ -19,7 +24,7 @@ luci={sys={exec=function(cmd)
 end}}
 nixio={bin={b64decode=function()error('Unexpected Base64 path')end,b64encode=function()error('Unexpected Base64 path')end}}
 package.loaded['luci.sys']=luci.sys
-package.loaded['luci.cbi.datatypes']={hostname=function(s)return s:find('[a-zA-Z]')~=nil end}
+package.loaded['luci.cbi.datatypes']=datatypes
 package.loaded['luci.jsonc']={parse=json.parse,stringify=function(o) output_json=o;return json.stringify(o)end}
 local current,socks
 package.loaded['luci.model.uci']={cursor=function()return {

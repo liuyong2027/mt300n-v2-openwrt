@@ -35,7 +35,7 @@ uci:foreach('mango_proxy','node',function(s) nodes[#nodes+1]=s end)
 local result=M.plan(p,nodes) -- Validate all node fields before changing any file.
 local root='/etc/ssrplus/mango-migration'
 assert(fs.mkdirr(root))
-assert(fs.chmod(root,448)) -- 0700, configuration backups can contain passwords.
+assert(fs.chmod(root,'rwx------')) -- nixio accepts symbolic or octal-text modes, not POSIX bit integers.
 local before={}
 local targets={
     '/etc/config/shadowsocksr','/etc/config/firewall','/etc/config/dhcp',
@@ -44,12 +44,19 @@ local targets={
 }
 for i,path in ipairs(targets) do
     before[path]=read(path)
-    if before[path] then write(root..'/original-'..i,before[path]) end
+    if before[path] then
+        if read('/rom'..path)==before[path] then
+            -- Immutable defaults remain recoverable from SquashFS; do not copy large rule lists to overlay.
+            write(root..'/original-'..i..'.rom','/rom'..path..'\n')
+        else
+            write(root..'/original-'..i,before[path])
+        end
+    end
 end
 write(root..'/mango_proxy.original',assert(old))
 local function stage(path,text)
     write(path..'.mango-new',text)
-    assert(fs.chmod(path..'.mango-new',384)) -- 0600
+    assert(fs.chmod(path..'.mango-new','rw-------'))
     assert(os.rename(path..'.mango-new',path))
 end
 local ok,err=pcall(function()
@@ -87,8 +94,10 @@ local ok,err=pcall(function()
     end
     -- Preserve every ZeroTier zone, forwarding, local.conf and identity byte.
     if not uci:get('firewall','shadowsocksr') then
-        assert(uci:section('firewall','include','shadowsocksr',{
-            type='script',path='/var/etc/shadowsocksr.include',fw4_compatible='1'}))
+        assert(uci:set('firewall','shadowsocksr','include'))
+        for key,value in pairs({type='script',path='/var/etc/shadowsocksr.include',fw4_compatible='1'}) do
+            assert(uci:set('firewall','shadowsocksr',key,value))
+        end
     end
     -- Retire only DNS values emitted by the old proxy. Keep custom DNS entries.
     uci:foreach('dhcp','dnsmasq',function(s)
@@ -110,10 +119,13 @@ end)
 if not ok then
     uci:revert('firewall');uci:revert('dhcp')
     for _,path in ipairs(targets) do
-        if before[path] then stage(path,before[path]) else fs.unlink(path) end
+        if read(path)~=before[path] then
+            if before[path] then stage(path,before[path]) else fs.unlink(path) end
+        end
     end
     fs.unlink(marker)
-    io.stderr:write('SSR Plus+ migration failed; original files restored\n')
+    local where=tostring(err):match(':%d+:') or ''
+    io.stderr:write('SSR Plus+ migration failed '..where..'; original files restored\n')
     os.exit(1) -- Do not log credentials or arbitrary config contents.
 end
 print('Legacy configuration migration completed; original Mango configuration retained')

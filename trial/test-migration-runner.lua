@@ -15,14 +15,17 @@ function fakeuci:foreach(c,t,fn)
   if not t or item['.type']==t then fn(item) end
  end
 end
-function fakeuci:section(c,t,s,o)
+local function addsection(c,t,s,o)
  configs[c]=configs[c] or {_order={}}
  local item={['.name']=s,['.type']=t}
  for k,v in pairs(o or {}) do item[k]=v end
  configs[c][s]=item;table.insert(configs[c]._order,s);return s
 end
 function fakeuci:delete(c,s) configs[c][s]=nil;return true end
-function fakeuci:set(c,s,k,v) configs[c][s][k]=v;return true end
+function fakeuci:set(c,s,k,v)
+ if v==nil then return addsection(c,k,s) end
+ configs[c][s][k]=v;return true
+end
 function fakeuci:commit(c)
  if fail_once=='commit' then fail_once=nil;return false end
  files['/etc/config/'..c]='committed '..c
@@ -31,7 +34,10 @@ end
 function fakeuci:revert() return true end
 package.preload.uci=function()return {cursor=function()return fakeuci end}end
 package.preload['nixio.fs']=function()return {
- mkdirr=function()return true end,chmod=function()return true end,
+ mkdirr=function()return true end,chmod=function(_,mode)
+  assert(mode=='rwx------' or mode=='rw-------','Invalid nixio permission mode')
+  return true
+ end,
  unlink=function(p)files[p]=nil;return true end
 }end
 io.open=function(path,mode)
@@ -94,9 +100,25 @@ for _,failure in ipairs({'/etc/ssrplus/white.list.mango-new','commit'}) do
  assert(not files['/etc/ssrplus/mango-migration/completed'])
 end
 setup()
-fakeuci:section('shadowsocksr','servers','native',{server='native.invalid'})
+fakeuci:set('shadowsocksr','native','servers')
+fakeuci:set('shadowsocksr','native','server','native.invalid')
 assert(run()==0 and files['/etc/config/shadowsocksr']=='native defaults')
 setup();configs.mango_proxy.main=nil
 assert(run()==0 and files['/etc/config/shadowsocksr']=='native defaults')
+setup()
+local rom_rules=string.rep('fixture.example\n',100000)
+files['/etc/ssrplus/gfw_list.conf']=rom_rules
+files['/rom/etc/ssrplus/gfw_list.conf']=rom_rules
+assert(run()==0)
+assert(files['/etc/ssrplus/mango-migration/original-6.rom']=='/rom/etc/ssrplus/gfw_list.conf\n')
+assert(not files['/etc/ssrplus/mango-migration/original-6'])
+assert(files['/etc/ssrplus/gfw_list.conf']==rom_rules)
+setup()
+files['/etc/ssrplus/gfw_list.conf']=rom_rules
+files['/rom/etc/ssrplus/gfw_list.conf']=rom_rules
+fail_once='commit'
+assert(run()==1)
+assert(files['/etc/ssrplus/gfw_list.conf']==rom_rules)
+assert(not files['/etc/ssrplus/gfw_list.conf.mango-new'])
 io.open,os.rename,os.exit,dofile=original.open,original.rename,original.exit,original.dofile
 print('migration runner: original retention, native precedence, idempotence, owned include cleanup, custom DNS and rollback passed')

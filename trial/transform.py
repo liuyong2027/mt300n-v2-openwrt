@@ -82,8 +82,8 @@ for name in ['luci-app-ssr-plus','dns2tcp','lua-neturl','microsocks','tcping']:
     shutil.copytree(vendor/name, ROOT/'package'/name, symlinks=True)
 # The selected protocols use TCP endpoints; keep TCP/ICMP GUI probes.
 # The standalone UDP nping fallback is only useful for the omitted UDP-only cores.
-replace('package/luci-app-ssr-plus/Makefile', '+curl +nping', '+curl')
-replace('package/luci-app-ssr-plus/Makefile', 'PKG_RELEASE:=3\n', 'PKG_RELEASE:=4\n')
+replace('package/luci-app-ssr-plus/Makefile', '+curl +nping', '+curl +luci-compat')
+replace('package/luci-app-ssr-plus/Makefile', 'PKG_RELEASE:=3\n', 'PKG_RELEASE:=5\n')
 controller = ROOT/'package/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua'
 text=controller.read_text()
 udp_fallback = "\t\tif not e.ping then\n\t\t\tlocal udp_cmd = string.format(\"nping --udp -c 1 -p %d %s 2>/dev/null | grep -o 'Avg rtt: [0-9.]*ms' | awk '{print $3}' | sed 's/ms//' | head -1\", port, domain)\n\t\t\tlocal udp_res = luci.sys.exec(udp_cmd)\n\t\t\tif udp_res and udp_res ~= \"\" then\n\t\t\t\tlocal ping_num = tonumber(udp_res)\n\t\t\t\tif ping_num then e.ping = math.floor(ping_num) end\n\t\t\tend\n\t\tend\n"
@@ -127,6 +127,14 @@ $(eval $(call BuildPackage,shadowsocksr-libev-ssr-check))
 # Use the baseline Xray recipe and its reviewed Vision/UDP443 patch, not the vendor core.
 init = 'package/luci-app-ssr-plus/root/etc/init.d/shadowsocksr'
 replace(init, 'START=95\n', 'START=95\nexport GOMEMLIMIT=48MiB\nexport GOMAXPROCS=1\n')
+# Serialize actions without unlinking an active lock; close lock descriptors in daemon children.
+replace(init, 'set_lock() {\n\texec 1000>"$LOCK_FILE"\n\tflock -xn 1000\n}\n\nunset_lock() {\n\tflock -u 1000\n\trm -rf "$LOCK_FILE"\n}\n\nunlock() {\n\tfailcount=1\n\twhile [ "$failcount" -le 10 ]; do\n\t\tif [ -f "$LOCK_FILE" ]; then\n\t\t\tlet "failcount++"\n\t\t\tsleep 1s\n\t\t\t[ "$failcount" -ge 10 ] && unset_lock\n\t\telse\n\t\t\tbreak\n\t\tfi\n\tdone\n}\n', 'set_lock() {\n\texec 9>"$LOCK_FILE"\n\tflock -x -w 60 9 || exit 1\n}\n\nunset_lock() {\n\tflock -u 9 2>/dev/null || true\n\texec 9>&-\n}\n\nunlock() {\n\t# Kernel flock releases dead owners; never unlink another process\'s lock inode.\n\t:\n}\n')
+replace(init, '"$@" >/dev/null 2>&1 &', '"$@" 9>&- >/dev/null 2>&1 &')
+replace(init, '\t\tstart_rules\n', '\t\tstart_rules 9>&-\n')
+replace(init, '\t\tstart_switch\n', '\t\tstart_switch 9>&-\n')
+replace(init, '\tstart_monitor\n', '\tstart_monitor 9>&-\n')
+replace(init, 'nft list ', 'nft -nn list ', count=11)
+
 # On official OpenWrt the dnsmasq configuration lives in /var/etc.
 replace(init, '/tmp/etc/dnsmasq.conf.', '/var/etc/dnsmasq.conf.', count=2)
 # The upstream fallback computes /tmp/dnsmasq-ssrplus.d; keep it inside the actual conf-dir.
@@ -159,6 +167,12 @@ s = s.replace('\n', '\n'+resolver, 1)
 needle = '$(uci -P /var/state get network."$name".ifname 2>/dev/null)'
 assert s.count(needle) >= 4
 s = s.replace(needle, '$(ssr_interface_device "$name")')
+# Numeric dumps avoid blocking early boot on service/name lookups before the DNS relay starts.
+assert s.count('NFT="nft"')==1
+s=s.replace('NFT="nft"','NFT="nft -nn"')
+assert s.count('logger -st ssr-rules[$$] -p$1 $2')==1
+s=s.replace('logger -st ssr-rules[$$] -p$1 $2','logger -st "ssr-rules[$$]" -p "$1" -- "$2"')
+
 p.write_text(s,encoding='utf-8',newline='\n')
 # Direct all ZeroTier destinations around the transparent proxy, including public ZT ranges.
 replace(init, '-b "$(uci_get_by_type access_control wan_bp_ips)"',
@@ -192,6 +206,7 @@ config = '\n'.join(line for line in config.splitlines() if not any(x in line for
 # Explicit choices are essential: MIPS defaults otherwise omit Xray.
 config += '''CONFIG_PACKAGE_xray-core=y
 CONFIG_PACKAGE_luci-app-ssr-plus=y
+CONFIG_PACKAGE_luci-compat=y
 CONFIG_PACKAGE_mango-zerotier-support=y
 # CONFIG_PACKAGE_dnsmasq is not set
 CONFIG_PACKAGE_dnsmasq-full=y

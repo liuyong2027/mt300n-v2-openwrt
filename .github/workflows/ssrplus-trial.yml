@@ -41,7 +41,7 @@
         },
         {
           "name": "Convert locked Release 23 to SSR Plus+ trial",
-          "run": "python3 release23/prepare.py\npython3 trial/transform.py source23\nlua5.1 trial/test-migration.lua trial\nlua5.1 trial/test-migration-runner.lua trial\npython3 -m py_compile trial/*.py\nbash -n source23/scripts/prepare.sh\nfind source23/package/mango-zerotier-support/root -type f -name '*.sh' -exec sh -n {} \\;\npython3 trial/test-check.py source23"
+          "run": "python3 release23/prepare.py\npython3 trial/transform.py source23\nlua5.1 trial/test-migration.lua trial\nlua5.1 trial/test-migration-runner.lua trial\npython3 -m py_compile trial/*.py\nbash -n source23/scripts/prepare.sh\nfind source23/package/mango-zerotier-support/root -type f -name '*.sh' -exec sh -n {} \\;"
         },
         {
           "name": "Test preserved ZeroTier rules",
@@ -79,7 +79,7 @@
           "name": "Validate actual MIPS Lua generator and Xray protocols",
           "id": "protocols",
           "if": "steps.compile.outcome == 'success'",
-          "run": "roots=(source23/openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nmkdir -p source23/reports/generator\nqemu-mipsel-static -L \"$root\" \"$root/usr/bin/lua\" trial/validate-generator.lua \"$root\" \"$PWD/trial\" \"$PWD/source23/reports/generator\"\nfor file in source23/reports/generator/*.json; do\n  qemu-mipsel-static -L \"$root\" \"$root/usr/bin/xray\" run -test -config \"$file\"\ndone\npython3 - <<'PY'\nimport json\nfrom pathlib import Path\np=Path('source23/reports')\nfiles=sorted(x.name for x in (p/'generator').glob('*.json'))\nassert len(files)>=6\n(p/'generator-validation.json').write_text(json.dumps({'status':'passed','scope':'actual MIPS Lua generator with fixture UCI; actual MIPS Xray config check','configs':files,'hardware_acceptance':'pending'},indent=2)+'\\n')\nPY",
+          "run": "roots=(source23/openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\nroot=\"$(realpath \"${roots[0]}\")\"\nmkdir -p source23/reports/generator\nqemu-mipsel-static -L \"$root\" \"$root/usr/bin/lua\" trial/test-native-api.lua \"$root\" \"$PWD/source23/reports/native-api\"\nqemu-mipsel-static -L \"$root\" \"$root/usr/bin/lua\" trial/validate-generator.lua \"$root\" \"$PWD/trial\" \"$PWD/source23/reports/generator\"\nfor file in source23/reports/generator/*.json; do\n  qemu-mipsel-static -L \"$root\" \"$root/usr/bin/xray\" run -test -config \"$file\"\ndone\npython3 - <<'PY'\nimport json\nfrom pathlib import Path\np=Path('source23/reports')\nfiles=sorted(x.name for x in (p/'generator').glob('*.json'))\nassert len(files)>=6\n(p/'generator-validation.json').write_text(json.dumps({'status':'passed','scope':'actual MIPS Lua generator with fixture UCI; actual MIPS Xray config check','configs':files,'hardware_acceptance':'pending'},indent=2)+'\\n')\nPY",
           "continue-on-error": true
         },
         {
