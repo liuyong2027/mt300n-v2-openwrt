@@ -70,3 +70,9 @@ lookups. The saved node domain, TLS/REALITY server name, WebSocket host and all
 credentials stay unchanged. Explicit per-node DNS resolvers retain priority.
 Native generator cases cover address substitution, invalid/mismatched bootstrap
 inputs, custom resolvers and preserved TLS/REALITY identities.
+
+Limit the node list to one automatic probe at a time on this small router.
+Do not pass node hostnames to nft/ipset: that starts additional DNS resolution.
+For literal IPv4 probes, remove a temporary bypass only when the probe added it;
+an existing bypass may belong to the running proxy. Six native Lua regression
+cases cover domains, invalid addresses, and existing/new nft/ipset elements.

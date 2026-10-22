@@ -47,6 +47,11 @@ assert 'endpoint_address = bootstrap_ip' in generator
 assert generator.count('address = endpoint_address,')==4
 rules=(target/'usr/bin/ssr-rules').read_text()
 assert rules.count('meta mark 0xff counter return comment ssrplus_core_self_bypass')==4
+for path, expected in {
+    'usr/lib/lua/luci/controller/shadowsocksr.lua':'891ceaae897eec34af74ce14ab5bf4f84cb4f1ff80236f2703e25221d6ef0a8c',
+    'usr/lib/lua/luci/view/shadowsocksr/server_list.htm':'0b020ca196590c92ed68390d2bd07a1faef16473992a3e82a945c9cc1ff9c328',
+}.items():
+    assert hashlib.sha256((target/path).read_bytes()).hexdigest()==expected,path
 ssrconfig=(target/'etc/config/shadowsocksr').read_text()
 assert "option chinadns_forward 'none'" not in ssrconfig
 assert "list wan_fw_ips '1.1.1.1'" in ssrconfig
