@@ -58,3 +58,8 @@ rules if a restore fails, and restore TPROXY policy routing with cached rules.
 Firewall reload uses an atomic transaction. Fix the background cache daemon PID.
 Kernel fixtures exercise write failure, malformed-cache rollback and route restore.
 Hardware DNS/port/UI/recovery/restart/boot acceptance is recorded separately.
+Xray's existing SO_MARK=255 egress must bypass both TCP hooks and UDP TPROXY;
+otherwise a rotating endpoint or a direct outbound can feed back into Xray.
+Kernel socket tests verify unmarked interception and marked bypass, including
+cache reload. Cache keys include the rules implementation hash. Bound the HTTP
+bootstrap resolver so a failed DNS fallback cannot hold the service lock forever.

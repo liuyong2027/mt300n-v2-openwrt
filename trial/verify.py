@@ -40,6 +40,9 @@ ztinit=(target/'etc/init.d/zerotier').read_text()
 assert ztinit.count('/usr/libexec/mango-zt-direct')==3
 ssrinit=(target/'etc/init.d/shadowsocksr').read_text()
 assert 'GOMEMLIMIT=48MiB' in ssrinit
+assert 'curl --connect-timeout 3 --max-time 5' in ssrinit
+rules=(target/'usr/bin/ssr-rules').read_text()
+assert rules.count('meta mark 0xff counter return comment ssrplus_core_self_bypass')==4
 ssrconfig=(target/'etc/config/shadowsocksr').read_text()
 assert "option chinadns_forward 'none'" not in ssrconfig
 assert "list wan_fw_ips '1.1.1.1'" in ssrconfig

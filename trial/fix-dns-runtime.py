@@ -19,6 +19,8 @@ def function(text,name,replacement):
 s=init.read_text(encoding='utf-8')
 s=once(s,'PERSIST_DIR="/usr/share/nftables.d/ruleset-post"','PERSIST_DIR="/tmp/ssrplus-nft"')
 s=once(s,'BACKUP_DIR="/etc/ssrplus/ssrplus-persist"','BACKUP_DIR="/tmp/ssrplus-nft-backup"')
+s=once(s,'curl -sSL "http://119.29.29.29/d?dn=$host"',
+       'curl --connect-timeout 3 --max-time 5 -sSL "http://119.29.29.29/d?dn=$host"')
 s=once(s,'\t\tstart_rules 9>&-\n\t\tstart_dns\n', '''		if ! start_dns; then
 			echolog "DNS startup failed; refusing to report a successful start."
 			unset_lock
@@ -43,6 +45,14 @@ init.write_text(s,encoding='utf-8',newline='\n')
 s=rules.read_text(encoding='utf-8')
 s=once(s,'NFT="nft -nn"','NFT="nft -nn -t"')
 s=once(s,'NFTABLES_RULES_DIR="/usr/share/nftables.d/ruleset-post"','NFTABLES_RULES_DIR="/tmp/ssrplus-nft"')
+# The pinned Xray generator sets SO_MARK=255 on its own egress sockets.
+for chain in ['inet ss_spec ss_spec_output','inet ss_spec ss_spec_prerouting']:
+    before='$NFT flush chain '+chain+' 2>/dev/null'
+    count=s.count(before)
+    assert count in [1,2],(chain,count)
+    s=s.replace(before,before+'\n\t\t$NFT add rule '+chain+' meta mark 0xff counter return comment ssrplus_core_self_bypass')
+before='\tif $NFT list chain ip ss_spec_mangle ss_spec_tproxy >/dev/null 2>&1; then'
+s=once(s,before,'\t$NFT add rule ip ss_spec_mangle ss_spec_tproxy meta mark 0xff counter return comment ssrplus_core_self_bypass\n'+before)
 s=function(s,'gen_include_nft',r'''
 gen_include_nft() {
 	[ -n "$FWI" ] || return 0
@@ -154,5 +164,7 @@ s=once(s,'\t\tFORCE_RECREATE=0\n\t\tPERSISTENCE_EXISTS=0', '''		FORCE_RECREATE=0
 		if [ "$RULES_FINGERPRINT" != "$(cat "$NFTABLES_RULES_FILE.key" 2>/dev/null)" ]; then
 			FORCE_RECREATE=1
 		fi''')
+s=once(s,'sha256sum /etc/ssrplus/china_ssr.txt /etc/ssrplus/netflixip.list',
+       'sha256sum /usr/bin/ssr-rules /etc/ssrplus/china_ssr.txt /etc/ssrplus/netflixip.list')
 rules.write_text(s,encoding='utf-8',newline='\n')
 print('DNS startup and atomic RAM nft cache fixes applied')

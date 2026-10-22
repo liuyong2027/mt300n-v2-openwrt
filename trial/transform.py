@@ -83,7 +83,7 @@ for name in ['luci-app-ssr-plus','dns2tcp','lua-neturl','microsocks','tcping']:
 # The selected protocols use TCP endpoints; keep TCP/ICMP GUI probes.
 # The standalone UDP nping fallback is only useful for the omitted UDP-only cores.
 replace('package/luci-app-ssr-plus/Makefile', '+curl +nping', '+curl +luci-compat')
-replace('package/luci-app-ssr-plus/Makefile', 'PKG_RELEASE:=3\n', 'PKG_RELEASE:=6\n')
+replace('package/luci-app-ssr-plus/Makefile', 'PKG_RELEASE:=3\n', 'PKG_RELEASE:=7\n')
 controller = ROOT/'package/luci-app-ssr-plus/luasrc/controller/shadowsocksr.lua'
 text=controller.read_text()
 udp_fallback = "\t\tif not e.ping then\n\t\t\tlocal udp_cmd = string.format(\"nping --udp -c 1 -p %d %s 2>/dev/null | grep -o 'Avg rtt: [0-9.]*ms' | awk '{print $3}' | sed 's/ms//' | head -1\", port, domain)\n\t\t\tlocal udp_res = luci.sys.exec(udp_cmd)\n\t\t\tif udp_res and udp_res ~= \"\" then\n\t\t\t\tlocal ping_num = tonumber(udp_res)\n\t\t\t\tif ping_num then e.ping = math.floor(ping_num) end\n\t\t\tend\n\t\tend\n"

@@ -49,7 +49,7 @@
         },
         {
           "name": "Test DNS cache rollback and TPROXY restoration",
-          "run": "sudo unshare --net -- python3 trial/test-dns-runtime.py source23"
+          "run": "sudo unshare --net -- python3 trial/test-dns-runtime.py source23\nsudo unshare --net -- python3 trial/test-proxy-mark.py source23"
         },
         {
           "name": "Prepare pinned OpenWrt, feeds and minimal packages",
