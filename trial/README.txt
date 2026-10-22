@@ -47,3 +47,14 @@ Include luci-compat; load actual runtime Lua dependencies before generator fixtu
 Serialize init actions with a stable lock inode; prevent daemon lock inheritance.
 Use numeric nft dumps and quote logger messages. Real node migration and traffic
 acceptance are recorded separately from the original capacity-only build.
+
+DNS service repair, 2026-10-22:
+Ordinary DNS checks did not cover the separate anti-pollution service. Start
+DNS2TCP before the expensive rule setup and fail startup if it exits early.
+Store nft snapshots atomically in RAM, using only nft-generated stateless syntax;
+multiline bypass metadata previously produced invalid executable cache files.
+Validate the selected endpoint/configuration before reusing a cache, retain live
+rules if a restore fails, and restore TPROXY policy routing with cached rules.
+Firewall reload uses an atomic transaction. Fix the background cache daemon PID.
+Kernel fixtures exercise write failure, malformed-cache rollback and route restore.
+Hardware DNS/port/UI/recovery/restart/boot acceptance is recorded separately.

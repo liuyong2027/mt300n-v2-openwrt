@@ -48,6 +48,10 @@
           "run": "cd source23\nlua5.1 tests/zt-json.lua\nlua5.1 tests/zt-direct.lua\nlua5.1 tests/zt-direct-runner.lua\npython3 tests/test_zt_command_integration.py\nsudo unshare --net -- python3 tests/test_zt_direct_nft.py"
         },
         {
+          "name": "Test DNS cache rollback and TPROXY restoration",
+          "run": "sudo unshare --net -- python3 trial/test-dns-runtime.py source23"
+        },
+        {
           "name": "Prepare pinned OpenWrt, feeds and minimal packages",
           "run": "cd source23\nbash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 scripts/kernel-profile.py configure --tree openwrt --profile production\nmake -C openwrt defconfig\ncp openwrt/.config reports/resolved.config\n(cd openwrt && ./scripts/diffconfig.sh) > reports/diffconfig.txt"
         },
@@ -83,6 +87,13 @@
           "continue-on-error": true
         },
         {
+          "name": "Validate actual MIPS DNS2TCP forwarding and recovery",
+          "id": "dns",
+          "if": "steps.compile.outcome == 'success'",
+          "run": "roots=(source23/openwrt/build_dir/target-*/root-ramips)\ntest \"${#roots[@]}\" = 1\npython3 trial/test-dns2tcp.py \"${roots[0]}\" source23/reports/dns-runtime-binary.json",
+          "continue-on-error": true
+        },
+        {
           "name": "Verify compiled target and capacity",
           "id": "verify",
           "if": "steps.compile.outcome == 'success'",
@@ -113,7 +124,7 @@
         {
           "name": "Require compilation and capacity gates",
           "if": "always()",
-          "run": "test '${{ steps.compile.outcome }}' = success\ntest '${{ steps.verify.outcome }}' = success\ntest '${{ steps.protocols.outcome }}' = success"
+          "run": "test '${{ steps.compile.outcome }}' = success\ntest '${{ steps.verify.outcome }}' = success\ntest '${{ steps.protocols.outcome }}' = success\ntest '${{ steps.dns.outcome }}' = success"
         }
       ]
     }
