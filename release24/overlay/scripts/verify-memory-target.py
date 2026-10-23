@@ -25,9 +25,11 @@ for name in paths:
     if name.startswith(('usr/libexec/', 'etc/init.d/', 'etc/uci-defaults/')):
         if not preflight: assert (fs/name).stat().st_mode & 0o111, name
         subprocess.run(busybox+['sh', '-n', str(source/name)], check=True, timeout=10)
-applets=subprocess.check_output(busybox+['--list'], text=True).splitlines()
 for name in ['nc', 'cmp', 'mktemp', 'rmdir', 'kill', 'sleep', 'awk', 'readlink', 'cut', 'tail', 'mv']:
-    assert name in applets, 'Missing actual target applet: '+name
+    # OpenWrt's compact BusyBox disables --list. Invoke each applet safely;
+    # an unsupported --help still proves applet dispatch without host fallback.
+    probe=subprocess.run(busybox+[name, '--help'],capture_output=True,text=True,timeout=10)
+    assert 'applet not found' not in probe.stdout+probe.stderr, 'Missing actual target applet: '+name
 sys.path.insert(0,str(ROOT/'tests'))
 import memory_checks
 results=memory_checks.guard_cases(source,busybox+['sh'])
@@ -48,3 +50,4 @@ report={'status':'passed','version':'24','preflight_prior_target':preflight,
         'new_full_image_hardware_acceptance':'pending'}
 (ROOT/'reports/memory-target.json').write_text(json.dumps(report,indent=2)+'\n')
 print(json.dumps(report,indent=2))
+
