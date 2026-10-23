@@ -35,7 +35,7 @@ import memory_checks
 results=memory_checks.guard_cases(source,busybox+['sh'])
 results+=memory_checks.protocol_cases(source,busybox+['sh'],busybox+['nc'])
 results+=memory_checks.dns_cases(source,busybox+['sh'])
-assert len(results)==36
+assert len(results)==42
 dns=next(p for p in [fs/'usr/sbin/dnsmasq', fs/'sbin/dnsmasq'] if p.is_file())
 config=ROOT/'reports/memory-dnsmasq-test.conf'
 config.write_text('max-tcp-connections=8\n')

@@ -10,7 +10,7 @@ class MemoryRecoveryTests(unittest.TestCase):
         import memory_checks
         source=Path(__file__).resolve().parents[1]/'package/luci-app-mango-proxy/root'
         reports=memory_checks.guard_cases(source, ['sh'])+memory_checks.protocol_cases(source, ['sh'])+memory_checks.dns_cases(source, ['sh'])
-        self.assertEqual(len(reports), 36)
+        self.assertEqual(len(reports), 42)
 
 
 if __name__ == '__main__': unittest.main()

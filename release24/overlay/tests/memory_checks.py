@@ -165,13 +165,14 @@ def dns_cases(source, shell):
 case "$*" in
  '-q get dhcp.@dnsmasq[0]') [ ! -e "$TESTROOT/missing" ] && echo dnsmasq;;
  '-q get dhcp.@dnsmasq[0].extraconftext') cat "$TESTROOT/extra";;
+ '-q get dhcp.@dnsmasq[0].confdir') [ ! -e "$TESTROOT/confdir" ] || cat "$TESTROOT/confdir";;
  'set dhcp.@dnsmasq[0].extraconftext='*) printf '%s' "${2#*=}" > "$TESTROOT/extra";;
  'commit dhcp') echo commit >> "$TESTROOT/commits";;
  *) exit 97;;
 esac
 ''')
         (root/'board').write_text('glinet,gl-mt300n-v2\n')
-        executable(root/'defaults', (source/'etc/uci-defaults/98-mango-memory').read_text().replace('/tmp/sysinfo/board_name', str(root/'board')))
+        executable(root/'defaults', (source/'etc/uci-defaults/98-mango-memory').read_text().replace('/tmp/sysinfo/board_name', str(root/'board')).replace('/etc/dnsmasq',str(root/'dnsmasq')))
         env=dict(os.environ, PATH=str(root/'bin')+':'+os.environ['PATH'], TESTROOT=str(root))
         for name, before, after in [
             ('fresh', '', 'max-tcp-connections=8'),
@@ -186,6 +187,21 @@ esac
             commits=(root/'commits').read_text().splitlines() if (root/'commits').exists() else []
             assert len(commits) == int(before != after), (name, commits)
             results.append({'case': 'dns_'+name+'_idempotent', 'passed': True})
+        for name,filename,body in [
+            ('standalone_limit','dnsmasq.conf','max-tcp-connections=32\n'),
+            ('instance_limit','dnsmasq.owner.conf','max-tcp-connections=24\n'),
+            ('standalone_nested_include','dnsmasq.conf','conf-file=/etc/owner.conf\n'),
+            ('standalone_include_directory','dnsmasq.conf','conf-dir=/etc/owner.d\n'),
+            ('uci_include_directory','confdir','/etc/owner.d'),
+            ('inline_nested_include','extra','conf-file=/etc/owner.conf')]:
+            (root/'extra').write_text('cache-size=400'); (root/'commits').unlink(missing_ok=True)
+            (root/filename).write_text(body)
+            before=(root/'extra').read_bytes()
+            for _ in range(2): subprocess.run(shell+[str(root/'defaults')],env=env,check=True,timeout=10)
+            assert (root/'extra').read_bytes()==before and not (root/'commits').exists(), name
+            assert (root/filename).read_text()==body, name
+            (root/filename).unlink()
+            results.append({'case':'dns_owner_'+name+'_preserved','passed':True})
         for name in ['missing', 'other_board']:
             (root/'extra').write_text('owner=1'); (root/'commits').unlink(missing_ok=True)
             if name == 'missing': (root/'missing').touch()

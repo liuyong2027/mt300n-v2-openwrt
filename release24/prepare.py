@@ -64,7 +64,7 @@ done
          .replace("'device_hotfix_evidence':", "'device_memory_evidence':")
          .replace("'zerotier_target': read('reports/zt-direct-target.json'),",
                   "'zerotier_target': read('reports/zt-direct-target.json'),\n        'memory_target': memory,")
-         .replace("    out = root / 'release-assets'", "    memory = read('reports/memory-target.json')\n    if (memory['status'] != 'passed' or memory['preflight_prior_target'] or\n            len(memory['installed_bytes_verified']) != 7 or len(memory['checks']) != 36):\n        raise ValueError('New compiled target memory gate failed')\n    out = root / 'release-assets'")
+         .replace("    out = root / 'release-assets'", "    memory = read('reports/memory-target.json')\n    if (memory['status'] != 'passed' or memory['preflight_prior_target'] or\n            len(memory['installed_bytes_verified']) != 7 or len(memory['checks']) != 42):\n        raise ValueError('New compiled target memory gate failed')\n    out = root / 'release-assets'")
          .replace("'Recovery timings measured on previous image with matching runtime source; exact 21 image and LAN client forwarding remain untested'",
                   "'Memory hotfix evidence is from Release 23 plus identical installed helpers; the exact full Release 24 image has not been flashed. Full LAN/IPv6 forwarding and power-loss recovery remain untested'"))
     edit('scripts/publish-release.py',lambda s:s.replace('DEVICE-HOTFIX-EVIDENCE-23.json',evidence))
