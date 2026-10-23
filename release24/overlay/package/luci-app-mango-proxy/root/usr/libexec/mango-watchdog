@@ -1,0 +1,143 @@
+#!/bin/sh
+umask 077
+. /usr/lib/mango/health.sh
+health_reset
+config_identity=
+rm -f /var/etc/mango/health-trigger /var/etc/mango/health-trigger.new
+failures=0
+interval=60
+startup_begin=$(cut -d. -f1 /proc/uptime)
+startup_ready=0
+startup_wait_logged=0
+identity=
+wan_wait=0
+mkdir -p /var/etc/mango
+status() {
+    printf '%s: %s\n' "$(date -u '+%Y-%m-%d %H:%M UTC')" "$1" > /var/etc/mango/failover-status.new &&
+        mv /var/etc/mango/failover-status.new /var/etc/mango/failover-status
+}
+while sleep "$interval"; do
+    mode=$(uci -q get mango_proxy.main.mode)
+    if [ "$mode" = direct ] || [ "$(uci -q get mango_proxy.main.failover)" != 1 ] || ! flock -n /var/lock/mango-operation.lock true 2>/dev/null; then
+        failures=0
+        interval=60
+        identity=
+        health_reset
+        continue
+    fi
+    /usr/libexec/mango-uplink
+    uplink=$?
+    if [ "$uplink" = 1 ]; then
+        failures=0
+        interval=60
+        wan_wait=1
+        health_reset
+        status '本地 IPv4 出口明确离线；暂停节点切换和守护重启'
+        continue
+    fi
+    if [ "$wan_wait" = 1 ]; then
+        wan_wait=0
+        health_reset
+        failures=0
+        interval=60
+        status '出口状态已变化；等待一轮稳定后再检查代理'
+        continue
+    fi
+    current=$(/usr/libexec/mango-runtime-id)
+    current_config=$(health_config) || { health_reset; failures=0; continue; }
+    if [ "$current_config" != "$config_identity" ]; then
+        health_reset
+        failures=0
+        config_identity=$current_config
+    fi
+    if [ "$current" != "$identity" ]; then
+        health_reset
+        failures=0
+        interval=60
+        identity=$current
+    fi
+    # A bounded, one-time startup grace period. Never suppress recovery forever,
+    # and never mask a core crash after we have observed it ready.
+    if [ "$startup_ready" != 1 ] && [ ! -f /var/etc/mango/recovery-queue ]; then
+        if /usr/libexec/mango-ready; then
+            startup_ready=1
+        else
+            now=$(cut -d. -f1 /proc/uptime)
+            if [ "$((now-startup_begin))" -lt 180 ]; then
+                failures=0
+                health_reset
+                if [ "$startup_wait_logged" = 0 ]; then
+                    logger -t mango-watchdog '核心尚未就绪，启动宽限内暂不计节点探测失败'
+                    startup_wait_logged=1
+                fi
+                continue
+            fi
+            startup_ready=1
+            logger -t mango-watchdog '启动宽限已结束，按原连续失败策略检查并恢复核心'
+        fi
+    fi
+    # Recover a locally stalled core before a low-memory guard skips failover.
+    # The helper is cheap when memory is healthy and serializes mutations itself.
+    /usr/libexec/mango-memory-guard
+    memory_result=$?
+    if [ "$memory_result" != 0 ]; then
+        health_reset
+        failures=0
+        interval=60
+        identity=$(/usr/libexec/mango-runtime-id)
+        continue
+    fi
+    # A successful probe to either independent endpoint prevents failover.
+    /usr/libexec/mango-probe
+    probe_result=$?
+    after=$(/usr/libexec/mango-runtime-id)
+    if [ "$current" != "$after" ] || [ "$current_config" != "$(health_config)" ]; then
+        health_reset
+        identity=$after
+        failures=0
+        interval=60
+        status '探测期间运行实例发生变化；本轮不计入连续失败'
+        continue
+    fi
+    if [ -f /var/etc/mango/recovery-queue ]; then
+        failures=3
+    fi
+    now=$(cut -d. -f1 /proc/uptime)
+    case "$now" in ''|*[!0-9]*) health_reset; failures=0; continue;; esac
+    if [ "$probe_result" = 0 ]; then
+        health_add "$now" 0
+        failures=0
+        interval=60
+        status '最近一轮代理探测通过（至少一个目标成功）；各目标详情见探测记录'
+        continue
+    fi
+    failures=$((failures+1))
+    health_add "$now" 1
+    reason=
+    if [ "$failures" -lt 3 ]; then
+        status "代理探测失败；连续失败 $failures/3，等待下一轮复核；各目标详情见探测记录"
+        health_bad "$now" || continue
+        health_ticket_write "$current" "$current_config" || continue
+        reason=--intermittent
+        status '最近五轮探测四轮失败；进入间歇故障复核'
+    fi
+    failures=0
+    /usr/libexec/mango-failover $reason >/dev/null 2>&1
+    recovered=$?
+    rm -f /var/etc/mango/health-trigger
+    health_reset
+    identity=$(/usr/libexec/mango-runtime-id)
+    if [ "$recovered" = 11 ]; then
+        interval=15
+        status '恢复预算耗尽；15 秒后继续剩余候选'
+        continue
+    fi
+    if [ "$recovered" = 0 ]; then
+        interval=60
+        continue
+    fi
+    [ "$interval" -ge 60 ] || interval=60
+    # Persistent outages must not cause an endless restart every three minutes.
+    interval=$((interval*2))
+    [ "$interval" -le 300 ] || interval=300
+done

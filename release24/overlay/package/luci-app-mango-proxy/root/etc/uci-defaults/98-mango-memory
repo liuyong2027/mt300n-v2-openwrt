@@ -1,0 +1,26 @@
+#!/bin/sh
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'glinet,gl-mt300n-v2' ] || exit 0
+# Only supply a missing default. Preserve owner options and custom limits.
+uci -q get 'dhcp.@dnsmasq[0]' >/dev/null || exit 0
+# Respect explicit include directories and standalone/instance configuration.
+# Nested includes may define a limit elsewhere; leave those owner setups alone.
+[ -z "$(uci -q get 'dhcp.@dnsmasq[0].confdir')" ] || exit 0
+pattern='^[[:space:]]*(max-tcp-connections|conf-file|conf-dir)[[:space:]]*='
+for owner_file in /etc/dnsmasq.conf /etc/dnsmasq.*.conf; do
+    if [ -f "$owner_file" ] && grep -Eq "$pattern" "$owner_file"; then
+        exit 0
+    fi
+done
+extra=$(uci -q get 'dhcp.@dnsmasq[0].extraconftext')
+if printf '%s\n' "$extra" | grep -Eq "$pattern"; then
+    exit 0
+fi
+if [ -n "$extra" ]; then
+    extra="$extra
+max-tcp-connections=8"
+else
+    extra='max-tcp-connections=8'
+fi
+uci set "dhcp.@dnsmasq[0].extraconftext=$extra" || exit 1
+uci commit dhcp || exit 1
+exit 0

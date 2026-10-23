@@ -1,0 +1,29 @@
+#!/bin/sh
+# Local SOCKS5 negotiation, independent of DNS and remote proxy nodes.
+# BusyBox nc has no timeout option on this firmware; own and reap the child.
+umask 077
+probe_dir=$(mktemp -d /tmp/mango-core-health.XXXXXX) || exit 2
+probe_pid=
+cleanup() {
+    if [ -n "$probe_pid" ]; then
+        kill "$probe_pid" 2>/dev/null || :
+        wait "$probe_pid" 2>/dev/null || :
+    fi
+    rm -f "$probe_dir/request" "$probe_dir/expected" "$probe_dir/reply"
+    rmdir "$probe_dir" 2>/dev/null || :
+}
+trap cleanup EXIT
+trap 'exit 2' HUP INT TERM
+printf '\005\001\000' > "$probe_dir/request" || exit 2
+printf '\005\000' > "$probe_dir/expected" || exit 2
+command -v nc >/dev/null 2>&1 || exit 2
+(exec 9>&-; exec nc 127.0.0.1 10808 < "$probe_dir/request" > "$probe_dir/reply" 2>/dev/null) &
+probe_pid=$!
+tries=0
+while [ "$tries" -lt 3 ]; do
+    sleep 1
+    cmp -s "$probe_dir/reply" "$probe_dir/expected" && exit 0
+    kill -0 "$probe_pid" 2>/dev/null || exit 1
+    tries=$((tries+1))
+done
+exit 1

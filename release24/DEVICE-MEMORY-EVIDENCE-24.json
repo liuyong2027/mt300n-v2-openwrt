@@ -1,0 +1,37 @@
+{
+  "version": "24",
+  "evidence_date": "2026-10-23",
+  "scope": "GL-MT300N-V2 Release 23 with four installed hotfix helpers; not the full Release 24 image",
+  "installed_helper_sha256": {
+    "/etc/init.d/mango_proxy": "e79b16f0678f2e3305fca72deaf44a5f45bc898ef842d15b41cf65b34315aa5d",
+    "/usr/libexec/mango-watchdog": "084925c372bc70652747a42b4b56d714a2bbfcd25489d39485451a2106061de1",
+    "/usr/libexec/mango-core-health": "503ff674e9773a5afbc272c53d98bd1b73107b439d58def266481b206f1635ad",
+    "/usr/libexec/mango-memory-guard": "e38f5e661ec495f80f3d56c57c427b01d7e8f0c5bbbde6323c5bff15bcb26d53"
+  },
+  "device_isolated_checks": 25,
+  "reboot_verified": true,
+  "settings_after_reboot": {
+    "vm.min_free_kbytes": 16384,
+    "vm.watermark_boost_factor": 0,
+    "vm.watermark_scale_factor": 10,
+    "GOMEMLIMIT": "48MiB",
+    "GOGC": "50",
+    "dnsmasq_max_tcp_connections": 8
+  },
+  "followup": {
+    "core_uptime_over_hours": 10,
+    "new_oom_events": 0,
+    "available_memory_mib_range": [34.9, 37.8],
+    "cpu_sample_seconds": 20,
+    "cpu_average_percent": 42,
+    "cpu_maximum_percent": 67,
+    "dns_udp_tcp": "passed",
+    "router_direct_https": "HTTP 200",
+    "router_local_socks_https": "HTTP 204"
+  },
+  "limitations": [
+    "The original primary node failed during an earlier reboot; changing device-specific node priorities is excluded from this firmware.",
+    "Local SOCKS/router OUTPUT and DNS checks do not validate full LAN/IPv6 forwarding, throughput, forced OOM or power-loss recovery.",
+    "Exact Release 24 image hardware acceptance requires flashing and remains pending."
+  ]
+}
