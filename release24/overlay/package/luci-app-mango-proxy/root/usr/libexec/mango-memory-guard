@@ -1,0 +1,100 @@
+#!/bin/sh
+# GL1 memory recovery v1. Only recycle a persistently unresponsive, old core
+# under memory pressure; never run a second candidate alongside the old core.
+# Exit 0: no recovery needed; 10: defer; 20: one recovery attempted.
+umask 077
+memory_low() {
+    available=$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo) || return 1
+    case "$available" in ''|*[!0-9]*) return 1;; esac
+    [ "$available" -lt 16384 ]
+}
+memory_low || exit 0
+[ "$(uci -q get mango_proxy.main.failover)" = 1 ] || exit 0
+[ "$(uci -q get mango_proxy.main.mode)" != direct ] || exit 0
+lock=$(readlink -f /var/lock/mango-operation.lock) || exit 10
+if [ "${MANGO_OPERATION_LOCK:-}" != 1 ] || [ "$(readlink /proc/$$/fd/9 2>/dev/null)" != "$lock" ]; then
+    exec 9>"$lock" || exit 10
+    flock -n 9 || exit 10
+    export MANGO_OPERATION_LOCK=1
+fi
+mkdir -p /var/etc/mango || exit 10
+status() {
+    printf '%s: %s\n' "$(date '+%Y-%m-%d %H:%M:%S %z')" "$1" > /var/etc/mango/memory-guard-status
+    logger -t mango-memory-guard "$1"
+}
+now=$(cut -d. -f1 /proc/uptime)
+case "$now" in ''|*[!0-9]*) exit 10;; esac
+config_state=$(uci -q export mango_proxy) || exit 10
+identity=$(/usr/libexec/mango-runtime-id) || exit 10
+processes=$(/usr/libexec/mango-process snapshot) || exit 10
+set -- $processes
+[ "$#" = 1 ] || exit 10
+stamp=${1#*:}
+case "$stamp" in ''|*[!0-9]*) exit 10;; esac
+# Linux /proc process start time is in USER_HZ (100) ticks on this target.
+[ "$((now*100-stamp))" -ge 18000 ] || exit 10
+guard() {
+    memory_low || return 1
+    [ "$(uci -q get mango_proxy.main.failover)" = 1 ] || return 1
+    [ "$(uci -q get mango_proxy.main.mode)" != direct ] || return 1
+    [ "$config_state" = "$(uci -q export mango_proxy)" ] || return 1
+    [ "$identity" = "$(/usr/libexec/mango-runtime-id)" ] || return 1
+    [ "$processes" = "$(/usr/libexec/mango-process snapshot)" ] || return 1
+    /usr/libexec/mango-uplink
+    [ "$?" != 1 ]
+}
+guard || exit 10
+/usr/libexec/mango-core-health
+health=$?
+[ "$health" != 0 ] || exit 0
+[ "$health" = 1 ] || exit 10
+sleep 5
+guard || exit 10
+/usr/libexec/mango-core-health
+health=$?
+[ "$health" != 0 ] || exit 0
+[ "$health" = 1 ] || exit 10
+guard || exit 10
+now=$(cut -d. -f1 /proc/uptime)
+case "$now" in ''|*[!0-9]*) exit 10;; esac
+history=/var/etc/mango/memory-guard-attempts
+# Persist attempts across service restarts, in RAM; never flash-write each check.
+recent=$(awk -v now="$now" '$1 ~ /^[0-9]+$/ && $1<=now && now-$1<3600 {print $1}' "$history" 2>/dev/null)
+last=$(printf '%s\n' "$recent" | tail -n 1)
+if [ -n "$last" ] && [ "$((now-last))" -lt 900 ]; then
+    status '低内存且本机 SOCKS 连续无响应；处于 900 秒恢复冷却，暂停候选启动'
+    exit 10
+fi
+count=$(printf '%s\n' "$recent" | awk 'NF {n++} END {print n+0}')
+if [ "$count" -ge 3 ]; then
+    status '一小时内已恢复三次；暂停自动恢复，保留保护规则等待排查'
+    exit 10
+fi
+{ [ -z "$recent" ] || printf '%s\n' "$recent"; printf '%s\n' "$now"; } > "$history.new" &&
+    mv "$history.new" "$history" || exit 10
+status "可用内存 ${available} KiB 且本机 SOCKS 两次无响应；停止旧核心后执行一次恢复"
+: > /var/etc/mango/runtime-uncertain
+if ! /usr/libexec/mango-process cleanup; then
+    status '旧核心清理未确认；禁止启动新实例，等待人工排查'
+    exit 20
+fi
+if [ "$config_state" != "$(uci -q export mango_proxy)" ]; then
+    status '停止期间配置发生变化；取消自动启动，等待新配置应用'
+    exit 20
+fi
+if ! /usr/libexec/mango-process absent; then
+    status '旧服务仍存在；禁止重叠启动'
+    exit 20
+fi
+# Existing init installs/verifies fail-closed policy and confirms owned listeners.
+if ! /etc/init.d/mango_proxy start >/dev/null 2>&1; then
+    status '单次恢复启动失败；保留保护规则并进入冷却'
+    exit 20
+fi
+if /usr/libexec/mango-core-health && /usr/libexec/mango-probe; then
+    rm -f /var/etc/mango/recovery-queue /var/etc/mango/health-trigger
+    status '停止旧核心后恢复成功；本机 SOCKS 和至少一个代理 HTTPS 目标通过'
+else
+    status '已完成单次恢复；协议或代理 HTTPS 未通过，进入冷却并交由原守护复核'
+fi
+exit 20

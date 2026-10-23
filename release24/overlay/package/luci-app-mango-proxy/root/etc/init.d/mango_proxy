@@ -1,0 +1,468 @@
+#!/bin/sh /etc/rc.common
+START=99
+STOP=15
+USE_PROCD=1
+
+# rc.common sources this file before dispatching its action.
+case "${action:-}" in
+    reload)
+        if [ "${MANGO_APPLY_WORKER:-}" != 1 ]; then
+            exec /usr/libexec/mango-apply-job request
+        fi
+        ;;
+esac
+case "${action:-}" in
+    start|stop|restart|reload|boot|shutdown)
+        if [ "${MANGO_OPERATION_LOCK:-}" != 1 ] || [ "$(readlink /proc/$$/fd/9 2>/dev/null)" != "$(readlink -f /var/lock/mango-operation.lock)" ]; then
+            exec /usr/libexec/mango-lock /etc/init.d/mango_proxy "$action" "$@"
+        fi
+        ;;
+esac
+
+# These flags exist only in this locked init invocation, never across requests.
+mango_fw_applied=0
+mango_dns_applied=0
+mango_recovery_failed=0
+mango_reload_mutated=0
+mango_ready_budget=120
+
+# Elapsed uptime includes the cost of checks and is independent of NTP.
+mango_wait_ready() {
+    local begin current rest
+    read -r begin rest < /proc/uptime || return 1
+    begin=${begin%%.*}
+    case "$begin" in ''|*[!0-9]*) return 1;; esac
+    while :; do
+        read -r current rest < /proc/uptime || return 1
+        current=${current%%.*}
+        case "$current" in ''|*[!0-9]*) return 1;; esac
+        [ "$current" -ge "$begin" ] && [ "$((current-begin))" -lt "$mango_ready_budget" ] || return 1
+        MANGO_READY_EXCLUDE_PIDS="$mango_previous_pids" /usr/libexec/mango-ready && return 0
+        sleep 1
+    done
+}
+# Recovery diagnostics only: RAM files are rotated by mango-failover.
+# Always preserve the caller's result even if diagnostic storage fails.
+mango_trace() {
+    [ "${MANGO_RECOVERY_TRACE:-}" = 1 ] || return 0
+    local up rest load
+    read -r up rest < /proc/uptime || up=unknown
+    read -r load rest < /proc/loadavg || load=unknown
+    printf 'uptime=%s load1=%s stage=%s event=%s rc=%s\n' "$up" "$load" "$1" "$2" "${3:--}" >> /var/etc/mango/recovery-timing 2>/dev/null || :
+    return 0
+}
+mango_timed() {
+    local stage="$1" begin end result
+    shift
+    if [ "${MANGO_APPLY_WORKER:-}" = 1 ]; then
+        local label=
+        case "$stage" in
+            assets) label='准备规则文件';;
+            dns-preflight) label='校验 DNS 规则';;
+            configure) label='生成服务配置';;
+            dns-install) label='安装 DNS 规则';;
+            dns-restart) label='重启 DNS 服务';;
+            firewall) label='校验并安装防火墙规则';;
+            stop) label='停止旧核心';;
+            start) label='启动并确认新核心';;
+            dns-ready) label='确认 DNS 就绪';;
+        esac
+        [ -z "$label" ] || printf '%s：%s（阶段开始 %s）\n' '正在应用' "$label" "$(date -u '+%H:%M:%S UTC')" > /var/etc/mango/apply-status
+    fi
+    begin=$(cut -d. -f1 /proc/uptime)
+    mango_trace "$stage" begin
+    "$@"
+    result=$?
+    mango_trace "$stage" end "$result"
+    end=$(cut -d. -f1 /proc/uptime)
+    printf '%s seconds=%s rc=%s\n' "$stage" "$((end-begin))" "$result" >> /var/etc/mango/apply-timing
+    return "$result"
+}
+
+# Called only for this serialized start after procd submission. Remove the
+# unconfirmed service instance so a late start cannot silently become active.
+# Keep the forwarding guard and runtime-uncertain; do not recursively restart.
+mango_abort_start() {
+    : > /var/etc/mango/runtime-uncertain
+    if procd_kill mango_proxy; then
+        printf '%s；已请求停止未确认实例，请检查后重新应用\n' "$1" > /var/etc/mango/start-status
+    else
+        printf '%s；停止未确认实例失败，请检查服务状态\n' "$1" > /var/etc/mango/start-status
+    fi
+    return 1
+}
+# The firewall helper owns generation/reuse and all live checks under its lock.
+# Invoke it for both stop and start: no redundant outer desired/live snapshots.
+mango_pair_ensure() {
+    local result guard_result
+    if /usr/libexec/mango-china-state ensure; then return 0; else result=$?; fi
+    mango_recovery_failed=1
+    : > /var/etc/mango/runtime-uncertain
+    if mango_timed recovery-guard /usr/libexec/mango-recovery-guard install; then
+        guard_result=0
+    else
+        guard_result=$?
+    fi
+    if [ "$guard_result" = 0 ]; then
+        printf '中国 IP 配对恢复失败（退出码 %s）；%s；未确认启动或应用成功\n' \
+            "$result" "$(cat /var/etc/mango/recovery-guard-status 2>/dev/null)" > /var/etc/mango/start-status
+    else
+        printf '中国 IP 配对恢复失败（退出码 %s）；保护安装未完成（退出码 %s）；%s；未确认启动或应用成功\n' \
+            "$result" "$guard_result" "$(cat /var/etc/mango/recovery-guard-status 2>/dev/null)" > /var/etc/mango/start-status
+    fi
+    logger -t mango-proxy "$(cat /var/etc/mango/start-status 2>/dev/null)"
+    return "$result"
+}
+mango_clear_recovery_guard() {
+    # No extra helper/generation on the ordinary path. Only a preceding failure
+    # creates this marker; clear verifies the newly installed normal policy.
+    [ -e /var/etc/mango/recovery-guard ] || return 0
+    if ! mango_timed recovery-guard-clear /usr/libexec/mango-recovery-guard clear; then
+        mango_recovery_failed=1
+        : > /var/etc/mango/runtime-uncertain
+        printf '%s\n' '正常防火墙未能核验或清除阻断兜底；未确认启动或应用成功' > /var/etc/mango/start-status
+        return 1
+    fi
+}
+mango_guard() {
+    [ "$mango_fw_applied" = 1 ] && return 0
+    mango_pair_ensure || return $?
+    mango_timed firewall /usr/libexec/mango-fw || return $?
+    mango_clear_recovery_guard
+}
+
+# Invocation-local split DNS candidate; never reused across boots or requests.
+mango_start_dns_dir=
+mango_start_dns_hash=
+mango_start_dns_cleanup() {
+    if [ -n "$mango_start_dns_dir" ]; then
+        rm -f "$mango_start_dns_dir/dns.conf"
+        rmdir "$mango_start_dns_dir" 2>/dev/null || :
+    fi
+    mango_start_dns_dir=
+    mango_start_dns_hash=
+}
+mango_ntp_inputs() {
+    if [ -e /etc/config/system ]; then sha256sum /etc/config/system; else printf '%s\n' system-config-absent; fi
+}
+mango_start_dns_inputs() {
+    sha256sum /etc/config/mango_proxy /usr/share/xray/cn-domains.txt \
+        /usr/lib/mango/dns.lua /usr/libexec/mango-dns-config || return 1
+    mango_ntp_inputs
+}
+mango_start_dns_prepare() {
+    [ "$mango_dns_applied" != 1 ] || return 0
+    [ "$(uci -q get mango_proxy.main.mode)" = split ] || return 0
+    mango_start_dns_cleanup
+    mango_start_dns_dir=$(mktemp -d /var/etc/mango/start-dns.XXXXXX) || return 1
+    mango_start_dns_hash=$(mango_start_dns_inputs) || { mango_start_dns_cleanup; return 1; }
+    mango_timed dns-preflight /usr/libexec/mango-dns check "$mango_start_dns_dir/dns.conf" || {
+        mango_start_dns_cleanup; return 1;
+    }
+    [ "$mango_start_dns_hash" = "$(mango_start_dns_inputs)" ] || {
+        mango_start_dns_cleanup; return 1;
+    }
+}
+mango_start_dns_install() {
+    local current
+    if [ -n "$mango_start_dns_dir" ]; then
+        current=$(mango_start_dns_inputs) || return 1
+        [ "$current" = "$mango_start_dns_hash" ] || return 1
+        mango_timed dns-install /usr/libexec/mango-dns prepared "$mango_start_dns_dir/dns.conf"
+    else
+        mango_timed dns-install /usr/libexec/mango-dns
+    fi
+}
+
+start_service() {
+    umask 077
+    mango_previous_pids=$(pidof xray 2>/dev/null)
+    mkdir -p /var/etc/mango
+    [ -n "${mango_stage:-}" ] || : > /var/etc/mango/apply-timing
+    printf '%s\n' local > /var/etc/mango/start-failure-class
+    printf '%s\n' '正在准备配置' > /var/etc/mango/start-status
+    : > /var/etc/mango/runtime-uncertain
+    runtime_mode=$(uci -q get mango_proxy.main.mode)
+    runtime_node=$(uci -q get mango_proxy.main.node)
+    if [ "$(uci -q get mango_proxy.main.failover)" = 1 ] && [ -s /var/etc/mango/active-node ]; then
+        runtime_node=$(cat /var/etc/mango/active-node)
+    fi
+    [ "$runtime_mode" != direct ] || runtime_node=direct
+    runtime_hash=$(sha256sum /etc/config/mango_proxy | awk '{print $1}')
+    mango_timed start-prepare mango_start
+    mango_start_result=$?
+    if [ "$mango_start_result" -ne 0 ]; then
+        mango_start_dns_cleanup
+        if [ "$mango_start_result" = 124 ]; then
+            printf '%s\n' 'Xray 配置预检执行超时；未判定节点不可用' > /var/etc/mango/start-status
+        elif [ "$mango_recovery_failed" != 1 ]; then
+            printf '%s\n' '启动失败，请查看系统日志' > /var/etc/mango/start-status
+        fi
+    fi
+    return "$mango_start_result"
+}
+
+mango_core_required() {
+    [ "$(uci -q get mango_proxy.main.mode)" != direct ] ||
+        [ "$(uci -q get mango_proxy.main.socks_server)" = 1 ]
+}
+
+service_started() {
+    local result
+    mango_service_started
+    result=$?
+    mango_start_dns_cleanup
+    return "$result"
+}
+mango_service_started() {
+    mango_trace procd-submit end 0
+    [ "${mango_start_result:-1}" = 0 ] || return 1
+    if mango_core_required; then
+        mango_trace core-ready begin
+        if ! mango_wait_ready; then
+            mango_trace core-ready end 1
+            printf '%s\n' node > /var/etc/mango/start-failure-class
+            mango_abort_start '启动超时：监听端口未全部就绪'
+            return 1
+        fi
+        mango_trace core-ready end 0
+        printf '%s\n' '监听端口已就绪（不代表节点认证成功）' > /var/etc/mango/start-status
+    else
+        printf '%s\n' '全部直连' > /var/etc/mango/start-status
+    fi
+    # Split/global DNS moves to Xray only after it is listening. GFW/direct already moved earlier.
+    if [ "$mango_dns_applied" != 1 ]; then
+        mango_start_dns_install || { mango_abort_start '应用失败：DNS 安装失败'; return 1; }
+    fi
+    if [ -f /var/etc/mango/reload-dhcp ]; then
+        mango_timed dns-restart /etc/init.d/dnsmasq restart || { mango_abort_start '应用失败：DNS 重启失败'; return 1; }
+        rm -f /var/etc/mango/reload-dhcp
+    fi
+    mango_timed dns-ready /usr/libexec/mango-dns-ready || {
+        mango_abort_start '应用失败：DNS 目录或监听检查未通过'
+        return 1
+    }
+    /usr/libexec/mango-cache || logger -t mango-proxy 'DNS cache refresh failed'
+    # DNS work can outlive the first listener check. Do not publish stale readiness.
+    if mango_core_required &&
+        ! MANGO_READY_EXCLUDE_PIDS="$mango_previous_pids" /usr/libexec/mango-ready; then
+        mango_abort_start '应用未确认：Xray 监听在切换期间发生变化'
+        return 1
+    fi
+    if [ -z "$runtime_hash" ] || [ "$runtime_hash" != "$(sha256sum /etc/config/mango_proxy | awk '{print $1}')" ]; then
+        mango_abort_start '应用未确认：配置在启动期间发生变化'
+        return 1
+    fi
+    /usr/libexec/mango-china-state commit || {
+        mango_abort_start '应用未确认：中国 IP 配对恢复未完成'
+        return 1
+    }
+    # Last locally ready node, distinct from an unapplied UCI selection.
+    if [ "$(uci -q get mango_proxy.main.mode)" = direct ]; then
+        printf '%s\n' direct > /var/etc/mango/ready-node
+    else
+        cat /var/etc/mango/active-node > /var/etc/mango/ready-node 2>/dev/null || uci -q get mango_proxy.main.node > /var/etc/mango/ready-node
+    fi
+    # Publish only after local service/DNS checks; concurrent edits stay unconfirmed.
+    if [ -n "$runtime_hash" ] && [ "$runtime_hash" = "$(sha256sum /etc/config/mango_proxy | awk '{print $1}')" ]; then
+        printf '%s\n%s\n%s\n' "$runtime_mode" "$runtime_node" "$runtime_hash" > /var/etc/mango/runtime-state.new &&
+            mv /var/etc/mango/runtime-state.new /var/etc/mango/runtime-state &&
+            rm -f /var/etc/mango/runtime-uncertain || { mango_abort_start '运行状态发布失败'; return 1; }
+    else
+        mango_abort_start '应用未确认：配置在发布期间发生变化'
+        return 1
+    fi
+    # RAM-only credential snapshot. Failure disables rollback, not readiness.
+    rm -f /var/etc/mango/start-failure-class
+    /usr/libexec/mango-rollback save || logger -t mango-proxy 'Ready configuration snapshot unavailable; automatic apply rollback disabled'
+    return 0
+}
+
+mango_start() {
+    rm -f /var/etc/mango/config.tested
+    mango_timed assets /usr/libexec/mango-assets || return 1
+    # Apply the persistent forwarding guard before starting or validating Xray.
+    mango_guard || return 1
+    mango_timed configure /usr/libexec/mango-generate configure >/dev/null || return 1
+    # Node-only changes leave dnsmasq and firewall4 configuration untouched.
+    if [ -f /var/etc/mango/reload-firewall ]; then
+        /etc/init.d/firewall reload || return 1
+        rm -f /var/etc/mango/reload-firewall
+    fi
+    # Build and validate before submitting the core, install only after readiness.
+    mango_start_dns_prepare || return 1
+    if ! mango_core_required; then
+        rm -f /var/etc/mango/config.tested /var/etc/mango/config.pending.json
+        printf '%s\n' '全部直连' > /var/etc/mango/start-status
+        return 0
+    fi
+    # Manual reload supplies a configuration prepared under the same operation lock.
+    # This marker means generated, never independently Xray-tested.
+    if [ "${mango_pending_generated:-0}" = 1 ] && [ -s /var/etc/mango/config.pending.json ]; then
+        mango_pending_generated=0
+    else
+        printf '%s\n' '正在生成 Xray 配置' > /var/etc/mango/start-status
+        if mango_timed json-generate /usr/libexec/mango-generate json > /var/etc/mango/config.pending.json; then
+            mango_json_result=0
+        else
+            mango_json_result=$?
+        fi
+        if [ "$mango_json_result" != 0 ]; then
+            [ "$mango_json_result" != 65 ] || printf '%s\n' node > /var/etc/mango/start-failure-class
+            printf '%s\n' 'Xray 配置生成失败' > /var/etc/mango/start-status
+            return "$mango_json_result"
+        fi
+    fi
+    mv /var/etc/mango/config.pending.json /var/etc/mango/config.json || return 1
+    procd_open_instance
+    procd_set_param command /usr/bin/xray run -config /var/etc/mango/config.json
+    procd_set_param env XRAY_LOCATION_ASSET=/var/etc/mango/assets GOMEMLIMIT=48MiB GOGC=50
+    procd_set_param respawn 60 5 5
+    procd_set_param stderr 1
+    procd_set_param stdout 1
+    procd_set_param file /var/etc/mango/config.json
+    mango_trace procd-submit begin
+    procd_close_instance
+    printf '%s\n' '已提交启动，等待监听端口就绪' > /var/etc/mango/start-status
+}
+
+stop_service() {
+    mango_stopping_processes=$(/usr/libexec/mango-process snapshot) || return 1
+    mkdir -p /var/etc/mango
+    : > /var/etc/mango/runtime-uncertain
+    printf '%s\n' '服务停止或切换中' > /var/etc/mango/start-status
+    # Keep fail-closed rules when stopping/restarting in a proxy mode.
+    mango_guard
+}
+# rc.common invokes this after procd has accepted deletion, not before.
+service_stopped() {
+    if ! mango_timed stop-wait /usr/libexec/mango-process wait $mango_stopping_processes; then
+        printf '%s\n' '停止超时：旧核心尚未退出，未启动新实例；请稍后重新应用' > /var/etc/mango/start-status
+        return 1
+    fi
+}
+reload_service() {
+    rm -f /var/etc/mango/recovery-queue
+    local previous requested result mango_stage mango_input_hash mango_apply_node mango_pending_generated
+    mkdir -p /var/etc/mango
+    : > /var/etc/mango/apply-timing
+    rm -f /var/etc/mango/apply-original-failure
+    mango_stage=$(mktemp -d /var/etc/mango/apply.XXXXXX) || return 1
+    mango_fw_applied=0
+    mango_dns_applied=0
+    mango_input_hash=$(sha256sum /etc/config/mango_proxy | awk '{print $1}')
+    mango_reload_mutated=0
+    previous=$(cat /var/etc/mango/ready-node 2>/dev/null)
+    requested=$(uci -q get mango_proxy.main.node)
+    [ "$(uci -q get mango_proxy.main.mode)" != direct ] || requested=direct
+    /usr/libexec/mango-rollback prepare "$mango_stage" >/dev/null 2>&1 || :
+    mango_apply_node=$(/usr/libexec/mango-apply-node "$mango_stage" 2>/dev/null) || mango_apply_node=
+    case "$mango_apply_node" in *[!a-zA-Z0-9_]*) mango_apply_node=;; esac
+    [ -z "$mango_apply_node" ] || requested=$mango_apply_node
+    /usr/libexec/mango-node-log '手动应用' "$previous" "$requested" '开始准备配置，尚未切换' || :
+    mango_timed total mango_reload_with_recovery
+    result=$?
+    rm -f "$mango_stage/dns.conf" "$mango_stage/rollback-config" "$mango_stage/rollback-state" \
+        "$mango_stage/requested-config" "$mango_stage/requested-export"
+    rmdir "$mango_stage"
+    mango_fw_applied=0
+    mango_dns_applied=0
+    if [ "$result" = 0 ]; then
+        /usr/libexec/mango-node-log '手动应用' "$previous" "$requested" '应用完成；就绪检查通过，不代表互联网可达' || :
+    else
+        /usr/libexec/mango-node-log '手动应用' "$previous" "$requested" "失败（退出码 $result）；$(cat /var/etc/mango/start-status 2>/dev/null)" || :
+    fi
+    return "$result"
+}
+mango_reload_with_recovery() {
+    local result failed_status
+    mango_reload
+    result=$?
+    [ "$result" != 0 ] || return 0
+    [ "$mango_reload_mutated" = 1 ] || return "$result"
+    failed_status=$(cat /var/etc/mango/start-status 2>/dev/null)
+    printf 'rc=%s\n%s\n' "$result" "$failed_status" > /var/etc/mango/apply-original-failure
+    if [ -s "$mango_stage/rollback-config" ] &&
+       /usr/libexec/mango-rollback check "$mango_stage"; then
+        if mango_timed rollback mango_restore_ready; then
+            printf '%s\n' '本次应用失败；已还原上次成功配置并确认本机就绪；失败设置保留于内存，未确认互联网连通' > /var/etc/mango/start-status
+        else
+            : > /var/etc/mango/runtime-uncertain
+            printf '%s\n' '本次应用失败；自动恢复未完成，停止重试，请检查配置和系统日志' > /var/etc/mango/start-status
+        fi
+    else
+        printf '%s；无有效成功快照或配置已变化，未自动回滚\n' "$failed_status" > /var/etc/mango/start-status
+    fi
+    return "$result"
+}
+mango_restore_ready() {
+    local processes
+    /usr/libexec/mango-rollback check "$mango_stage" || return 1
+    # Stop only this service, without installing the failed candidate policy.
+    processes=$(/usr/libexec/mango-process snapshot) || return 1
+    procd_kill mango_proxy || /usr/libexec/mango-process absent || return 1
+    /usr/libexec/mango-process wait $processes || return 1
+    /usr/libexec/mango-rollback restore "$mango_stage" || return 1
+    # The candidate may have been direct mode. Ensure restored proxy policy has
+    # independent protection even if asset preparation fails before mango_guard.
+    /usr/libexec/mango-recovery-guard install || return 1
+    rm -f /var/etc/mango/config.tested /var/etc/mango/config.pending.json
+    mango_fw_applied=0
+    mango_dns_applied=0
+    mango_recovery_failed=0
+    mango_pending_generated=0
+    # One start only: regenerate DNS/firewall/core together.
+    start
+}
+mango_reload() {
+    local ntp_inputs
+    mango_pair_ensure || return $?
+    mango_timed assets /usr/libexec/mango-assets || return 1
+    ntp_inputs=$(mango_ntp_inputs) || return 1
+    mode=$(uci -q get mango_proxy.main.mode)
+    # Prepare DNS and JSON before changing the live runtime. No independent Xray test.
+    rm -f /var/etc/mango/config.tested
+    printf '%s\n' '正在校验 DNS 规则，尚未切换' > /var/etc/mango/start-status
+    mango_timed dns-preflight /usr/libexec/mango-dns check "$mango_stage/dns.conf" || return 1
+    if mango_core_required; then
+        printf '%s\n' '正在生成新配置，尚未切换' > /var/etc/mango/start-status
+        MANGO_CONFIGURED_NODE=1 MANGO_APPLY_NODE="${mango_apply_node:-}" /usr/libexec/mango-generate json > /var/etc/mango/config.pending.json || return 1
+        mango_pending_generated=1
+    else
+        rm -f /var/etc/mango/config.tested /var/etc/mango/config.pending.json
+    fi
+    if [ "$mango_input_hash" != "$(sha256sum /etc/config/mango_proxy | awk '{print $1}')" ] || \
+       [ "$ntp_inputs" != "$(mango_ntp_inputs)" ]; then
+        rm -f /var/etc/mango/config.tested
+        printf '%s\n' '配置在校验期间发生变化，请重新应用' > /var/etc/mango/start-status
+        return 1
+    fi
+    : > /var/etc/mango/runtime-uncertain
+    mango_reload_mutated=1
+    if [ -n "${mango_apply_node:-}" ]; then
+        printf '%s\n' "$mango_apply_node" > /var/etc/mango/active-node.new &&
+            mv /var/etc/mango/active-node.new /var/etc/mango/active-node || return 1
+    else
+        rm -f /var/etc/mango/active-node
+    fi
+    mango_timed configure /usr/libexec/mango-generate configure >/dev/null || return 1
+    mango_timed dns-install /usr/libexec/mango-dns prepared "$mango_stage/dns.conf" || return 1
+    mango_dns_applied=1
+    if [ "$mode" = direct ] || [ "$mode" = gfw ] || [ "$mode" = split ]; then
+        if [ -f /var/etc/mango/reload-dhcp ]; then
+            mango_timed dns-restart /etc/init.d/dnsmasq restart || return 1
+            rm -f /var/etc/mango/reload-dhcp
+        fi
+    fi
+    # China-IP bypass is installed before the old process is stopped.
+    mango_timed firewall /usr/libexec/mango-fw || return 1
+    mango_clear_recovery_guard || return 1
+    mango_fw_applied=1
+    if [ -f /var/etc/mango/reload-firewall ]; then
+        /etc/init.d/firewall reload || return 1
+        rm -f /var/etc/mango/reload-firewall
+    fi
+    mango_timed stop stop || return 1
+    mango_timed start start
+}
+service_triggers() { procd_add_reload_trigger mango_proxy; }
