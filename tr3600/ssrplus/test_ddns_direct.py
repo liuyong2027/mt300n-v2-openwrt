@@ -3,7 +3,8 @@
 Linux native: python3 test_ddns_direct.py --framework PATH --report REPORT
 Packed ARM64: python3 test_ddns_direct.py --root ROOTFS --report REPORT
 Requires gcc, curl, openssl, iproute2, nftables, util-linux and passwordless sudo.
-Packed mode also requires qemu-aarch64-static. No real provider is contacted.
+Packed mode requires --qemu pointing to the test-only SO_MARK-enabled QEMU
+built by build-test-qemu.sh. No real provider is contacted.
 """
 import argparse
 import ctypes
@@ -12,6 +13,7 @@ import http.server
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -386,7 +388,13 @@ def inside(args):
                 assert (root / 'lib/upgrade/keep.d/cudy-dynu-ddns').read_text() == '/etc/config/ddns\n'
                 assert '/usr/libexec/cudy-ddns-curl -4 --interface ' in (root / 'usr/libexec/cudy-dynu-resolve').read_text()
                 assert load_patcher().BLOCK in (root / 'usr/lib/ddns/dynamic_dns_functions.sh').read_text()
-                command = ['qemu-aarch64-static', '-L', str(root), '-E', 'LD_PRELOAD=' + str(installed), str(root / 'usr/bin/curl')]
+                # UID 65534 must execute the emulator too, regardless of the
+                # runner workspace's ancestor permissions. Copy only test code.
+                emulator = temporary / 'qemu-aarch64'
+                shutil.copyfile(shutil.which(args.qemu), emulator)
+                emulator.chmod(0o755)
+                run([emulator, '--version'], preexec_fn=no_mark_permissions)
+                command = [str(emulator), '-L', str(root), '-E', 'LD_PRELOAD=' + str(installed), str(root / 'usr/bin/curl')]
                 hostenv = dict(os.environ)
                 hostenv.pop('LD_PRELOAD', None)
                 before = counters()['marked-direct']
@@ -400,13 +408,20 @@ def inside(args):
                               '  assert stream.read(4)==bytes([127,69,76,70])\n')
                 run([sys.executable, '-c', read_probe, installed, root / 'usr/bin/curl'],
                     preexec_fn=no_mark_permissions)
-                failed = run(command + ['--disable', '--interface', DEVICE] + options,
+                # Confirm the failure is real kernel SO_MARK permission denial,
+                # not QEMU rejecting an unsupported syscall (ENOPROTOOPT).
+                failed = run(command[:1] + ['-strace'] + command[1:] +
+                             ['--disable', '--interface', DEVICE] + options,
                              env=hostenv, ok=False, preexec_fn=no_mark_permissions)
                 assert failed.returncode != 0
+                assert re.search(r'setsockopt\([^\n]*,1,36,[^\n]*\) = -1 errno=1 ', failed.stderr), failed.stderr
                 assert counters() == before_failure, 'packed marking failure sent a request'
                 cases.append('packed ARM64 curl plus installed ARM64 shim performs TLS over bound marked socket; no-cap failure stops')
                 packed = {'runtime': 'actual packed ARM64 curl and socket-mark.so under QEMU',
                           'unprivileged_packed_files_readable': True,
+                          'unprivileged_mark_errno': 'EPERM',
+                          'emulator_version': run([emulator, '--version']).stdout.splitlines()[0],
+                          'emulator_sha256': hashlib.sha256(emulator.read_bytes()).hexdigest(),
                           'shim_sha256': hashlib.sha256(installed.read_bytes()).hexdigest(),
                           'launcher': 'packed ELF/architecture checked; launcher behavior exercised by identical native source'}
             report = {'passed': True, 'cases': cases, 'case_count': len(cases),
@@ -435,6 +450,8 @@ def main():
     parser.add_argument('--root', type=lambda v: Path(v).resolve())
     parser.add_argument('--framework', type=lambda v: Path(v).resolve())
     parser.add_argument('--report', type=lambda v: Path(v).resolve())
+    parser.add_argument('--qemu', default='qemu-aarch64-static',
+                        help='ARM64 user emulator with real SO_MARK syscall forwarding')
     parser.add_argument('--inside', action='store_true')
     parser.add_argument('--peer', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--cert', help=argparse.SUPPRESS)
@@ -452,7 +469,8 @@ def main():
         assert sys.platform == 'linux', 'Real socket/nft test requires Linux'
         assert args.report
         command = ['unshare', '--net', '--mount', '--propagation', 'private', sys.executable,
-                   str(Path(__file__).resolve()), '--inside', '--report', str(args.report)]
+                   str(Path(__file__).resolve()), '--inside', '--report', str(args.report),
+                   '--qemu', args.qemu]
         if args.root:
             command += ['--root', str(args.root)]
         if args.framework:

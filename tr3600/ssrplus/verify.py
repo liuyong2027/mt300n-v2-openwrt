@@ -136,9 +136,16 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         '--root',str(root),'--report',str(server_report)],check=True)
     server_checks=json.loads(server_report.read_text())
     ddns_report=repo/'reports/ddns-direct-packed-verification.json'
+    # The distro QEMU rejects SO_MARK before reaching the host kernel. Use the
+    # pinned test-only syscall-forwarding build, without changing packed bytes.
+    qemu_build=json.loads((repo/'reports/ddns-qemu-build.json').read_text())
+    ddns_qemu=repo/qemu_build['executable']
+    assert hashlib.sha256(ddns_qemu.read_bytes()).hexdigest()==qemu_build['executable_sha256']
     subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_ddns_direct.py'),
-        '--root',str(root),'--report',str(ddns_report)],check=True)
+        '--root',str(root),'--report',str(ddns_report),'--qemu',str(ddns_qemu)],check=True)
     ddns_checks=json.loads(ddns_report.read_text())
+    assert ddns_checks['packed']['emulator_sha256']==qemu_build['executable_sha256']
+    ddns_checks['test_emulator_build']=qemu_build
     # Test all three preserved server ciphers with the actual compiled ARM64 Xray.
     for cipher in ['aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305']:
         cfg={'log':{'loglevel':'warning'},'dns':{'queryStrategy':'UseIPv4','servers':['198.18.255.1']},

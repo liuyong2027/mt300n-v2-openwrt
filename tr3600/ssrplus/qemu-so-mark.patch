@@ -1,0 +1,36 @@
+diff --git a/linux-user/generic/sockbits.h b/linux-user/generic/sockbits.h
+index b3b4a8e..fb24403 100644
+--- a/linux-user/generic/sockbits.h
++++ b/linux-user/generic/sockbits.h
+@@ -9,6 +9,7 @@
+ #define GENERIC_SOCKBITS_H
+ 
+ #define TARGET_SO_PASSSEC        34
++#define TARGET_SO_MARK           36
+ 
+ /* For setsockopt(2) */
+ #define TARGET_SOL_SOCKET      1
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 15caa69..078afd4 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -2452,6 +2452,9 @@ set_timeout:
+         case TARGET_SO_PRIORITY:
+ 		optname = SO_PRIORITY;
+ 		break;
++        case TARGET_SO_MARK:
++                optname = SO_MARK;
++                break;
+ #ifdef SO_BSDCOMPAT
+         case TARGET_SO_BSDCOMPAT:
+ 		optname = SO_BSDCOMPAT;
+@@ -2700,6 +2703,9 @@ get_timeout:
+         case TARGET_SO_PRIORITY:
+             optname = SO_PRIORITY;
+             goto int_case;
++        case TARGET_SO_MARK:
++            optname = SO_MARK;
++            goto int_case;
+ #ifdef SO_BSDCOMPAT
+         case TARGET_SO_BSDCOMPAT:
+             optname = SO_BSDCOMPAT;
