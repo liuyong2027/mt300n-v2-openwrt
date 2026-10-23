@@ -1,0 +1,7 @@
+config usteer 'main'
+	option enabled '0'
+	option network 'lan'
+	option local_mode '1'
+	option syslog '1'
+	option debug_level '1'
+	option band_steering_interval '0'

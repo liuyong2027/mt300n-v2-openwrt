@@ -1,0 +1,7 @@
+{
+  "luci-app-cudy-ss": {
+    "description": "Manage the private ZeroTier Shadowsocks server",
+    "read": { "ubus": { "cudy.ss": ["status"] } },
+    "write": { "ubus": { "cudy.ss": ["configure", "client"] } }
+  }
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+case "$ACTION" in add|remove) ;; *) exit 0 ;; esac
+case "$DEVNAME" in sd*) ;; *) exit 0 ;; esac
+/usr/libexec/cudy-usb hotplug "$ACTION" "$DEVNAME" | logger -t cudy-usb

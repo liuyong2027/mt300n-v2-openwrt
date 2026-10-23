@@ -1,0 +1,6 @@
+#!/bin/sh
+[ "$#" = 0 ] || exit 1
+[ ! -e /var/run/cudy-led/suspend ] || { echo '升级期间指示灯由系统管理'; exit 1; }
+/usr/libexec/cudy-led-control validate || exit 1
+/etc/init.d/cudy_led restart || { echo '指示灯服务应用失败'; exit 1; }
+echo '指示灯设置已应用，不影响网络连接'

@@ -1,0 +1,130 @@
+Dual Image Note:
+1. The two sets of kernel and rootfs volumes are stored in one UBI partition. The rootfs_data will also be stored in a UBI partition to allow it to be shared by both image slots.
+
+2. The environment of uboot is stored in a UBI partition, it will be changed due to the need to store the active slot number, which changes with every upgrade.
+
+3. UBI partition layout:
+u-boot-env
+kernel
+kernel2
+rootfs
+rootfs2
+rootfs_data
+
+4. u-boot-env environment is used to store metadata, which contains:
+- Active image slot (dual_boot.current_slot)
+- Image slot 0 valid state (dual_boot.slot_0_invalid)
+- Image slot 1 valid state (dual_boot.slot_1_invalid)
+
+root@TR3600:/# cat /etc/fw_env.config 
+/dev/ubi0_0 0 0x80000 0x80000 1
+root@TR3600:/# fw_printenv
+dual_boot.current_slot=1
+dual_boot.slot_0_invalid=0
+dual_boot.slot_1_invalid=0
+mtdids=nmbm0=nmbm0
+mtdparts=nmbm0:1024k(bl2),512k(backup),4096k(factory),256k(bdinfo),2048k(fip),237824k(ubi)
+stderr=serial@11000000
+stdin=serial@11000000
+stdout=serial@11000000
+baudrate=115200
+
+5. The image slot and partition information are determined by U-Boot and will be passed to the kernel in command-line mode.
+root@TR3600:/# cat /proc/cmdline 
+console=ttyS0,115200n1 loglevel=8 earlycon=uart8250,mmio32,0x11000000 pci=pcie_bus_perf ubi.rootfs_volume=rootfs2 boot_param.boot_kernel_part=kernel2 boot_param.boot_rootfs_part=rootfs2 boot_param.upgrade_kernel_part=kernel boot_param.upgrade_rootfs_part=rootfs boot_param.env_part=u-boot-env boot_param.rootfs_data_part=rootfs_data boot_param.boot_image_slot=1 boot_param.upgrade_image_slot=0 boot_param.dual_boot
+
+Currently defined command-line parameters:
+1) boot_param.dual_boot - Tells upgrade scripts whether dual-boot is enabled.
+2) boot_param.upgrade_image_slot - Tells upgrade scripts image slot for upgrading new image. For example:
+
+	upgrade_image_slot=$(cat /sys/module/boot_param/parameters/upgrade_image_slot 2>/dev/null)
+	[ -n "${upgrade_image_slot}" ] && {
+		v "Set new boot image slot to ${upgrade_image_slot}"
+		fw_setenv "dual_boot.current_slot" "${upgrade_image_slot}"
+		fw_setenv "dual_boot.slot_${upgrade_image_slot}_invalid" "0"
+	}
+	
+3) boot_param.upgrade_kernel_part - Tells upgrade scripts kernel volume name for upgrading new kernel.
+4) boot_param.upgrade_rootfs_part - Tells upgrade scripts rootfs volume name for upgrading new rootfs.
+5) boot_param.env_part - Tells uboot-envtool the partition to be used as u-boot environment where the metadata is stored.
+6) ubi.rootfs_volume - Tells UBI subsystem the default volume to be mounted as root.
+
+6. Apply the following patches for kernel
+target/linux/mediatek/patches-6.12/999-ubi-add-configurable-rootdev.patch
+
+7. Below is mtd and ubi detailed info:
+root@TR3600:/# cat /proc/mtd
+dev:    size   erasesize  name
+mtd0: 10000000 00020000 "spi0.0"
+mtd1: 00100000 00020000 "BL2"
+mtd2: 00080000 00020000 "backup"
+mtd3: 00400000 00020000 "Factory"
+mtd4: 00040000 00020000 "bdinfo"
+mtd5: 00200000 00020000 "FIP"
+mtd6: 0e840000 00020000 "ubi"
+root@TR3600:/# ubinfo -a
+UBI version:                    1
+Count of UBI devices:           1
+UBI control device major/minor: 10:62
+Present UBI devices:            ubi0
+
+ubi0
+Volumes count:                           6
+Logical eraseblock size:                 126976 bytes, 124.0 KiB
+Total amount of logical eraseblocks:     1858 (235921408 bytes, 224.9 MiB)
+Amount of available logical eraseblocks: 101 (12824576 bytes, 12.2 MiB)
+Maximum count of volumes                 128
+Count of bad physical eraseblocks:       0
+Count of reserved physical eraseblocks:  38
+Current maximum erase counter value:     8
+Minimum input/output unit size:          2048 bytes
+Character device major/minor:            246:0
+Present volumes:                         0, 1, 2, 3, 4, 5
+
+Volume ID:   0 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        9 LEBs (1142784 bytes, 1.0 MiB)
+State:       OK
+Name:        u-boot-env
+Character device major/minor: 246:1
+-----------------------------------
+Volume ID:   1 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        30 LEBs (3809280 bytes, 3.6 MiB)
+State:       OK
+Name:        kernel
+Character device major/minor: 246:2
+-----------------------------------
+Volume ID:   2 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        30 LEBs (3809280 bytes, 3.6 MiB)
+State:       OK
+Name:        kernel2
+Character device major/minor: 246:3
+-----------------------------------
+Volume ID:   3 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        244 LEBs (30982144 bytes, 29.5 MiB)
+State:       OK
+Name:        rootfs
+Character device major/minor: 246:4
+-----------------------------------
+Volume ID:   4 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        245 LEBs (31109120 bytes, 29.6 MiB)
+State:       OK
+Name:        rootfs2
+Character device major/minor: 246:5
+-----------------------------------
+Volume ID:   5 (on ubi0)
+Type:        dynamic
+Alignment:   1
+Size:        1157 LEBs (146911232 bytes, 140.1 MiB)
+State:       OK
+Name:        rootfs_data
+Character device major/minor: 246:6

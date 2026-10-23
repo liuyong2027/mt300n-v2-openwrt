@@ -1,0 +1,4 @@
+#!/bin/sh
+chmod 600 /etc/config/cudy_led
+/etc/init.d/cudy_led enable
+exit 0

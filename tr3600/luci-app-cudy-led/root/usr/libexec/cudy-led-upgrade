@@ -1,0 +1,16 @@
+#!/bin/sh
+# Called only after image/config validation, before handing upgrade to procd.
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'cudy,tr3600-v1' ] || exit 0
+umask 077
+mkdir -p /var/run/cudy-led
+case "$1" in
+	suspend)
+		touch /var/run/cudy-led/suspend
+		/etc/init.d/cudy_led stop
+		;;
+	resume)
+		rm -f /var/run/cudy-led/suspend
+		/etc/init.d/cudy_led start
+		;;
+	*) exit 1;;
+esac

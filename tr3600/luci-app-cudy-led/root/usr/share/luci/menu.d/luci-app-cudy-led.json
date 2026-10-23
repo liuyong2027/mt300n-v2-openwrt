@@ -1,0 +1,1 @@
+{"admin/system/cudy-led":{"title":"指示灯","order":65,"action":{"type":"view","path":"cudy-led"},"depends":{"acl":["luci-app-cudy-led"],"uci":{"cudy_led":true}}}}

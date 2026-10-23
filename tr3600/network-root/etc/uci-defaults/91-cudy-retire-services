@@ -1,0 +1,39 @@
+#!/bin/sh
+# Retire only this build's VPN configuration and the owner's removed DDNS feature.
+# Keep a private reversible backup on an existing installation; no secrets in image.
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'cudy,tr3600-v1' ] || exit 0
+set -eu
+umask 077
+backup=/root/.cudy-retired-test2
+need_backup=0
+for config in cudy_l2tp ddns; do
+    [ ! -e "/etc/config/$config" ] || need_backup=1
+done
+for section in cudy_l2tp_ike cudy_l2tp_esp cudy_l2tp_zone cudy_l2tp_lan cudy_l2tp_wan cudy_l2tp_zt; do
+    if uci -q get "firewall.$section" >/dev/null 2>&1; then need_backup=1; fi
+done
+[ "$need_backup" = 1 ] || exit 0
+# Never overwrite the first backup on a retried first-boot invocation.
+mkdir -p "$backup"
+chmod 700 "$backup"
+if [ ! -e "$backup/firewall" ]; then cp -p /etc/config/firewall "$backup/firewall"; chmod 600 "$backup/firewall"; fi
+for config in cudy_l2tp ddns; do
+    if [ -e "/etc/config/$config" ]; then
+        [ -e "$backup/$config" ] || cp -p "/etc/config/$config" "$backup/$config"
+        chmod 600 "$backup/$config"
+    fi
+done
+# New image has no VPN/DDNS daemon. Remove only legacy enabled-service links.
+for service in cudy_l2tp xl2tpd swanctl ddns; do
+    for link in /etc/rc.d/S*"$service" /etc/rc.d/K*"$service"; do
+        [ ! -L "$link" ] || rm -f "$link"
+    done
+done
+for section in cudy_l2tp_ike cudy_l2tp_esp cudy_l2tp_zone cudy_l2tp_lan cudy_l2tp_wan cudy_l2tp_zt; do
+    uci -q delete "firewall.$section" || :
+done
+uci -q commit firewall
+for config in cudy_l2tp ddns; do
+    [ ! -e "/etc/config/$config" ] || rm -f "/etc/config/$config"
+done
+exit 0
