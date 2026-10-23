@@ -18,6 +18,9 @@ image=images[0]
 assert image.stat().st_size < 237824*1024
 with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as temp:
     temp=Path(temp)
+    # Low-privilege packed checks must reach these public image files; their
+    # expected failure must come from SO_MARK, not a private temp-directory ACL.
+    temp.chmod(0o755)
     with tarfile.open(image) as archive:
         roots=[m for m in archive.getmembers() if m.isfile() and m.name.endswith('/root')]
         assert len(roots)==1

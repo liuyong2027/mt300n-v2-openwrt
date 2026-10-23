@@ -394,12 +394,19 @@ def inside(args):
                 assert response.stdout.strip() == DIRECT_IP
                 assert counters()['marked-direct'] > before
                 before_failure = counters()
+                read_probe = ('import sys\n'
+                              'for path in sys.argv[1:]:\n'
+                              ' with open(path,"rb") as stream:\n'
+                              '  assert stream.read(4)==bytes([127,69,76,70])\n')
+                run([sys.executable, '-c', read_probe, installed, root / 'usr/bin/curl'],
+                    preexec_fn=no_mark_permissions)
                 failed = run(command + ['--disable', '--interface', DEVICE] + options,
                              env=hostenv, ok=False, preexec_fn=no_mark_permissions)
                 assert failed.returncode != 0
                 assert counters() == before_failure, 'packed marking failure sent a request'
                 cases.append('packed ARM64 curl plus installed ARM64 shim performs TLS over bound marked socket; no-cap failure stops')
                 packed = {'runtime': 'actual packed ARM64 curl and socket-mark.so under QEMU',
+                          'unprivileged_packed_files_readable': True,
                           'shim_sha256': hashlib.sha256(installed.read_bytes()).hexdigest(),
                           'launcher': 'packed ELF/architecture checked; launcher behavior exercised by identical native source'}
             report = {'passed': True, 'cases': cases, 'case_count': len(cases),
