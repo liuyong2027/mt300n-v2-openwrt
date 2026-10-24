@@ -133,6 +133,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     qemu_build=json.loads((repo/'reports/ddns-qemu-build.json').read_text())
     ddns_qemu=repo/qemu_build['executable']
     assert hashlib.sha256(ddns_qemu.read_bytes()).hexdigest()==qemu_build['executable_sha256']
+    assert qemu_build['transparent_patch_sha256']==hashlib.sha256((repo/'tr3600/ssrplus/qemu-transparent.py').read_bytes()).hexdigest()
     server_report=repo/'reports/ss-server-packed-verification.json'
     subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_unified_ss_packed.py'),
         '--root',str(root),'--report',str(server_report),'--qemu',str(ddns_qemu)],check=True)

@@ -84,6 +84,32 @@ end''')
         self.assertEqual(o.validate(o,'public','ordinary'),'public')
         self.assertIsNone(o.validate(o,'zerotier','ordinary')[0])
 
+    def test_process_ownership_excludes_client_core_and_recycled_pid(self):
+        script=(HERE/'unified-root/usr/libexec/cudy-ss-process').read_text(encoding='utf-8').removeprefix('#!/usr/bin/lua\n')
+        self.lua.execute('''
+local commands={['10']='/usr/bin/xray run -config /var/etc/cudy-ss/config.json ',
+ ['11']='/bin/sh /usr/libexec/cudy-ssr-serve ',
+ ['12']='/usr/bin/xray run -config /var/etc/ssrplus/tcp.json ',
+ ['13']='/bin/sh /usr/libexec/cudy-ssr-serve-foreign '}
+package.loaded['nixio.fs']={
+ dir=function()local i=9;return function()i=i+1;if i<=13 then return tostring(i)end end end,
+ readfile=function(path)
+  local pid,kind=path:match('^/proc/(%d+)/(.*)$')
+  if kind=='cmdline' then return commands[pid]:gsub(' ','\\0') end
+  if kind=='stat' then return pid..' (synthetic) S'..string.rep(' 0',18)..' 111' end
+ end}
+package.loaded['nixio']={nanosleep=function()error('Unexpected wait on recycled PID')end}
+output='';io.write=function(v)output=output..v end
+''')
+        for action,expected in [('snapshot','10:111 '),('snapshot-all','10:111 11:111 ')]:
+            self.lua.globals().arg=self.lua.table_from([action]);self.lua.globals().output=''
+            self.lua.execute(script)
+            self.assertEqual(self.lua.globals().output,expected)
+        self.lua.execute("os.exit=function(code)exit_code=code;error('captured exit')end")
+        self.lua.globals().arg=self.lua.table_from(['wait','10:110'])
+        with self.assertRaises(Exception):self.lua.execute(script)
+        self.assertEqual(self.lua.globals().exit_code,0)
+
 def integration(root):
     runtime=root/'package/luci-app-cudy-ss/root'
     package=root/'feeds/helloworld/luci-app-ssr-plus'

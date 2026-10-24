@@ -196,6 +196,25 @@ add rule inet fw4 input meta mark 1 accept
         # Reopening valid state must recover without stale DNAT/TPROXY failures.
         test.model.rules(raw)
         with test.client(raw,'10.99.0.1',network.names['lan']):test.checks('policy/re-enabled',network.names['lan'],prefix=b'PROXY|')
+        # Run the installed gate with only its file locations relocated. nft and
+        # packet forwarding remain real; selected upstream state is synthetic.
+        gate=(root/'usr/libexec/cudy-ss-gate').read_text()
+        gate=gate.replace('/etc/cudy-ss',str(directory/'gate-files'))
+        gate=gate.replace('/var/run/cudy-ss',str(directory/'gate-state'))
+        gate=gate.replace('/var/lock',str(directory/'gate-locks'))
+        gatepath=directory/'gate';gatepath.write_text(gate)
+        uci.write_text('#!/bin/sh\nprintf "synthetic-selected-relay\\n"\n');uci.chmod(0o755)
+        old.run('sh',str(gatepath),'close',env=env)
+        with test.client(raw,'10.99.0.1',network.names['lan']):
+            before=old.drop_count();test.checks('gate/restart-blocks-decrypted-egress',network.names['lan'],False)
+            assert old.drop_count()>before
+        old.run('sh',str(gatepath),'started',env=env)
+        with test.client(raw,'10.99.0.1',network.names['lan']):
+            test.checks('gate/SSR-started-restores-policy',network.names['lan'],prefix=b'PROXY|')
+        state=directory/'gate-files/route-guard.nft';stamp=state.stat().st_mtime_ns
+        old.run('sh',str(gatepath),'refresh',env=env)
+        assert state.stat().st_mtime_ns==stamp,'Healthy gate rewrote its persisted state'
+        test.passed.append('gate/healthy-refresh-does-not-rewrite-state')
     data=json.loads(subprocess.check_output(['nft','-j','list','ruleset'],text=True))
     replies=0;captured={'tcp':0,'udp':0}
     for item in data['nftables']:
@@ -237,10 +256,12 @@ def execute(args):
             network_setup(network)
             old.run('ip','-n',network.names['wan'],'address','add','1.2.3.3/24','dev','ss-peer-wan')
             with namespace(network,root,directory),\
-                programs.process([sys.executable,str(HERE/'test_ss_server.py'),'--echo',str(old.ECHO_PORT),'DIRECT|','0.0.0.0'],network.names['wan']),\
+                programs.process([sys.executable,str(HERE/'test_ss_server.py'),'--echo',str(old.ECHO_PORT),'DIRECT|','1.2.3.2'],network.names['wan']),\
+                programs.process([sys.executable,str(HERE/'test_ss_server.py'),'--echo',str(old.ECHO_PORT),'DIRECT|','1.2.3.3'],network.names['wan']),\
                 programs.process([sys.executable,str(HERE/'test_ss_server.py'),'--echo',str(old.PROXY_PORT),'PROXY|','0.0.0.0'],network.names['wan']),\
                 programs.process([sys.executable,str(HERE/'test_ss_server.py'),'--echo','19004','DIRECT|','0.0.0.0'],network.names['wan']):
-                old.verify_echo('1.2.3.2');test=old.Acceptance(model,programs,'1.2.3.2',packed=True)
+                old.verify_echo('1.2.3.2');old.verify_echo('1.2.3.3')
+                test=old.Acceptance(model,programs,'1.2.3.2',packed=True)
                 test.matrix();scopes(test,network);policy(test,network,root,directory)
         finally:network.close()
         result={'all_passed':True,'packed_arm64':True,'methods':model.methods,'cases':test.passed,
