@@ -13,13 +13,57 @@
     "workflow_dispatch": {}
   },
   "permissions": {
-    "contents": "read"
+    "contents": "read",
+    "actions": "read"
   },
   "concurrency": {
     "group": "tr3600-ssrplus-${{ github.ref }}",
     "cancel-in-progress": true
   },
   "jobs": {
+    "runtime-preflight": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 45,
+      "steps": [
+        {
+          "name": "Checkout runtime changes",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Install isolated runtime test tools",
+          "run": "sudo apt-get update\nsudo apt-get install -y build-essential python3-venv python3-distlib libglib2.0-dev meson ninja-build pkg-config curl squashfs-tools nftables iproute2 lua5.1 qemu-user-static\nmkdir -p reports\npython3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8"
+        },
+        {
+          "name": "Download exact previously checked ARM64 baseline",
+          "env": {
+            "GITHUB_TOKEN": "${{ github.token }}"
+          },
+          "run": "curl -fL --retry 2 -H \"Authorization: Bearer $GITHUB_TOKEN\" -H \"Accept: application/vnd.github+json\" -o baseline.zip https://api.github.com/repos/liuyong2027/mt300n-v2-openwrt/actions/artifacts/12482494675/zip\ncurl -fL --retry 2 -o pinned-ssr.tar.gz https://codeload.github.com/fw876/helloworld/tar.gz/80d7bfff625b33db8afe80934638d96d214ceadc"
+        },
+        {
+          "name": "Build pinned syscall test emulator",
+          "run": "bash tr3600/ssrplus/build-test-qemu.sh 2>&1 | tee reports/ddns-qemu-build.log"
+        },
+        {
+          "name": "Test new runtime before full firmware compilation",
+          "run": "python3 tr3600/ssrplus/preflight-unified.py 2>&1 | tee reports/unified-preflight.log"
+        },
+        {
+          "name": "Upload runtime preflight diagnostics",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-unified-runtime-preflight-${{ github.run_number }}",
+            "path": "reports/",
+            "retention-days": 14,
+            "if-no-files-found": "warn"
+          }
+        }
+      ]
+    },
     "build": {
       "runs-on": "ubuntu-24.04",
       "timeout-minutes": 330,
@@ -70,11 +114,11 @@
           "run": "bash tr3600/ssrplus/build-test-qemu.sh 2>&1 | tee reports/ddns-qemu-build.log"
         },
         {
-          "name": "Validate replacement and private SS migration",
-          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8\n.test-venv/bin/python tr3600/ssrplus/test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py"
+          "name": "Validate legacy client migration and unified SS models",
+          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8\n.test-venv/bin/python tr3600/ssrplus/test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py"
         },
         {
-          "name": "Test actual namespace routing and private scope",
+          "name": "Retain legacy namespace regression coverage",
           "run": "python3 tr3600/ssrplus/test_network.py"
         },
         {
@@ -87,7 +131,7 @@
         },
         {
           "name": "Resolve exact OpenWrt and SSR Plus+ sources",
-          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 tr3600/ssrplus/check_config.py"
+          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 tr3600/ssrplus/check_config.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py --integration-root openwrt"
         },
         {
           "name": "Test DDNS direct sockets without provider updates",
@@ -117,7 +161,7 @@
           "name": "Upload checked test firmware",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "cudy-tr3600-ssrplus-test3-${{ github.sha }}",
+            "name": "cudy-tr3600-ssrplus-test4-${{ github.sha }}",
             "path": "ssrplus-assets/",
             "if-no-files-found": "error",
             "retention-days": 30
@@ -134,6 +178,9 @@
             "if-no-files-found": "warn"
           }
         }
+      ],
+      "needs": [
+        "runtime-preflight"
       ]
     }
   }

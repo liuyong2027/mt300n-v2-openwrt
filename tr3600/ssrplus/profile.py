@@ -50,7 +50,8 @@ cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
 ./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks
 ./scripts/feeds install -a
 python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"
-python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"''')
+python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"
+python3 "$kit/tr3600/ssrplus/unify-ss.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
     text=text.replace('cp -R "$kit/files" .', '''cp -R "$kit/files" .
 python3 "$kit/tr3600/ssrplus/patch-ddns.py" --framework feeds/packages/net/ddns-scripts/files/usr/lib/ddns/dynamic_dns_functions.sh --resolver files/usr/libexec/cudy-dynu-resolve''')
@@ -197,7 +198,7 @@ return M
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
-    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test3\n')
+    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test4\n')
     shutil.copy2(PROFILE/'migration.sh',files/'etc/uci-defaults/90-cudy-ssrplus-migrate')
     # Keep the same LED state machine, replace its proxy-specific adapter.
     led=ROOT/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua'
@@ -223,8 +224,9 @@ return M
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',
-        'private_ss':'SSR Plus+ server_config row; isolated Xray namespace; same client policy',
-        'ss_server_config_revision':3,
+        'private_ss':'removed by explicit user request; credentials are not migrated',
+        'ordinary_ss':'shared isolated Xray namespace; decrypted TCP/UDP enter SSR client policy; access scopes retained',
+        'ss_server_config_revision':4,
         'ddns_direct':'Dynu HTTPS curl sockets marked 255; WAN binding and TLS retained',
         'private_ss_ipv6':False,
         'hardware_validation':'pending'},indent=2)+'\n')

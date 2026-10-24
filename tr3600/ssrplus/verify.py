@@ -35,17 +35,19 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test3'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test4'
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw',
         'usr/share/luci/menu.d/luci-app-mango-proxy.json',
         'usr/share/luci/menu.d/luci-app-cudy-ss.json','usr/libexec/rpcd/cudy.ss',
         'usr/share/rpcd/acl.d/luci-app-cudy-ss.json','usr/libexec/cudy-ss-worker',
-        'www/luci-static/resources/view/cudy-ss.js']:
+        'www/luci-static/resources/view/cudy-ss.js','etc/config/cudy_ss','usr/libexec/cudy-ss-zt',
+        'usr/libexec/cudy-ss-zt-guard','usr/libexec/cudy-ss-zt-watch','lib/upgrade/keep.d/cudy-ss',
+        'usr/lib/cudy-ss/config.lua','usr/lib/cudy-ss/ss-zt.lua','usr/lib/cudy-ss/ss-server-migrate.lua']:
         assert not (root/absent).exists(),absent
     assert not list((root/'usr/libexec').glob('mango-*'))
     for required in ['etc/init.d/shadowsocksr','usr/bin/xray','usr/libexec/cudy-ss-netns',
-        'usr/lib/cudy-ss/migrate.lua','usr/lib/cudy-ss/config.lua','usr/libexec/cudy-ss-gate',
-        'usr/lib/cudy-ss/ss-server-migrate.lua','usr/lib/lua/cudy/ssr-server.lua',
+        'usr/lib/cudy-ss/migrate.lua','usr/lib/cudy-ss/server-runtime.lua','usr/libexec/cudy-ss-gate',
+        'usr/lib/cudy-ss/remove-private.lua','usr/lib/lua/cudy/ssr-server.lua','usr/libexec/cudy-ssr-serve',
         'usr/share/shadowsocksr/gen_cudy_ss_server.lua','usr/libexec/cudy-ssr-server-firewall',
         'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct','usr/libexec/cudy-ddns-curl',
         'etc/uci-defaults/80-cudy-ddns-direct',
@@ -71,10 +73,6 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     assert '__param_dual_boot' in symbols and '__param_rootfs_volume' in symbols
     assert not (root/'etc/cudy-webfiles').exists()
     assert not (root/'etc/cudy-ss').exists()
-    ss_defaults=(root/'etc/config/cudy_ss').read_text()
-    assert "option enabled '0'" in ss_defaults
-    for key in ['password','listen','subnet','network_id','interface']:
-        assert 'option '+key not in ss_defaults,key
     manifest=json.loads((root/'usr/lib/cudy-webfiles/manifest.json').read_text())
     assert manifest==json.loads((repo/'tr3600/cudy-webfiles/build-output/manifest.json').read_text())
     assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/cudy-webfiles').read_bytes()).hexdigest()==manifest['helperSHA256']
@@ -123,33 +121,32 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         assert 'PASS '+case+': native UCI, private SS preserved, repeat no-op' in native_result.stdout,case
     assert 'PASS all synthetic native-UCI migration checks; no production configuration used' in native_result.stdout
     private_migration_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
-        str(repo/'tr3600/ssrplus/test-ss-server-migration.lua'),
-        str(root/'usr/lib/cudy-ss/ss-server-migrate.lua'),str(root/'usr/lib/cudy-ss/config.lua'),
-        str(temp/'private-row-native-uci'),str(root/'usr/lib/cudy-ss/ss-zt.lua')],env=native_environment,text=True,
+        str(repo/'tr3600/ssrplus/test-remove-private.lua'),
+        str(root/'usr/lib/cudy-ss/remove-private.lua'),str(temp/'private-deletion-native-uci')],env=native_environment,text=True,
         stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-    (repo/'reports/private-ss-migration-packed-verification.log').write_text(private_migration_result.stdout)
+    (repo/'reports/private-ss-deletion-packed-verification.log').write_text(private_migration_result.stdout)
     print(private_migration_result.stdout,end='')
     private_migration_result.check_returncode()
-    assert 'PASS all 4 native private SS server_config migration cases' in private_migration_result.stdout
-    server_report=repo/'reports/ss-server-packed-verification.json'
-    subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_ss_server.py'),
-        '--root',str(root),'--report',str(server_report)],check=True)
-    server_checks=json.loads(server_report.read_text())
-    ddns_report=repo/'reports/ddns-direct-packed-verification.json'
+    assert 'PASS all 5 native private SS deletion cases' in private_migration_result.stdout
     # The distro QEMU rejects SO_MARK before reaching the host kernel. Use the
     # pinned test-only syscall-forwarding build, without changing packed bytes.
     qemu_build=json.loads((repo/'reports/ddns-qemu-build.json').read_text())
     ddns_qemu=repo/qemu_build['executable']
     assert hashlib.sha256(ddns_qemu.read_bytes()).hexdigest()==qemu_build['executable_sha256']
+    server_report=repo/'reports/ss-server-packed-verification.json'
+    subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_unified_ss_packed.py'),
+        '--root',str(root),'--report',str(server_report),'--qemu',str(ddns_qemu)],check=True)
+    server_checks=json.loads(server_report.read_text())
+    ddns_report=repo/'reports/ddns-direct-packed-verification.json'
     subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_ddns_direct.py'),
         '--root',str(root),'--report',str(ddns_report),'--qemu',str(ddns_qemu)],check=True)
     ddns_checks=json.loads(ddns_report.read_text())
     assert ddns_checks['packed']['emulator_sha256']==qemu_build['executable_sha256']
     ddns_checks['test_emulator_build']=qemu_build
-    # Test all three preserved server ciphers with the actual compiled ARM64 Xray.
+    # Extra parser regression checks, in addition to all seven encrypted ciphers.
     for cipher in ['aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305']:
         cfg={'log':{'loglevel':'warning'},'dns':{'queryStrategy':'UseIPv4','servers':['198.18.255.1']},
-            'inbounds':[{'tag':'cudy-ss-zt','listen':'0.0.0.0','port':8388,'protocol':'shadowsocks',
+            'inbounds':[{'tag':'ordinary-ss','listen':'0.0.0.0','port':8388,'protocol':'shadowsocks',
             'settings':{'method':cipher,'password':'synthetic-test-password-only-12345','network':'tcp,udp'}}],
             'outbounds':[{'protocol':'freedom','settings':{'domainStrategy':'UseIPv4'}}]}
         path=temp/'test.json';path.write_text(json.dumps(cfg))
@@ -173,7 +170,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-1.2.0-test3-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-1.2.0-test4-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
@@ -182,14 +179,15 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'actual_xray_version':xray_version,
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
         'actual_arm64_native_uci_migration_cases_passed':len(native_cases),
-        'actual_arm64_private_ss_row_migration_cases_passed':4,
+        'actual_arm64_private_ss_deletion_cases_passed':5,
         'build_recipe_commit':os.environ.get('GITHUB_SHA'),
         'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
-        'private_ss':'SSR Plus+ server row with preserved scope and isolated network namespace',
+        'private_ss':'removed without credential migration; dedicated firewall sections removed',
+        'ordinary_ss':'shared namespace; TCP REDIRECT and UDP TPROXY follow SSR client policy',
         'ss_server_end_to_end_checks':server_checks,
         'ddns_direct_socket_checks':ddns_checks,
         'private_ss_ipv6_supported':False,
-        'actual_arm64_server_ciphers_tested':3,'actual_installed_syntax_checks':syntax,
+        'actual_arm64_server_ciphers_tested':len(server_checks['methods']),'actual_installed_syntax_checks':syntax,
         'hardware_flash_or_boot_tested':False}
     (out/'BUILD-VERIFICATION.json').write_text(json.dumps(proof,indent=2)+'\n')
     (out/'README.txt').write_text((repo/'tr3600/ssrplus/README.txt').read_text())

@@ -1,0 +1,23 @@
+#!/usr/bin/lua
+local u=require('uci').cursor()
+local fs=require('nixio.fs')
+local model=require('cudy.ssr-server')
+local runtime=dofile('/usr/lib/cudy-ss/server-runtime.lua')
+if arg[1]=='validate' then
+    local sid=arg[2]
+    assert(type(sid)=='string' and sid:match('^[%w_]+$'),'Invalid server section')
+    local row=assert(u:get_all('shadowsocksr',sid));row['.name']=sid
+    model.normalize(row)
+    return
+end
+assert(arg[1]=='rules' and arg[2]=='/var/run/ssrplus/server-access.active','Invalid rules command')
+local active={}
+for sid in (fs.readfile(arg[2]) or ''):gmatch('[^\n]+') do
+    assert(sid:match('^[%w_]+$'),'Invalid active server state');active[sid]=true
+end
+local rows=runtime.rows(u)
+local ok,ready=pcall(runtime.ready)
+for _,row in ipairs(rows) do
+    if row.type=='shadowsocks' then active[row['.name']]=ok and ready or nil end
+end
+io.write(model.rules(rows,runtime.lan(),active))

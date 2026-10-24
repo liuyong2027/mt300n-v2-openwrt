@@ -1,0 +1,38 @@
+#!/bin/sh
+# procd owns this supervisor and its one isolated Xray child.
+set -eu
+umask 077
+dir=/var/run/cudy-ss
+mkdir -p "$dir" /var/etc/cudy-ss
+child=
+cleanup() {
+    trap - EXIT HUP INT TERM
+    rm -f "$dir/core-ready"
+    /usr/libexec/cudy-ssr-server-firewall reload >/dev/null 2>&1 || :
+    if [ -n "$child" ]; then kill "$child" 2>/dev/null || :; wait "$child" 2>/dev/null || :; fi
+    /usr/libexec/cudy-ss-netns stop >/dev/null 2>&1 || :
+}
+trap cleanup EXIT
+trap 'exit 0' HUP INT TERM
+rm -f "$dir/core-ready"
+/usr/libexec/cudy-ssr-server-firewall reload
+/usr/libexec/cudy-ssr-servers wanted || exit 0
+/usr/libexec/cudy-ssr-servers config > /var/etc/cudy-ss/config.new.json
+/usr/bin/xray run -test -config /var/etc/cudy-ss/config.new.json >/dev/null 2>&1
+mv /var/etc/cudy-ss/config.new.json /var/etc/cudy-ss/config.json
+/usr/libexec/cudy-ss-netns start
+echo 1 > /proc/sys/net/ipv4/conf/css-host/route_localnet
+/sbin/ip netns exec cudy-ss /usr/bin/xray run -config /var/etc/cudy-ss/config.json &
+child=$!
+ready=0
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$child" 2>/dev/null || exit 1
+    if /usr/libexec/cudy-ssr-servers probe; then ready=1; break; fi
+    sleep 1
+done
+[ "$ready" = 1 ] || exit 1
+touch "$dir/core-ready"
+/usr/libexec/cudy-ss-ssr-interfaces
+/usr/libexec/cudy-ssr-server-firewall reload
+/usr/libexec/cudy-ss-gate refresh
+wait "$child"

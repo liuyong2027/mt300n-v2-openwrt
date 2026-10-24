@@ -1,0 +1,55 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in prepare|add|reload|stop|check) ;; *) exit 2;; esac
+mkdir -p /var/run/ssrplus /var/lock
+exec 8>/var/lock/cudy-ssr-server-firewall.lock
+flock -w 30 8
+active=/var/run/ssrplus/server-access.active
+batch=/var/run/ssrplus/server-access.nft
+cache=/var/run/ssrplus/server-access.applied
+trap 'rm -f "$batch"' EXIT HUP INT TERM
+[ -f "$active" ] || : >"$active"
+if [ "$1" = stop ]; then
+    : >"$active"
+    rm -f /var/run/cudy-ss/core-ready "$cache"
+    # No core is reachable after deleting the ingress mappings. fw4 owns its
+    # normal zone rules; remove only this feature's two chains and jumps.
+    for spec in 'input CUDY_SSR_SERVER' 'forward CUDY_SSR_SS_FORWARD'; do
+        set -- $spec
+        for handle in $(nft -a list chain inet fw4 "$1" 2>/dev/null | awk -v target="$2" '$0 ~ "jump "target" " {print $NF}'); do
+            case "$handle" in ''|*[!0-9]*) exit 1;; esac
+            nft delete rule inet fw4 "$1" handle "$handle"
+        done
+        if nft list chain inet fw4 "$2" >/dev/null 2>&1; then nft flush chain inet fw4 "$2";nft delete chain inet fw4 "$2";fi
+    done
+    nft destroy table inet cudy_ssr_server
+    nft destroy table inet cudy_ssr_ss
+    exit 0
+fi
+[ "$1" != prepare ] || : >"$active"
+if [ "$1" = add ]; then
+    case "${2:-}" in ''|*[!a-zA-Z0-9_]*) exit 2;; esac
+    /usr/libexec/cudy-ssr-server-rules validate "$2"
+    grep -qxF "$2" "$active" 2>/dev/null || printf '%s\n' "$2" >>"$active"
+fi
+/usr/libexec/cudy-ssr-server-rules rules "$active" >"$batch"
+if [ "$1" = check ]; then
+    cmp -s "$batch" "$cache" || exit 1
+    nft list table inet cudy_ssr_ss >/dev/null 2>&1
+    nft list table inet cudy_ssr_server >/dev/null 2>&1
+    nft list chain inet fw4 input | grep -q 'jump CUDY_SSR_SERVER'
+    nft list chain inet fw4 forward | grep -q 'jump CUDY_SSR_SS_FORWARD'
+    exit 0
+fi
+nft list table inet fw4 >/dev/null
+for spec in 'input CUDY_SSR_SERVER' 'forward CUDY_SSR_SS_FORWARD'; do
+    set -- $spec
+    nft list chain inet fw4 "$2" >/dev/null 2>&1 || nft add chain inet fw4 "$2"
+    if ! nft list chain inet fw4 "$1" | grep -q "jump $2"; then
+        nft insert rule inet fw4 "$1" jump "$2" comment '"Cudy SSR server access"'
+    fi
+done
+nft -c -f "$batch"
+nft -f "$batch"
+cp "$batch" "$cache"
+chmod 600 "$active" "$cache"

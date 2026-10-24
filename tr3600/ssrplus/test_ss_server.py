@@ -169,7 +169,7 @@ def row(method='aes-256-gcm', network='tcp,udp', scope='loopback'):
 
 def client_config(raw, destination, source=None, secret=None):
     outbound = {'protocol': 'shadowsocks', 'settings': {'servers': [{
-        'address': destination, 'port': SS_PORT, 'method': raw['ss_method'],
+        'address': destination, 'port': int(raw['server_port']), 'method': raw['ss_method'],
         'password': secret if secret is not None else raw['ss_password']} ]}}
     if source:
         outbound['sendThrough'] = source
@@ -323,10 +323,10 @@ class Acceptance:
         self.model, self.programs, self.target, self.packed = model, programs, target, packed
         self.passed=[]
 
-    def request(self, protocol, expected_prefix=b'DIRECT|', namespace=None, allowed=True):
+    def request(self, protocol, expected_prefix=b'DIRECT|', namespace=None, allowed=True, echo_port=ECHO_PORT):
         payload=b'SSRPLUS-ENCRYPTED-ECHO|'+os.urandom(256)
         data={'protocol':protocol,'target':self.target,'payload':base64.b64encode(payload).decode(),
-            'expected':base64.b64encode(expected_prefix+payload).decode()}
+            'expected':base64.b64encode(expected_prefix+payload).decode(),'echo_port':echo_port}
         if namespace:
             result=subprocess.run(['ip','netns','exec',namespace,sys.executable,str(__file__),
                 '--query',json.dumps(data)],capture_output=True,text=True)
@@ -335,15 +335,15 @@ class Acceptance:
             assert result.returncode in (0,1),failure
         else:
             try:
-                probe(protocol,self.target,payload,expected_prefix+payload)
+                probe(protocol,self.target,payload,expected_prefix+payload,echo_port)
                 success=True;failure=''
             except (OSError,EOFError) as error:
                 success=False;failure=str(error)
         assert success == allowed, (protocol,'expected allowed='+str(allowed),failure)
 
-    def checks(self, label, namespace=None, allowed=True, prefix=b'DIRECT|'):
+    def checks(self, label, namespace=None, allowed=True, prefix=b'DIRECT|', echo_port=ECHO_PORT):
         for protocol in ('tcp','udp'):
-            self.request(protocol,prefix,namespace,allowed)
+            self.request(protocol,prefix,namespace,allowed,echo_port)
             self.passed.append(label+'/'+protocol)
 
     def ready(self, namespace=None, protocol='tcp'):
@@ -634,7 +634,7 @@ def main():
     if args.query:
         data=json.loads(args.query)
         try:
-            probe(data['protocol'],data['target'],base64.b64decode(data['payload']),base64.b64decode(data['expected']))
+            probe(data['protocol'],data['target'],base64.b64decode(data['payload']),base64.b64decode(data['expected']),data.get('echo_port',ECHO_PORT))
         except (OSError,EOFError) as error:
             print(type(error).__name__+': '+str(error),file=sys.stderr);return 1
         except Exception as error:
