@@ -1,0 +1,35 @@
+#!/usr/bin/lua
+local fs=require('nixio.fs')
+local n=require('nixio')
+local function start(pid)
+    local s=fs.readfile('/proc/'..pid..'/stat') or ''
+    local rest=s:match('^%d+ %b() (.*)')
+    if not rest then return end
+    local fields={};for v in rest:gmatch('%S+') do fields[#fields+1]=v end
+    return fields[20]
+end
+local function owned(pid,all)
+    local cmd=(fs.readfile('/proc/'..pid..'/cmdline') or ''):gsub('%z',' ')
+    return cmd=='/usr/bin/xray run -config /var/etc/cudy-ss/config.json ' or
+        (all and cmd=='/bin/sh /usr/libexec/cudy-ssr-serve ')
+end
+if arg[1]=='snapshot' or arg[1]=='snapshot-all' then
+    local dir=fs.dir('/proc')
+    if dir then for pid in dir do
+        if pid:match('^%d+$') and owned(pid,arg[1]=='snapshot-all') then
+            local value=start(pid);if value then io.write(pid..':'..value..' ') end
+        end
+    end end
+elseif arg[1]=='wait' then
+    for i=2,#arg do assert(arg[i]:match('^%d+:%d+$')) end
+    for attempt=1,200 do
+        local busy=false
+        for i=2,#arg do
+            local pid,value=arg[i]:match('^(%d+):(%d+)$')
+            if start(pid)==value then busy=true end
+        end
+        if not busy then os.exit(0) end
+        n.nanosleep(0,100000000)
+    end
+    os.exit(1)
+else os.exit(2) end

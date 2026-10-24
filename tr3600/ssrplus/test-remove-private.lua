@@ -47,12 +47,12 @@ for _,case in ipairs({'enabled','disabled','legacy_only','fresh','collision'}) d
  local files={};for _,p in ipairs({'/etc/config/cudy_ss','/etc/cudy-ss/guard.nft',
   '/etc/cudy-ssrplus/cudy_ss.before-migration','/etc/cudy-ssrplus/cudy_ss.before-server-v2','/etc/cudy-ssrplus/ss-server-v2.done'}) do files[p]=true end
  local removed={};local fakefs={access=function(p)return files[p] end,remove=function(p)files[p]=nil;removed[p]=true;return true end}
- local ok=pcall(cleanup.run,u,fakefs)
+ local ok,error=pcall(cleanup.run,u,fakefs)
  if case=='collision' then
   assert(not ok);for pkg,s in pairs(before) do assert(same(s,u:get_all(pkg))) end
   assert(not next(removed));print('PASS collision: unrelated owner resource unchanged')
  else
-  assert(ok)
+  assert(ok,error)
   assert(not u:get('shadowsocksr','cudy_zt_private'));assert(not next(files))
   for _,id in ipairs({'ordinary','owner_node','global','sg'}) do assert(same(before.shadowsocksr[id],u:get_all('shadowsocksr',id))) end
   for _,id in ipairs({'zerotier_direct','zerotier_ssdp','owner','mango_zt','lan','wan'}) do

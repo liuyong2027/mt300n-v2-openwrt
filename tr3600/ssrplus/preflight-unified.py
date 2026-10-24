@@ -61,9 +61,10 @@ with tempfile.TemporaryDirectory(prefix='unified-preflight-',dir='/tmp') as tmp:
     shutil.copytree(runtime/'root',root,dirs_exist_ok=True)
     env=os.environ.copy();env.update(LUA_PATH=str(root/'usr/lib/lua/?.lua')+';'+str(root/'usr/lib/lua/?/init.lua'),
         LUA_CPATH=str(root/'usr/lib/lua/?.so'))
-    result=run('qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),str(HERE/'test-remove-private.lua'),
-        str(root/'usr/lib/cudy-ss/remove-private.lua'),str(tmp/'native-cleanup'),env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),str(HERE/'test-remove-private.lua'),
+        str(root/'usr/lib/cudy-ss/remove-private.lua'),str(tmp/'native-cleanup')],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
     (REPO/'reports/private-ss-deletion-preflight.log').write_text(result.stdout);print(result.stdout,end='')
+    result.check_returncode()
     assert 'PASS all 5 native private SS deletion cases' in result.stdout
     qemu=json.loads((REPO/'reports/ddns-qemu-build.json').read_text())
     executable=REPO/qemu['executable']

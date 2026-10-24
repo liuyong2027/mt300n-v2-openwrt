@@ -12,7 +12,14 @@ start_service() {
     procd_close_instance
 }
 stop_service() {
+    cudy_old_pids=$(/usr/libexec/cudy-ss-process snapshot-all)
     rm -f /var/run/cudy-ss/core-ready
     /usr/libexec/cudy-ssr-server-firewall reload || :
+}
+service_stopped() {
+    # A new core must not overwrite config or reuse the namespace before the
+    # previous supervisor and child have actually exited.
+    /usr/libexec/cudy-ss-process wait $cudy_old_pids || return 1
+    /usr/libexec/cudy-ss-netns stop
 }
 reload_service() { restart; }
