@@ -43,6 +43,12 @@ class ProfileTests(unittest.TestCase):
         self.assertNotIn('cp -R "$kit/package/luci-app-mango-proxy"',prepare)
         self.assertNotIn('ss-integration.py',prepare)
         self.assertIn('patch-ssr.py',prepare)
+        # The unified patch reads both feed sources and the copied runtime/files.
+        # Feed installation alone is too early, as the full build demonstrated.
+        unified=prepare.index('python3 "$kit/tr3600/ssrplus/unify-ss.py"')
+        self.assertGreater(unified,prepare.index('cp -R "$kit/tr3600/luci-app-cudy-ss" package/'))
+        self.assertGreater(unified,prepare.index('cp -R "$kit/files" .'))
+        self.assertGreater(unified,prepare.index('python3 "$kit/tr3600/ssrplus/patch-ss-server.py"'))
         self.assertIn('80d7bfff625b33db8afe80934638d96d214ceadc',prepare)
         self.assertLess(prepare.index('./scripts/feeds install -f -p helloworld'),
             prepare.index('./scripts/feeds install -a'))

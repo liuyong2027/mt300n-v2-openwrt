@@ -50,11 +50,11 @@ cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
 ./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks
 ./scripts/feeds install -a
 python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"
-python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"
-python3 "$kit/tr3600/ssrplus/unify-ss.py" "$PWD"''')
+python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
     text=text.replace('cp -R "$kit/files" .', '''cp -R "$kit/files" .
-python3 "$kit/tr3600/ssrplus/patch-ddns.py" --framework feeds/packages/net/ddns-scripts/files/usr/lib/ddns/dynamic_dns_functions.sh --resolver files/usr/libexec/cudy-dynu-resolve''')
+python3 "$kit/tr3600/ssrplus/patch-ddns.py" --framework feeds/packages/net/ddns-scripts/files/usr/lib/ddns/dynamic_dns_functions.sh --resolver files/usr/libexec/cudy-dynu-resolve
+python3 "$kit/tr3600/ssrplus/unify-ss.py" "$PWD"''')
     text=re.sub(r'^python3 "\$kit/scripts/build-profile.py".*\n','',text,flags=re.M)
     text=text.replace(' luci-app-mango-proxy','').replace(' mango-tcpcheck','')
     text=text.replace('! grep -qx \'CONFIG_PACKAGE_v2ray-geoip=y\' .config\n','').replace('! grep -qx \'CONFIG_PACKAGE_v2ray-geosite=y\' .config\n','')
