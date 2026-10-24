@@ -34,7 +34,8 @@ Included:
 - Optional dual-band unification in Network / Wireless / Wi-Fi 双频合一.
   Select two enabled LAN APs and shared SSID/security/password. Optional
   local usteer suggests 5 GHz to supported clients; clients decide whether
-  to switch. Default disabled; disabling restores backed-up AP settings.
+  to switch. Both unification and steering default off; steering can be enabled
+  separately. Disabling unification restores backed-up AP settings.
   New APs remain disabled until the owner sets country and security.
   New 5 GHz configuration defaults to channel 36/HE80.
 - Client/AP repeater and IPv4 relayd pseudo bridge through normal LuCI.

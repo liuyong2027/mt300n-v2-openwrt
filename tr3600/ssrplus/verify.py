@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -35,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test5'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0'
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw',
         'usr/share/luci/menu.d/luci-app-mango-proxy.json',
         'usr/share/luci/menu.d/luci-app-cudy-ss.json','usr/libexec/rpcd/cudy.ss',
@@ -53,8 +54,22 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct','usr/libexec/cudy-ddns-curl',
         'etc/uci-defaults/80-cudy-ddns-direct',
         'etc/init.d/cudy_ss_core','usr/lib/cudy-webfiles/bin/cudy-webfiles',
-        'usr/lib/cudy-webfiles/bin/filebrowser','usr/sbin/smbd','usr/bin/zerotier-one']:
+        'usr/lib/cudy-webfiles/bin/filebrowser','usr/sbin/smbd','usr/bin/zerotier-one',
+        'sbin/usteerd','etc/config/cudy_wifi','etc/config/usteer','usr/lib/lua/cudy/wifi.lua',
+        'usr/libexec/cudy-wifi-config','usr/libexec/cudy-wifi-apply',
+        'www/luci-static/resources/view/cudy-wifi.js','usr/share/luci/menu.d/zz-cudy-wifi-tabs.json']:
         assert (root/required).is_file(),required
+    wifi_package=repo/'tr3600/luci-app-cudy-wifi'
+    assert (root/'etc/config/cudy_wifi').read_bytes()==(wifi_package/'root/etc/config/cudy_wifi').read_bytes()
+    assert "option steering '0'" in (root/'etc/config/cudy_wifi').read_text()
+    assert (root/'etc/config/usteer').read_bytes()==(repo/'tr3600/network-root/etc/config/usteer').read_bytes()
+    assert "option enabled '0'" in (root/'etc/config/usteer').read_text()
+    assert "option band_steering_interval '0'" in (root/'etc/config/usteer').read_text()
+    assert (root/'usr/lib/lua/cudy/wifi.lua').read_bytes()==(wifi_package/'root/usr/lib/lua/cudy/wifi.lua').read_bytes()
+    wifi_js=wifi_package/'htdocs/luci-static/resources/view/cudy-wifi.js'
+    jsmin=repo/'openwrt/staging_dir/hostpkg/bin/jsmin'
+    minified_wifi_js=subprocess.check_output([str(jsmin)],input=wifi_js.read_bytes())
+    assert (root/'www/luci-static/resources/view/cudy-wifi.js').read_bytes()==minified_wifi_js
     assert (root/'lib/upgrade/cudy-tr3600.sh').read_bytes()==(repo/'tr3600/cudy-upgrade.sh').read_bytes()
     assert (root/'lib/upgrade/keep.d/cudy-dynu-ddns').read_text()=='/etc/config/ddns\n'
     subscription_package=repo/'openwrt/feeds/helloworld/luci-app-ssr-plus'
@@ -62,12 +77,22 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'usr/share/shadowsocksr/shadowsocksr.config','etc/uci-defaults/luci-ssr-plus'):
         assert (root/relative).read_bytes()==(subscription_package/'root'/relative).read_bytes(),relative
     assert (root/'usr/share/shadowsocksr/yaml_nodes.lua').read_bytes()==(repo/'tr3600/ssrplus/yaml_nodes.lua').read_bytes()
+    access_defaults=(root/'usr/share/shadowsocksr/shadowsocksr.config').read_text()
+    assert not re.search(r'(?m)^\s*list\s+wan_fw_ips\b',access_defaults)
+    for name in ('white.list','deny.list'):
+        assert (root/'etc/ssrplus'/name).read_bytes()==b'',name
+    assert (root/'usr/share/shadowsocksr/bulk_delete.lua').read_bytes()==(repo/'tr3600/ssrplus/bulk_delete.lua').read_bytes()
+    bulk_controller=(root/'usr/lib/lua/luci/controller/shadowsocksr.lua').read_text()
+    assert (repo/'tr3600/ssrplus/bulk-delete-controller.lua').read_text().rstrip() in bulk_controller
+    assert 'post("act_delete_nodes")' in bulk_controller
     subscription_ui=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/servers.lua').read_text()
     assert 'mihomo/1.18.0' in subscription_ui
     assert '过期/重置/套餐/剩余/网址/QQ群/官网/防失联/回国/邮箱客服/支持AI' in subscription_ui
     server_table=(root/'usr/lib/lua/luci/view/shadowsocksr/server_table.htm').read_text()
     assert 'ssr-numbered-server-table' in server_table and 'counter-reset: ssr-node-number' in server_table
     assert 'math.max(first_index - 1, 0)' in server_table
+    assert (repo/'tr3600/ssrplus/bulk-delete.js').read_text().rstrip() in server_table
+    assert 'ssr-bulk-node' in server_table and 'ssr-bulk-all' in server_table
     server_status=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/status.lua').read_text()
     assert (repo/'tr3600/ssrplus/server-status.lua').read_text().rstrip() in server_status
     assert 'Process_list:find("ssr.server")' not in server_status
@@ -95,7 +120,8 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/cudy-webfiles').read_bytes()).hexdigest()==manifest['helperSHA256']
     assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/filebrowser').read_bytes()).hexdigest()==manifest['quantum']['sha256']
     config=(repo/'openwrt/.config').read_text()
-    for package in ['luci-app-ssr-plus','dnsmasq-full','kmod-nft-socket','kmod-nft-tproxy','kmod-veth','luci-compat','luci-app-cudy-ss','zerotier']:
+    for package in ['luci-app-ssr-plus','dnsmasq-full','kmod-nft-socket','kmod-nft-tproxy','kmod-veth','luci-compat','luci-app-cudy-ss','zerotier',
+        'luci-app-cudy-wifi','usteer','wpad-mbedtls']:
         assert 'CONFIG_PACKAGE_'+package+'=y' in config,package
     assert 'CONFIG_PACKAGE_luci-app-mango-proxy=y' not in config
     # Parse every actual installed Lua file and every shell entrypoint using target tools.
@@ -106,7 +132,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
             try:text=path.read_text()
             except UnicodeDecodeError:continue
             if path.suffix=='.lua' or text.startswith('#!/usr/bin/lua'):
-                if path.parent.name in ('cudy-ss','cudy') or path.name.startswith(('cudy-ss','gen_cudy_')) or path.name in ('yaml_nodes.lua','subscribe.lua'):
+                if path.parent.name in ('cudy-ss','cudy') or path.name.startswith(('cudy-ss','gen_cudy_')) or path.name in ('yaml_nodes.lua','subscribe.lua','bulk_delete.lua'):
                     subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),'-e',
                         'assert(loadfile('+json.dumps(str(path))+'))'],check=True);syntax+=1
             elif text.startswith('#!') and ('cudy' in path.name or path.name=='shadowsocksr'):
@@ -199,11 +225,12 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-1.2.0-test5-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-1.2.0-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
     proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.1.1',
+        'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
         'actual_xray_version':xray_version,
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
@@ -214,6 +241,9 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'subscription_default_notice_filters':['邮箱客服','支持AI'],
         'subscription_user_agent_option':'mihomo/1.18.0',
         'node_numbering':'display order; continuous across pages; CSS counters follow drag order',
+        'node_bulk_delete':'current-page selection; POST/CSRF; service-reference protection; single commit; no restart',
+        'empty_access_defaults':['wan_fw_ips','white.list','deny.list'],
+        'wifi_unification':'retained; automatic band steering defaults off; saved settings retained',
         'build_recipe_commit':os.environ.get('GITHUB_SHA'),
         'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
         'private_ss':'removed without credential migration; dedicated firewall sections removed',
@@ -225,6 +255,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'hardware_flash_or_boot_tested':False}
     (out/'BUILD-VERIFICATION.json').write_text(json.dumps(proof,indent=2)+'\n')
     (out/'README.txt').write_text((repo/'tr3600/ssrplus/README.txt').read_text())
+    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.2.0.txt',out/'刷机与验收说明.txt')
     shutil.copyfile(repo/'reports/resolved.config',out/'resolved.config')
     shutil.copyfile(repo/'reports/ssrplus-source.json',out/'SOURCE.json')
     print(json.dumps(proof,indent=2))

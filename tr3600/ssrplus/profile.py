@@ -51,7 +51,8 @@ cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
 ./scripts/feeds install -a
 python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"
 python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"
-python3 "$kit/tr3600/ssrplus/patch-subscription.py" "$PWD"''')
+python3 "$kit/tr3600/ssrplus/patch-subscription.py" "$PWD"
+python3 "$kit/tr3600/ssrplus/patch-bulk-delete.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
     text=text.replace('cp -R "$kit/files" .', '''cp -R "$kit/files" .
 python3 "$kit/tr3600/ssrplus/patch-ddns.py" --framework feeds/packages/net/ddns-scripts/files/usr/lib/ddns/dynamic_dns_functions.sh --resolver files/usr/libexec/cudy-dynu-resolve
@@ -199,7 +200,7 @@ return M
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
-    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test5\n')
+    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0\n')
     shutil.copy2(PROFILE/'migration.sh',files/'etc/uci-defaults/90-cudy-ssrplus-migrate')
     # Keep the same LED state machine, replace its proxy-specific adapter.
     led=ROOT/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua'
@@ -221,6 +222,7 @@ return M
     replace(p,'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"',
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
+        'firmware_version':'1.2.0','release_stage':'candidate; hardware acceptance pending',
         'base':'tr3600-v1.1.1','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
@@ -235,6 +237,9 @@ return M
         'node_numbering':'display order with pagination and drag updates; node identities retained',
         'server_status':'requested ordinary SS readiness or owned host-server listener; watcher/client excluded',
         'server_access_notes':'type-dependent display-only notes; Access Scope settings retained',
+        'node_bulk_delete':'current-page checkboxes; POST/CSRF; validate all, protect selected service nodes, commit once without restart',
+        'empty_access_defaults':['forced WAN proxy IPs', 'direct domains (white.list)', 'blocked domains (deny.list)'],
+        'wifi_unification':'retained; automatic band steering defaults off in UCI and LuCI; saved settings retained',
         'private_ss_ipv6':False,
         'hardware_validation':'pending'},indent=2)+'\n')
     print('Prepared SSR Plus+ build; no router was modified.')

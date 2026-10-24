@@ -1,8 +1,18 @@
-Cudy TR3600 V1.0 / R126 - SSR Plus+ 1.2.0 test5
+Cudy TR3600 V1.0 / R126 - SSR Plus+ 1.2.0 candidate
 Based on the tr3600-v1.1.1 device and application recipe.
+
+This is a candidate awaiting hardware acceptance, not a published stable Release.
+The firmware uses version 1.2.0 so the identical checked SHA256 can be promoted
+after acceptance. Compilation and packed checks do not prove a hardware boot.
 
 SSR Plus+ is the sole transparent proxy (nftables, Xray). SOURCE.json records
 pinned sources. Wi-Fi, USB/Samba, WebFiles, DDNS, ZeroTier and LED remain.
+
+Dual-band Wi-Fi unification remains available. Automatic band steering defaults
+off in both the UCI configuration and LuCI checkbox; enabling a shared SSID does
+not enable steering automatically. Owners may opt in to steering separately.
+Keep-settings upgrades retain saved Wi-Fi and steering choices. No upgrade or
+startup migration replaces an existing owner choice with this fresh default.
 
 The validated YAML node importer is included in this image. One subscription
 can contain AnyTLS, VMess and Hysteria2; supported connection parameters are
@@ -22,6 +32,19 @@ The server list includes a leftmost numbered column. Numbers continue across
 pages (the second 50-row page starts at 51) and follow the displayed row order
 immediately after dragging. They are display positions; stored node identities,
 names, selected node and automatic switch order are not changed by numbering.
+
+Node rows offer individual checkboxes and Select all on this page. Delete
+selected nodes confirms the count and submits one authenticated POST request.
+Nodes referenced by main/UDP/SOCKS/HTTP settings are protected. The complete
+selection is validated before a single configuration commit; no per-node proxy
+restart occurs. Pending SSR edits must be applied or discarded first. Selection
+is display-only and is cleared on page reload. Subscription updates can restore
+deleted subscription nodes; use subscription filters for permanent exclusions.
+
+Fresh defaults leave Forced proxy WAN IPs, Direct domains (white.list), and
+Blocked domains (deny.list) empty. Keep-settings upgrades retain saved owner
+configuration and list files; no startup migration clears them. The forced
+proxy domain list and internal SS bypass network are outside this change.
 
 Ordinary SS is managed in SSR Plus+ > Server Settings. Existing ss_method,
 ss_password, ss_network and Access Scope are preserved. Enabled ordinary SS

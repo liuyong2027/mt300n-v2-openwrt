@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Integrate the validated node-only YAML importer and subscription UI defaults."""
 from pathlib import Path
+import re
 import sys
 
 HERE = Path(__file__).resolve().parent
@@ -127,6 +128,17 @@ msgstr "此类服务端的流量按路由器自身出站策略处理。"
         uci -q set shadowsocksr.@server_subscribe[0].filter_words=''' + "'" + FILTER_WORDS + "'" + '''
     fi'''
     changed[defaults] = once(defaults.read_text(encoding='utf-8'), old, new)
+    # Defaults only: keep-settings upgrades must not erase owner-maintained
+    # lists. No runtime UCI migration or startup truncation is introduced.
+    config = package / 'root/usr/share/shadowsocksr/shadowsocksr.config'
+    changed[config], count = re.subn(r"(?m)^[ \t]*list[ \t]+wan_fw_ips[ \t]+[^\n]*\n", '', changed[config])
+    if count != 7:
+        raise ValueError('Pinned forced WAN IP defaults changed')
+    for name in ('white.list', 'deny.list'):
+        path = package / 'root/etc/ssrplus' / name
+        if not path.is_file():
+            raise ValueError('Missing pinned access list: ' + name)
+        changed[path] = ''
     # Read every input and verify every pinned anchor before writing sources.
     helper = (HERE / 'yaml_nodes.lua').read_bytes()
     for path, text in changed.items():

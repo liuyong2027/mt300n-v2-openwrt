@@ -1,12 +1,12 @@
 {
-  "name": "Cudy TR3600 SSR Plus+ test firmware",
+  "name": "Cudy TR3600 SSR Plus+ 1.2.0 candidate firmware",
   "on": {
     "push": {
       "branches": [
         "codex/tr3600-ssrplus"
       ],
       "paths": [
-        "tr3600/ssrplus/**",
+        "tr3600/**",
         ".github/workflows/tr3600-ssrplus.yml"
       ]
     },
@@ -24,7 +24,11 @@
     "runtime-preflight": {
       "runs-on": "ubuntu-24.04",
       "timeout-minutes": 45,
-      "defaults": { "run": { "shell": "bash" } },
+      "defaults": {
+        "run": {
+          "shell": "bash"
+        }
+      },
       "steps": [
         {
           "name": "Checkout runtime changes",
@@ -115,8 +119,8 @@
           "run": "bash tr3600/ssrplus/build-test-qemu.sh 2>&1 | tee reports/ddns-qemu-build.log"
         },
         {
-          "name": "Validate legacy client migration and unified SS models",
-          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8 PyYAML==6.0.3\n.test-venv/bin/python tr3600/ssrplus/test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py\n.test-venv/bin/python tr3600/ssrplus/test_server_status.py\n.test-venv/bin/python tr3600/ssrplus/test_yaml_nodes.py"
+          "name": "Validate runtime, Wi-Fi and node management",
+          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8 PyYAML==6.0.3\n.test-venv/bin/python -m unittest discover -s tr3600/ssrplus -p test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py\n.test-venv/bin/python tr3600/ssrplus/test_server_status.py\n.test-venv/bin/python tr3600/ssrplus/test_yaml_nodes.py\n.test-venv/bin/python tr3600/ssrplus/test_bulk_delete.py\nnode --test tr3600/ssrplus/test_bulk_delete.js\nlua5.1 tr3600/test-wifi.lua\nnode --check tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js"
         },
         {
           "name": "Retain legacy namespace regression coverage",
@@ -149,7 +153,7 @@
           "run": "make -j2 tools/install V=s 2>&1 | tee ../reports/host-tools-build.log\nmake -j2 package/feeds/packages/golang/host/compile V=s 2>&1 | tee ../reports/golang-host-build.log\ngo_version=$(GOTOOLCHAIN=local staging_dir/hostpkg/lib/go-1.27/bin/go version)\nprintf '%s\\n' \"$go_version\" | tee ../reports/golang-host-version.txt\ntest \"$go_version\" = 'go version go1.27.3 linux/amd64'"
         },
         {
-          "name": "Compile SSR Plus+ test firmware",
+          "name": "Compile SSR Plus+ 1.2.0 candidate firmware",
           "id": "compile",
           "working-directory": "openwrt",
           "run": "make -j2 V=s 2>&1 | tee ../build.log"
@@ -159,13 +163,13 @@
           "run": "python3 tr3600/ssrplus/verify.py 2>&1 | tee reports/ssrplus-packed-verification.log"
         },
         {
-          "name": "Upload checked test firmware",
+          "name": "Upload checked 1.2.0 candidate firmware",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
-            "name": "cudy-tr3600-ssrplus-test5-${{ github.sha }}",
+            "name": "cudy-tr3600-ssrplus-1.2.0-candidate-${{ github.sha }}",
             "path": "ssrplus-assets/",
             "if-no-files-found": "error",
-            "retention-days": 30
+            "retention-days": 90
           }
         },
         {
