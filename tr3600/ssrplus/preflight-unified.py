@@ -61,6 +61,19 @@ with tempfile.TemporaryDirectory(prefix='unified-preflight-',dir='/tmp') as tmp:
     shutil.copytree(runtime/'root',root,dirs_exist_ok=True)
     env=os.environ.copy();env.update(LUA_PATH=str(root/'usr/lib/lua/?.lua')+';'+str(root/'usr/lib/lua/?/init.lua'),
         LUA_CPATH=str(root/'usr/lib/lua/?.so'))
+    # Validate the new importer with native lyaml and the unchanged pinned
+    # generator/core before starting the long build. Final verification repeats
+    # this against the newly packed image, rather than trusting this baseline.
+    shutil.copyfile(HERE/'yaml_nodes.lua',root/'usr/share/shadowsocksr/yaml_nodes.lua')
+    version=subprocess.check_output(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/xray'),'version'],text=True).splitlines()[0]
+    yaml_sandbox=tmp/'yaml-preflight'
+    yaml_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
+        str(HERE/'test-yaml-packed.lua'),str(root),str(yaml_sandbox),
+        str(HERE/'yaml-nodes-fixture.yaml'),version],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    (REPO/'reports/yaml-nodes-native-preflight.log').write_text(yaml_result.stdout)
+    print(yaml_result.stdout,end='');yaml_result.check_returncode()
+    for protocol in ('anytls','vmess','hysteria2'):
+        run('qemu-aarch64-static','-L',str(root),str(root/'usr/bin/xray'),'run','-test','-config',str(yaml_sandbox/(protocol+'.json')))
     result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),str(HERE/'test-remove-private.lua'),
         str(root/'usr/lib/cudy-ss/remove-private.lua'),str(tmp/'native-cleanup')],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
     (REPO/'reports/private-ss-deletion-preflight.log').write_text(result.stdout);print(result.stdout,end='')

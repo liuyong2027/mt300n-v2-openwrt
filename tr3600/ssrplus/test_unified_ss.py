@@ -70,15 +70,16 @@ class UnifiedModelTests(unittest.TestCase):
             with self.assertRaises(Exception):self.model.namespace_config(self.rows(**extra))
 
     def test_ui_only_three_scopes_and_legacy_fallback(self):
-        self.lua.execute('''translate=function(v)return v end;ListValue='list';
+        self.lua.execute('''translate=function(v)return v end;ListValue='list';DummyValue='dummy';
 local raw={accept_lan='1'}
-s={};function s:option(kind,name,label)
- o={map={uci={get_all=function()return raw end}},values={}}
- function o:value(v,label)self.values[v]=label end
- return o
+s={fields={}};function s:option(kind,name,label)
+ local field={map={uci={get_all=function()return raw end}},values={},deps={}}
+ function field:value(v,label)self.values[v]=label end
+ function field:depends(key,value)self.deps[#self.deps+1]=type(key)=='table' and key or {[key]=value} end
+ self.fields[name]=field;return field
 end''')
         self.lua.execute((HERE/'unified-access-ui.lua').read_text(encoding='utf-8'))
-        o=self.lua.globals().o
+        o=self.lua.globals().s.fields.cudy_access
         self.assertEqual(set(o['values'].keys()),{'loopback','lan','public'})
         self.assertEqual(o.cfgvalue(o,'ordinary'),'lan')
         self.assertEqual(o.validate(o,'public','ordinary'),'public')
@@ -128,6 +129,10 @@ def integration(root):
     page=(package/'luasrc/model/cbi/shadowsocksr/server-config.lua').read_text(encoding='utf-8')
     assert 'cudy_private' not in page and 'cudy_zt_' not in page
     assert "o:value('public'" in page
+    status=(package/'luasrc/model/cbi/shadowsocksr/status.lua').read_text(encoding='utf-8')
+    assert (HERE/'server-status.lua').read_text(encoding='utf-8').rstrip() in status
+    assert 'Process_list:find("ssr.server")' not in status
+    assert 'Process_list:find("mihomo") and Process_list:find("/ss%-server%-")' not in status
     init=(package/'root/etc/init.d/shadowsocksr').read_text(encoding='utf-8')
     server=init.split('start_server() {',1)[1].split('\nstart_switch()',1)[0]
     assert 'gen_cudy_ss_server.lua' not in server

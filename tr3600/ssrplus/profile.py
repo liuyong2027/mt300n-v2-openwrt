@@ -50,7 +50,8 @@ cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
 ./scripts/feeds install -f -p helloworld xray-core luci-app-ssr-plus dns2tcp lua-neturl ipt2socks
 ./scripts/feeds install -a
 python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"
-python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"''')
+python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"
+python3 "$kit/tr3600/ssrplus/patch-subscription.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
     text=text.replace('cp -R "$kit/files" .', '''cp -R "$kit/files" .
 python3 "$kit/tr3600/ssrplus/patch-ddns.py" --framework feeds/packages/net/ddns-scripts/files/usr/lib/ddns/dynamic_dns_functions.sh --resolver files/usr/libexec/cudy-dynu-resolve
@@ -198,7 +199,7 @@ return M
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
-    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test4\n')
+    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0-test5\n')
     shutil.copy2(PROFILE/'migration.sh',files/'etc/uci-defaults/90-cudy-ssrplus-migrate')
     # Keep the same LED state machine, replace its proxy-specific adapter.
     led=ROOT/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua'
@@ -228,6 +229,12 @@ return M
         'ordinary_ss':'shared isolated Xray namespace; decrypted TCP/UDP enter SSR client policy; access scopes retained',
         'ss_server_config_revision':4,
         'ddns_direct':'Dynu HTTPS curl sockets marked 255; WAN binding and TLS retained',
+        'yaml_node_import':'AnyTLS, VMess and Hysteria2; connection parameters only; existing SSR policy/DNS retained',
+        'subscription_default_notice_filters':['邮箱客服','支持AI'],
+        'subscription_user_agent_option':'mihomo/1.18.0; existing selected UA retained',
+        'node_numbering':'display order with pagination and drag updates; node identities retained',
+        'server_status':'requested ordinary SS readiness or owned host-server listener; watcher/client excluded',
+        'server_access_notes':'type-dependent display-only notes; Access Scope settings retained',
         'private_ss_ipv6':False,
         'hardware_validation':'pending'},indent=2)+'\n')
     print('Prepared SSR Plus+ build; no router was modified.')

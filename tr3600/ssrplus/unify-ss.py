@@ -36,12 +36,10 @@ for _, v in ipairs(v_ss_encrypt_method_list) do o:value(v) end'''+s[end:]
     s=once(s,"    if require('cudy.ssr-server').private(raw) then return translate('Approved ZeroTier only') end\n",'')
     files[path]=s
     path=package/'luasrc/model/cbi/shadowsocksr/status.lua'
-    s=path.read_text(encoding='utf-8');begin=s.index('-- ready alone is also true')
+    s=path.read_text(encoding='utf-8')
+    begin=s.index('if Process_list:find("ssr.server") or Process_list:find("/xray%-server%-%d+") then')
     end=s.index('\nend',s.index('if cudy_private_requested',begin))+4
-    s=s[:begin]+'''-- One supervised namespace core serves all ordinary SS rows.
-if luci.sys.call('/usr/libexec/cudy-ssr-servers ready >/dev/null 2>&1') == 0 then
-    server_run = 1
-end'''+s[end:]
+    s=s[:begin]+(HERE/'server-status.lua').read_text(encoding='utf-8').rstrip()+s[end:]
     files[path]=s
     path=package/'root/etc/init.d/shadowsocksr'
     s=path.read_text(encoding='utf-8')

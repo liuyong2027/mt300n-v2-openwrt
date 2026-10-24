@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test4'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0-test5'
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw',
         'usr/share/luci/menu.d/luci-app-mango-proxy.json',
         'usr/share/luci/menu.d/luci-app-cudy-ss.json','usr/libexec/rpcd/cudy.ss',
@@ -48,7 +48,8 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     for required in ['etc/init.d/shadowsocksr','usr/bin/xray','usr/libexec/cudy-ss-netns',
         'usr/lib/cudy-ss/migrate.lua','usr/lib/cudy-ss/server-runtime.lua','usr/libexec/cudy-ss-gate',
         'usr/lib/cudy-ss/remove-private.lua','usr/lib/lua/cudy/ssr-server.lua','usr/libexec/cudy-ssr-serve',
-        'usr/share/shadowsocksr/gen_cudy_ss_server.lua','usr/libexec/cudy-ssr-server-firewall',
+        'usr/share/shadowsocksr/gen_cudy_ss_server.lua','usr/share/shadowsocksr/yaml_nodes.lua',
+        'usr/libexec/cudy-ssr-server-firewall',
         'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct','usr/libexec/cudy-ddns-curl',
         'etc/uci-defaults/80-cudy-ddns-direct',
         'etc/init.d/cudy_ss_core','usr/lib/cudy-webfiles/bin/cudy-webfiles',
@@ -56,6 +57,22 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         assert (root/required).is_file(),required
     assert (root/'lib/upgrade/cudy-tr3600.sh').read_bytes()==(repo/'tr3600/cudy-upgrade.sh').read_bytes()
     assert (root/'lib/upgrade/keep.d/cudy-dynu-ddns').read_text()=='/etc/config/ddns\n'
+    subscription_package=repo/'openwrt/feeds/helloworld/luci-app-ssr-plus'
+    for relative in ('usr/share/shadowsocksr/subscribe.lua','usr/share/shadowsocksr/yaml_nodes.lua',
+        'usr/share/shadowsocksr/shadowsocksr.config','etc/uci-defaults/luci-ssr-plus'):
+        assert (root/relative).read_bytes()==(subscription_package/'root'/relative).read_bytes(),relative
+    assert (root/'usr/share/shadowsocksr/yaml_nodes.lua').read_bytes()==(repo/'tr3600/ssrplus/yaml_nodes.lua').read_bytes()
+    subscription_ui=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/servers.lua').read_text()
+    assert 'mihomo/1.18.0' in subscription_ui
+    assert '过期/重置/套餐/剩余/网址/QQ群/官网/防失联/回国/邮箱客服/支持AI' in subscription_ui
+    server_table=(root/'usr/lib/lua/luci/view/shadowsocksr/server_table.htm').read_text()
+    assert 'ssr-numbered-server-table' in server_table and 'counter-reset: ssr-node-number' in server_table
+    assert 'math.max(first_index - 1, 0)' in server_table
+    server_status=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/status.lua').read_text()
+    assert (repo/'tr3600/ssrplus/server-status.lua').read_text().rstrip() in server_status
+    assert 'Process_list:find("ssr.server")' not in server_status
+    server_ui=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/server-config.lua').read_text()
+    assert (repo/'tr3600/ssrplus/unified-access-ui.lua').read_text().rstrip() in server_ui
     for name in ['usr/bin/xray','bin/busybox','usr/sbin/smbd','usr/bin/zerotier-one',
         'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct']:
         data=(root/name).read_bytes()
@@ -89,12 +106,13 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
             try:text=path.read_text()
             except UnicodeDecodeError:continue
             if path.suffix=='.lua' or text.startswith('#!/usr/bin/lua'):
-                if path.parent.name in ('cudy-ss','cudy') or path.name.startswith(('cudy-ss','gen_cudy_')):
+                if path.parent.name in ('cudy-ss','cudy') or path.name.startswith(('cudy-ss','gen_cudy_')) or path.name in ('yaml_nodes.lua','subscribe.lua'):
                     subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),'-e',
                         'assert(loadfile('+json.dumps(str(path))+'))'],check=True);syntax+=1
             elif text.startswith('#!') and ('cudy' in path.name or path.name=='shadowsocksr'):
                 subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'bin/busybox'),'sh','-n',str(path)],check=True);syntax+=1
     for relative in ('model/cbi/shadowsocksr/server-config.lua','model/cbi/shadowsocksr/server.lua',
+        'model/cbi/shadowsocksr/servers.lua',
         'model/cbi/shadowsocksr/status.lua','controller/shadowsocksr.lua'):
         path=root/'usr/lib/lua/luci'/relative
         assert path.is_file(),relative
@@ -108,6 +126,16 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     native_environment=os.environ.copy()
     native_environment['LUA_PATH']=str(root/'usr/lib/lua/?.lua')+';'+str(root/'usr/lib/lua/?/init.lua')
     native_environment['LUA_CPATH']=str(root/'usr/lib/lua/?.so')
+    yaml_sandbox=temp/'yaml-connections'
+    yaml_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
+        str(repo/'tr3600/ssrplus/test-yaml-packed.lua'),str(root),str(yaml_sandbox),
+        str(repo/'tr3600/ssrplus/yaml-nodes-fixture.yaml'),xray_version],
+        env=native_environment,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    (repo/'reports/yaml-nodes-packed-verification.log').write_text(yaml_result.stdout)
+    print(yaml_result.stdout,end='');yaml_result.check_returncode()
+    yaml_protocols=['anytls','vmess','hysteria2']
+    for protocol in yaml_protocols:
+        subprocess.run(xray_command+['run','-test','-config',str(yaml_sandbox/(protocol+'.json'))],check=True)
     native_sandbox=temp/'native-uci'
     assert not native_sandbox.exists()
     native_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
@@ -171,7 +199,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-1.2.0-test4-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-1.2.0-test5-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
@@ -181,6 +209,11 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
         'actual_arm64_native_uci_migration_cases_passed':len(native_cases),
         'actual_arm64_private_ss_deletion_cases_passed':5,
+        'yaml_node_import':'integrated; AnyTLS, VMess, Hysteria2; existing policy/DNS',
+        'actual_arm64_yaml_connection_configs_tested':yaml_protocols,
+        'subscription_default_notice_filters':['邮箱客服','支持AI'],
+        'subscription_user_agent_option':'mihomo/1.18.0',
+        'node_numbering':'display order; continuous across pages; CSS counters follow drag order',
         'build_recipe_commit':os.environ.get('GITHUB_SHA'),
         'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
         'private_ss':'removed without credential migration; dedicated firewall sections removed',

@@ -1,8 +1,27 @@
-Cudy TR3600 V1.0 / R126 - SSR Plus+ 1.2.0 test4
+Cudy TR3600 V1.0 / R126 - SSR Plus+ 1.2.0 test5
 Based on the tr3600-v1.1.1 device and application recipe.
 
 SSR Plus+ is the sole transparent proxy (nftables, Xray). SOURCE.json records
 pinned sources. Wi-Fi, USB/Samba, WebFiles, DDNS, ZeroTier and LED remain.
+
+The validated YAML node importer is included in this image. One subscription
+can contain AnyTLS, VMess and Hysteria2; supported connection parameters are
+mapped to ordinary Xray nodes. HTTP/inline proxy-providers are supported.
+Existing SSR policy and DNS remain in control. YAML rules, groups, DNS, TUN
+and listeners are not applied. Unsupported connection parameters reject the
+whole affected subscription group and preserve its previous nodes.
+
+The subscription User-Agent field offers Mihomo (mihomo/1.18.0), alongside
+the existing suggestions and manual input. A saved UA is never replaced by
+this addition. Default notice filters include 邮箱客服 and 支持AI. Fresh
+settings, SSR reset and the missing-value fallback use the same defaults.
+On upgrade, only the exact old default filter list is extended automatically;
+custom owner lists, including an existing AI keyword, are retained.
+
+The server list includes a leftmost numbered column. Numbers continue across
+pages (the second 50-row page starts at 51) and follow the displayed row order
+immediately after dragging. They are display positions; stored node identities,
+names, selected node and automatic switch order are not changed by numbering.
 
 Ordinary SS is managed in SSR Plus+ > Server Settings. Existing ss_method,
 ss_password, ss_network and Access Scope are preserved. Enabled ordinary SS
@@ -19,6 +38,13 @@ access to the internal peer is blocked. Overlaps with internal 198.18.255.0/30
 and existing host listeners fail closed. Seven AEAD/SS2022 methods are supported;
 unsupported methods/keys fail validation. SS ingress remains IPv4-only.
 The upstream IPv6 proxy options are separate and retain their existing scope.
+
+Access Scope applies to every built-in server type. The traffic explanation
+changes immediately with Server Type: only ordinary Shadowsocks describes
+the SSR client TCP/UDP policy path; SOCKS5, VMess and the other host server
+types describe the router's own outbound policy. These notes are display-only.
+The Local Servers indicator excludes watcher/client processes and checks
+ordinary SS readiness or an owned host-server listener before showing Running.
 
 The dedicated ZeroTier private SS is DELETED, not migrated. First boot removes
 its reserved server row, /etc/config/cudy_ss, private approval/credential files
