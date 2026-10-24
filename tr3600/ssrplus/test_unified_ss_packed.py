@@ -170,9 +170,10 @@ add rule inet fw4 input meta mark 1 accept
     before=subprocess.check_output(['nft','list','ruleset'],text=True)
     old.run('sh',str(root/'usr/libexec/cudy-ss-ssr-interfaces'),env=env)
     assert before==subprocess.check_output(['nft','list','ruleset'],text=True),'Interface hooks are not idempotent'
-    transparent={'log':{'loglevel':'warning'},'inbounds':[{'listen':'0.0.0.0','port':19003,
-        'protocol':'dokodemo-door','settings':{'network':'tcp,udp','followRedirect':True},
-        'streamSettings':{'sockopt':{'tproxy':'tproxy'}}}],
+    transparent={'log':{'loglevel':'warning'},'inbounds':[
+        {'listen':'0.0.0.0','port':19003,'protocol':'dokodemo-door',
+         'settings':{'network':proto,'followRedirect':True},'streamSettings':{'sockopt':{'tproxy':mode}}}
+        for proto,mode in [('tcp','redirect'),('udp','tproxy')]],
         'outbounds':[{'protocol':'freedom','settings':{'redirect':'1.2.3.2:19002'},
             'streamSettings':{'sockopt':{'mark':255}}}]}
     raw=old.row(scope='public');config=test.model.config(raw);test.model.rules(raw)

@@ -15,6 +15,7 @@ test "$(git -C "$source_dir" rev-parse HEAD)" = "$commit"
 git -C "$source_dir" diff --exit-code
 git -C "$source_dir" apply --check "$patch"
 git -C "$source_dir" apply "$patch"
+python3 "$repo/tr3600/ssrplus/qemu-transparent.py" "$source_dir"
 # All three revisions are pinned in this exact upstream commit's wrap files.
 (cd "$source_dir" && meson subprojects download keycodemapdb berkeley-softfloat-3 berkeley-testfloat-3)
 mkdir "$source_dir/build"
@@ -40,10 +41,11 @@ proof = {
     'source_url': 'https://github.com/qemu/qemu',
     'source_commit': sys.argv[2],
     'patch_sha256': hashlib.sha256(patch.read_bytes()).hexdigest(),
+    'transparent_patch_sha256': hashlib.sha256((repo / 'tr3600/ssrplus/qemu-transparent.py').read_bytes()).hexdigest(),
     'executable': str(executable.relative_to(repo)),
     'executable_sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
     'version': subprocess.check_output([str(executable), '--version'], text=True).splitlines()[0],
-    'semantics': 'forward SO_MARK to real host setsockopt/getsockopt; no success or permission emulation',
+    'semantics': 'real host SO_MARK, IP_TRANSPARENT, original-destination sockaddr/CMSG; no success, destination or permission emulation',
 }
 (repo / 'reports/ddns-qemu-build.json').write_text(json.dumps(proof, indent=2) + '\n')
 print(json.dumps(proof, indent=2))
