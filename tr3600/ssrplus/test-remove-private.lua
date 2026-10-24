@@ -7,8 +7,10 @@ local cleanup=dofile(module)
 local function same(a,b)
  if type(a)~=type(b) then return false end
  if type(a)~='table' then return a==b end
- for k,v in pairs(a) do if not same(v,b[k]) then return false end end
- for k in pairs(b) do if a[k]==nil then return false end end
+ -- get_all(package) includes .index; get_all(package,section) does not. It is
+ -- cursor enumeration metadata, not a saved owner option, and deletion shifts it.
+ for k,v in pairs(a) do if k~='.index' and not same(v,b[k]) then return false end end
+ for k in pairs(b) do if k~='.index' and a[k]==nil then return false end end
  return true
 end
 for _,case in ipairs({'enabled','disabled','legacy_only','fresh','collision'}) do
@@ -69,3 +71,4 @@ for _,case in ipairs({'enabled','disabled','legacy_only','fresh','collision'}) d
  end
 end
 print('PASS all 5 native private SS deletion cases')
+
