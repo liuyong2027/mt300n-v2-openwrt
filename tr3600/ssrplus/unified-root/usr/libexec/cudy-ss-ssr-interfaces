@@ -1,0 +1,26 @@
+#!/bin/sh
+# Re-enter the existing SSR client policy. Replies to encrypted clients must
+# return before either TCP REDIRECT or UDP TPROXY can capture them again.
+set -eu
+for spec in 'inet ss_spec ss_spec_prerouting ss_spec_wan_ac tcp' 'ip ss_spec_mangle prerouting ss_spec_tproxy udp'; do
+    set -- $spec
+    nft list chain "$1" "$2" "$3" >/dev/null 2>&1 || continue
+    if ! nft list chain "$1" "$2" "$3" | grep -q 'Cudy SS encrypted ingress'; then
+        nft insert rule "$1" "$2" "$3" ip daddr 198.18.255.2 ct status dnat counter return comment '"Cudy SS encrypted ingress"'
+    fi
+    if ! nft list chain "$1" "$2" "$3" | grep -q 'Cudy SS encrypted reply'; then
+        nft insert rule "$1" "$2" "$3" iifname '"css-host"' ct direction reply counter return comment '"Cudy SS encrypted reply"'
+    fi
+    # Retained, independent ZeroTier gateway behavior.
+    if [ "$(uci -q get firewall.mango_zt_wan.enabled || :)" = 1 ] &&
+        nft list chain "$1" "$2" "$4" >/dev/null 2>&1; then
+        if ! nft list chain "$1" "$2" "$3" | grep -q 'Cudy ZeroTier gateway'; then
+            nft add rule "$1" "$2" "$3" iifname '"zt*"' meta l4proto "$5" jump "$4" comment '"Cudy ZeroTier gateway"'
+        fi
+    else
+        for handle in $(nft -a list chain "$1" "$2" "$3" | awk '/comment "Cudy ZeroTier gateway"/ { print $NF }'); do
+            case "$handle" in ''|*[!0-9]*) exit 1;; esac
+            nft delete rule "$1" "$2" "$3" handle "$handle"
+        done
+    fi
+done

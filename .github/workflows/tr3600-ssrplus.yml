@@ -1,0 +1,192 @@
+{
+  "name": "Cudy TR3600 SSR Plus+ 1.2.0 candidate firmware",
+  "on": {
+    "push": {
+      "branches": [
+        "codex/tr3600-ssrplus"
+      ],
+      "paths": [
+        "tr3600/**",
+        ".github/workflows/tr3600-ssrplus.yml"
+      ]
+    },
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "concurrency": {
+    "group": "tr3600-ssrplus-${{ github.ref }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "runtime-preflight": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 45,
+      "defaults": {
+        "run": {
+          "shell": "bash"
+        }
+      },
+      "steps": [
+        {
+          "name": "Checkout runtime changes",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Install isolated runtime test tools",
+          "run": "sudo apt-get update\nsudo apt-get install -y build-essential python3-venv python3-distlib libglib2.0-dev meson ninja-build pkg-config curl squashfs-tools nftables iproute2 lua5.1 qemu-user-static\nmkdir -p reports\npython3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8"
+        },
+        {
+          "name": "Download exact previously checked ARM64 baseline",
+          "env": {
+            "GITHUB_TOKEN": "${{ github.token }}"
+          },
+          "run": "curl -fL --retry 2 -H \"Authorization: Bearer $GITHUB_TOKEN\" -H \"Accept: application/vnd.github+json\" -o baseline.zip https://api.github.com/repos/liuyong2027/mt300n-v2-openwrt/actions/artifacts/12482494675/zip\ncurl -fL --retry 2 -o pinned-ssr.tar.gz https://codeload.github.com/fw876/helloworld/tar.gz/80d7bfff625b33db8afe80934638d96d214ceadc"
+        },
+        {
+          "name": "Build pinned syscall test emulator",
+          "run": "bash tr3600/ssrplus/build-test-qemu.sh 2>&1 | tee reports/ddns-qemu-build.log"
+        },
+        {
+          "name": "Test new runtime before full firmware compilation",
+          "run": "python3 tr3600/ssrplus/preflight-unified.py 2>&1 | tee reports/unified-preflight.log"
+        },
+        {
+          "name": "Upload runtime preflight diagnostics",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-unified-runtime-preflight-${{ github.run_number }}",
+            "path": "reports/",
+            "retention-days": 14,
+            "if-no-files-found": "warn"
+          }
+        }
+      ]
+    },
+    "build": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 330,
+      "defaults": {
+        "run": {
+          "shell": "bash"
+        }
+      },
+      "steps": [
+        {
+          "name": "Checkout build recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up pinned Go compiler",
+          "uses": "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+          "with": {
+            "go-version": "1.27.2",
+            "cache": false
+          }
+        },
+        {
+          "name": "Set up pinned frontend Node runtime",
+          "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+          "with": {
+            "node-version": "24.19.0"
+          }
+        },
+        {
+          "name": "Checkout exact Quantum source",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "repository": "gtsteffaniak/filebrowser",
+            "ref": "a29573e7068a4a682f199b64bec3e206159f535c",
+            "path": "vendor/quantum",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Install build dependencies",
+          "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-venv squashfs-tools socat python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc cpio lua5.1 libglib2.0-dev python3-distlib meson ninja-build pkg-config nftables iproute2 iputils-ping qemu-user-static samba samba-vfs-modules smbclient\nmkdir -p reports\n# Free space for OpenWrt and two Go source trees; only hosted-runner tool caches.\nsudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet\ndf -h .\ndf -h . | tee reports/disk-before.txt"
+        },
+        {
+          "name": "Build test-only QEMU with real SO_MARK forwarding",
+          "run": "bash tr3600/ssrplus/build-test-qemu.sh 2>&1 | tee reports/ddns-qemu-build.log"
+        },
+        {
+          "name": "Validate runtime, Wi-Fi and node management",
+          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8 PyYAML==6.0.3\n.test-venv/bin/python -m unittest discover -s tr3600/ssrplus -p test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py\n.test-venv/bin/python tr3600/ssrplus/test_server_status.py\n.test-venv/bin/python tr3600/ssrplus/test_yaml_nodes.py\n.test-venv/bin/python tr3600/ssrplus/test_bulk_delete.py\nnode --test tr3600/ssrplus/test_bulk_delete.js\nlua5.1 tr3600/test-wifi.lua\nnode --check tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js"
+        },
+        {
+          "name": "Retain legacy namespace regression coverage",
+          "run": "python3 tr3600/ssrplus/test_network.py"
+        },
+        {
+          "name": "Prepare SSR Plus+ profile",
+          "run": "python3 tr3600/ssrplus/profile.py\nsh -n tr3600/ssrplus/migration.sh\nbash -n scripts/prepare.sh"
+        },
+        {
+          "name": "Build guarded WebFiles and patched Quantum from pinned sources",
+          "run": "python3 tr3600/webfiles/build.py\npython3 tr3600/webfiles/test_binary_guard.py tr3600/cudy-webfiles/build-output/cudy-webfiles tr3600/cudy-webfiles/build-output/filebrowser --report reports/webfiles-arm64-binary-guard.json\n"
+        },
+        {
+          "name": "Resolve exact OpenWrt and SSR Plus+ sources",
+          "run": "bash scripts/prepare.sh 2>&1 | tee prepare.log\npython3 tr3600/ssrplus/check_config.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py --integration-root openwrt"
+        },
+        {
+          "name": "Test DDNS direct sockets without provider updates",
+          "run": "python3 tr3600/ssrplus/test_ddns_direct.py --report reports/ddns-direct-native.json"
+        },
+        {
+          "name": "Fetch build inputs",
+          "working-directory": "openwrt",
+          "run": "make download -j4 2>&1 | tee ../download.log"
+        },
+        {
+          "name": "Build host tools and validate pinned Go compiler",
+          "working-directory": "openwrt",
+          "run": "make -j2 tools/install V=s 2>&1 | tee ../reports/host-tools-build.log\nmake -j2 package/feeds/packages/golang/host/compile V=s 2>&1 | tee ../reports/golang-host-build.log\ngo_version=$(GOTOOLCHAIN=local staging_dir/hostpkg/lib/go-1.27/bin/go version)\nprintf '%s\\n' \"$go_version\" | tee ../reports/golang-host-version.txt\ntest \"$go_version\" = 'go version go1.27.3 linux/amd64'"
+        },
+        {
+          "name": "Compile SSR Plus+ 1.2.0 candidate firmware",
+          "id": "compile",
+          "working-directory": "openwrt",
+          "run": "make -j2 V=s 2>&1 | tee ../build.log"
+        },
+        {
+          "name": "Verify packed image and actual ARM64 programs",
+          "run": "python3 tr3600/ssrplus/verify.py 2>&1 | tee reports/ssrplus-packed-verification.log"
+        },
+        {
+          "name": "Upload checked 1.2.0 candidate firmware",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "cudy-tr3600-ssrplus-1.2.0-candidate-${{ github.sha }}",
+            "path": "ssrplus-assets/",
+            "if-no-files-found": "error",
+            "retention-days": 90
+          }
+        },
+        {
+          "name": "Upload diagnostics",
+          "if": "always()",
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "tr3600-ssrplus-diagnostics-${{ github.run_number }}",
+            "path": "reports/\nprepare.log\ndownload.log\nbuild.log\nopenwrt/bin/targets/mediatek/filogic/*cudy_tr3600-v1*squashfs-sysupgrade.bin",
+            "retention-days": 14,
+            "if-no-files-found": "warn"
+          }
+        }
+      ],
+      "needs": [
+        "runtime-preflight"
+      ]
+    }
+  }
+}

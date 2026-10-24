@@ -39,8 +39,8 @@ return view.extend({
 		o = s.option(form.Value,'key','共同无线密码','留空沿用所选 5 GHz 网络当前密码。');
 		o.password = true; o.depends('enabled','1');
 		o.validate = function(section,value) { return !value || /^[\x20-\x7e]{8,63}$/.test(value) || '请输入 8–63 位可打印英文字符密码'; };
-		o = s.option(form.Flag,'steering','自动频段引导','仅在信号足够时建议支持的设备切换至 5 GHz；关闭后仍保持同名双频网络，由终端自行选择。');
-		o.default = '1'; o.rmempty = false; o.depends('enabled','1');
+		o = s.option(form.Flag,'steering','自动频段引导','默认关闭，可按需手动开启。关闭后仍保持同名双频网络，由终端自行选择；开启后仅在信号足够时建议支持的设备切换至 5 GHz。');
+		o.default = '0'; o.rmempty = false; o.depends('enabled','1');
 		this.map = m;
 		return m.render();
 	},

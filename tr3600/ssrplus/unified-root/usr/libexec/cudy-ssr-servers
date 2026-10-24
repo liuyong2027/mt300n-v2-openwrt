@@ -1,0 +1,10 @@
+#!/usr/bin/lua
+local json=require('luci.jsonc')
+local runtime=dofile('/usr/lib/cudy-ss/server-runtime.lua')
+local action=arg[1]
+if action=='config' then print(json.stringify(runtime.config()))
+elseif action=='wanted' then os.exit(#runtime.config().inbounds>0 and 0 or 1)
+elseif action=='matches' then os.exit(runtime.matches() and 0 or 1)
+elseif action=='probe' then os.exit(runtime.probe() and 0 or 1)
+elseif action=='ready' then os.exit(runtime.ready() and 0 or 1)
+else os.exit(2) end

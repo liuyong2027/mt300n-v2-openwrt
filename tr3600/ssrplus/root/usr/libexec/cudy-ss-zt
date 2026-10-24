@@ -1,0 +1,63 @@
+#!/usr/bin/lua
+local fs=require('nixio.fs')
+local j=require('luci.jsonc')
+local M=dofile('/usr/lib/cudy-ss/ss-zt.lua')
+local N=dofile('/usr/lib/cudy-ss/config.lua')
+local function capture(cmd)
+    local p=assert(io.popen(cmd));local s=p:read('*a');p:close();return s
+end
+local migrated=fs.access('/etc/cudy-ssrplus/ss-server-v2.done')
+local raw_ok,raw=pcall(N.raw)
+local valid,c=false,nil
+if migrated and raw_ok then valid,c=pcall(N.validate,raw,M.validate) end
+if not valid then c=nil end
+if fs.access('/var/run/cudy-ss/service-stopped') then c=nil end
+local function network_ok()
+    return M.available(c,j.parse(capture('timeout 3 zerotier-cli -j listnetworks 2>/dev/null')) or {})
+end
+local function guard_ok()
+    return fs.readfile('/etc/cudy-ss/guard.nft')==N.guard(c) and
+        os.execute('nft list table inet cudy_ss_zt >/dev/null 2>&1')==0
+end
+local function wanted() return c and network_ok() and guard_ok() end
+local function ready()
+    local expected=wanted()
+    local config=j.parse(fs.readfile('/var/etc/cudy-ss/config.json') or '')
+    local tokens=capture('/usr/libexec/cudy-ss-process snapshot')
+    if not expected then return tokens=='' end
+    if not N.matches(config,c,true) then return false end
+    for pid in tokens:gmatch('(%d+):%d+') do
+        local owned={}
+        local fds=fs.dir('/proc/'..pid..'/fd')
+        if fds then for fd in fds do
+            local ino=(fs.readlink('/proc/'..pid..'/fd/'..fd) or ''):match('^socket:%[(%d+)%]$')
+            if ino then owned[ino]=true end
+        end end
+        local seen={}
+        for proto in c.network:gmatch('[^,]+') do
+            for line in (fs.readfile('/proc/'..pid..'/net/'..proto) or ''):gmatch('[^\n]+') do
+                local f={};for v in line:gmatch('%S+') do f[#f+1]=v end
+                if f[2]==string.format('00000000:%04X',c.port) and
+                    f[4]==(proto=='tcp' and '0A' or '07') and owned[f[10]] then seen[proto]=true end
+            end
+        end
+        if (c.network=='tcp' and seen.tcp) or (c.network=='udp' and seen.udp) or
+            (c.network=='tcp,udp' and seen.tcp and seen.udp) then return true end
+    end
+    return false
+end
+local action=arg[1]
+if action=='validate' then
+    if not migrated then io.stderr:write('Private SS server_config migration is pending\n');os.exit(1) end
+    if not raw_ok or not valid then io.stderr:write('Invalid private SS server_config; access remains closed\n');os.exit(1) end
+    if raw and raw.requested_enabled=='1' and raw.global_enabled~='1' then
+        io.stderr:write('Private SS is blocked until the SSR Plus+ global server switch is enabled\n')
+    end
+elseif action=='guard' then io.write(N.guard(c))
+elseif action=='guard-ok' then os.exit(guard_ok() and 0 or 1)
+elseif action=='available' then os.exit(wanted() and 0 or 1)
+elseif action=='config' then assert(c and wanted());io.write(j.stringify(N.config(c)),'\n')
+elseif action=='needs-apply' then os.exit(ready() and 1 or 0)
+elseif action=='ready' then os.exit(ready() and 0 or 1)
+else os.exit(2) end
+

@@ -1,0 +1,48 @@
+proxies:
+  - name: Example AnyTLS
+    type: anytls
+    server: anytls.example.invalid
+    port: 443
+    password: synthetic-anytls-password
+    sni: tls.example.invalid
+    client-fingerprint: chrome
+    fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
+    skip-cert-verify: false
+    udp: true
+    idle-session-check-interval: 30
+  - name: Example VMess
+    type: vmess
+    server: vmess.example.invalid
+    port: 8443
+    uuid: 00000000-0000-4000-8000-000000000001
+    alterId: 0
+    cipher: auto
+    tls: true
+    servername: tls.example.invalid
+    network: ws
+    ws-path: /example
+    ws-headers: {Host: websocket.example.invalid}
+    ws-opts:
+      path: /example
+      headers:
+        Host: websocket.example.invalid
+  - name: Example Hysteria2
+    type: hysteria2
+    server: hy2.example.invalid
+    port: 443
+    password: synthetic-hysteria2-password
+    sni: tls.example.invalid
+    obfs: salamander
+    obfs-password: synthetic-obfs-password
+    up: 30 Mbps
+    down: 200 Mbps
+    alpn: [h3]
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+rules:
+  - MATCH,DIRECT
+proxy-groups:
+  - name: Ignored group
+    type: select
+    proxies: [DIRECT]

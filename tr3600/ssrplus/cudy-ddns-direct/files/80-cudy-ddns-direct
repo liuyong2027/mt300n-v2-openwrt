@@ -1,0 +1,40 @@
+#!/bin/sh
+# An old keep.d list preserved executable source across sysupgrade. Restore
+# only the exact known legacy files from this image's immutable /rom copy.
+# Owner DDNS configuration and unknown custom helper versions are untouched.
+[ "$#" -eq 0 ] || exit 1
+resolver=/usr/libexec/cudy-dynu-resolve
+rom_resolver=/rom/usr/libexec/cudy-dynu-resolve
+keep=/lib/upgrade/keep.d/cudy-dynu-ddns
+rom_keep=/rom/lib/upgrade/keep.d/cudy-dynu-ddns
+legacy_resolver=1e8cb9ff828d321d0bf3b936f0cedb3f974d2ea5717dd4e865e3ea48df8263aa
+legacy_keep=b8fd6308c52cf23159a19cfd6ce525e9105d7f5d77e4eac4e85e153e36e33ea0
+
+digest() {
+    [ -f "$1" ] && [ ! -L "$1" ] || return 1
+    sha256sum "$1" | awk '{print $1}'
+}
+
+restore_known() {
+    local target="$1" original="$2" legacy="$3" label="$4"
+    local current expected
+    # /rom is absent in an image build/chroot; first real boot performs this.
+    [ -f "$original" ] || return 0
+    expected=$(digest "$original") || return 1
+    current=$(digest "$target") || {
+        logger -t cudy-ddns-direct "$label has an unknown file type; preserved for owner review"
+        return 0
+    }
+    [ "$current" = "$expected" ] && return 0
+    if [ "$current" = "$legacy" ]; then
+        cp -p "$original" "$target" || return 1
+        [ "$(digest "$target")" = "$expected" ] || return 1
+        logger -t cudy-ddns-direct "$label restored from the new firmware"
+    else
+        logger -t cudy-ddns-direct "$label is a custom version; preserved for owner review"
+    fi
+}
+
+restore_known "$resolver" "$rom_resolver" "$legacy_resolver" 'Dynu resolver' || exit 1
+restore_known "$keep" "$rom_keep" "$legacy_keep" 'DDNS keep list' || exit 1
+exit 0

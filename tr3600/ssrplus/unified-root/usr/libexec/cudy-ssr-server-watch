@@ -1,0 +1,14 @@
+#!/bin/sh
+while sleep 15; do
+    if /usr/libexec/cudy-ssr-servers wanted; then
+        if ! /usr/libexec/cudy-ssr-servers ready; then
+            /usr/libexec/cudy-ss-lock /etc/init.d/cudy_ss_core restart >/dev/null 2>&1 || :
+        fi
+    elif /usr/libexec/cudy-ss-process snapshot | grep -q '[0-9]'; then
+        /usr/libexec/cudy-ss-lock /etc/init.d/cudy_ss_core stop >/dev/null 2>&1 || :
+    fi
+    /usr/libexec/cudy-ssr-server-firewall check >/dev/null 2>&1 ||
+        /usr/libexec/cudy-ssr-server-firewall reload >/dev/null 2>&1 || :
+    /usr/libexec/cudy-ss-ssr-interfaces >/dev/null 2>&1 || :
+    /usr/libexec/cudy-ss-gate refresh >/dev/null 2>&1 || :
+done
