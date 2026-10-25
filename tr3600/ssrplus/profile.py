@@ -223,6 +223,8 @@ return M
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
         'firmware_version':'1.2.0','release_stage':'candidate; hardware acceptance pending',
+        'candidate_revision':2,
+        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload'],
         'base':'tr3600-v1.1.1','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',

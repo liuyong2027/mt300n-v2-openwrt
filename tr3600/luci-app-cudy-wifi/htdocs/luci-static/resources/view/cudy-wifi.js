@@ -45,10 +45,20 @@ return view.extend({
 		return m.render();
 	},
 	handleSaveApply: function() {
-		return this.map.save().then(function() { return uci.apply(); }).then(function() {
+		return this.map.save().then(function() { return uci.changes(); }).then(function(changes) {
+			var pending = Object.keys(changes || {}).some(function(name) {
+				return Array.isArray(changes[name]) && changes[name].length > 0;
+			});
+			// A repeated apply must still run the Wi-Fi helper when UCI has no changes.
+			if (!pending) return;
+			// Confirm the saved settings before the helper deliberately reloads Wi-Fi.
+			return uci.callApply(10,true).then(function() { return uci.callConfirm(); });
+		}).then(function() {
 			return fs.exec('/usr/libexec/cudy-wifi-apply',['apply']);
 		}).then(function(result) {
 			ui.addNotification(null,E('p',{},result.stdout || result.stderr || '请重新连接无线并检查配置状态。'),result.code === 0 ? 'info' : 'error');
+		}).catch(function(error) {
+			ui.addNotification(null,E('p',{},'双频合一应用失败：'+(error.message || String(error))),'error');
 		});
 	}
 });

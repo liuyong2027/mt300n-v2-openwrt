@@ -5,6 +5,13 @@ This is a candidate awaiting hardware acceptance, not a published stable Release
 The firmware uses version 1.2.0 so the identical checked SHA256 can be promoted
 after acceptance. Compilation and packed checks do not prove a hardware boot.
 
+Candidate revision 2 incorporates four field-validated corrections: applying
+unified Wi-Fi with no staged changes and steering disabled, selectable USB
+partition controls, aligned node table headings, and bulk deletion without a
+proxy reload. The internal version remains 1.2.0; distinguish candidates by
+build commit and SHA256. The previous f95ed187... image lacks these corrections.
+The newly rebuilt image and keep-settings upgrade still need hardware acceptance.
+
 SSR Plus+ is the sole transparent proxy (nftables, Xray). SOURCE.json records
 pinned sources. Wi-Fi, USB/Samba, WebFiles, DDNS, ZeroTier and LED remain.
 
@@ -36,8 +43,8 @@ names, selected node and automatic switch order are not changed by numbering.
 Node rows offer individual checkboxes and Select all on this page. Delete
 selected nodes confirms the count and submits one authenticated POST request.
 Nodes referenced by main/UDP/SOCKS/HTTP settings are protected. The complete
-selection is validated before a single configuration commit; no per-node proxy
-restart occurs. Pending SSR edits must be applied or discarded first. Selection
+selection is validated before a single native UCI commit without a service
+reload notification. Pending SSR edits must be applied or discarded first. Selection
 is display-only and is cleared on page reload. Subscription updates can restore
 deleted subscription nodes; use subscription filters for permanent exclusions.
 

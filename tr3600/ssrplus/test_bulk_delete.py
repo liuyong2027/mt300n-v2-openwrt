@@ -68,22 +68,55 @@ function cursor:unload(pkg)assert(pkg=='shadowsocksr');unloads=unloads+1;rows=co
         self.assertEqual(self.delete('b'), (None, 'commit_failed'))
         self.assertIsNotNone(self.lua.globals().rows.b)
 
-    def test_controller_rejects_get_and_never_calls_a_shell(self):
+    def load_controller(self):
         self.lua.globals().bulk_helper = self.helper
         self.lua.execute('''
-method='GET';payload='synthetic';parsed_ids={'b'};removed=0
+method='POST';payload='synthetic';parsed_ids={'b'};removed=0
+session_pending=false;rpc_commits=0;native_cursors=0
 json={parse=function(v)return parsed_ids end}
 luci={http={status=function(v)http_status=v end,prepare_content=function()end,
  write_json=function(v)response=v end,getenv=function()return method end,formvalue=function()return payload end}}
 nixio={fs={remove=function()removed=removed+1 end}};SERVER_DETECT_CACHE='synthetic-cache'
-package.loaded['luci.model.uci']={cursor=function()return cursor end}
+local session=setmetatable({}, {__index=cursor})
+function session:changes(pkg)
+ assert(pkg=='shadowsocksr');if session_pending=='unavailable'then return nil end
+ return session_pending and {shadowsocksr={synthetic=true}}or{}
+end
+function session:commit(pkg)rpc_commits=rpc_commits+1;error('RPC_COMMIT_WOULD_RELOAD_SERVICE')end
+package.loaded['luci.model.uci']={cursor=function()return session end}
+package.loaded['uci']={cursor=function()native_cursors=native_cursors+1;return cursor end}
 dofile=function(path)assert(path=='/usr/share/shadowsocksr/bulk_delete.lua');return bulk_helper end
 ''')
         self.lua.execute((HERE / 'bulk-delete-controller.lua').read_text(encoding='utf-8'))
+
+    def test_controller_commits_without_rpc_service_reload(self):
+        self.load_controller()
         g = self.lua.globals(); g.act_delete_nodes()
-        self.assertEqual((g.http_status, g.deletes), (405, 0))
-        g.method = 'POST'; g.act_delete_nodes()
         self.assertEqual((g.http_status, g.response.ret, g.response.deleted, g.commits, g.removed), (200, 1, 1, 1, 1))
+        self.assertEqual((g.rpc_commits, g.native_cursors), (0, 1))
+
+    def test_controller_preserves_session_pending_changes(self):
+        self.load_controller()
+        g = self.lua.globals(); g.session_pending = True; g.act_delete_nodes()
+        self.assertEqual((g.http_status, g.response.error), (409, 'pending_changes'))
+        self.assertEqual((g.deletes, g.commits, g.unloads, g.rpc_commits, g.native_cursors), (0, 0, 0, 0, 0))
+        self.assertIsNotNone(g.rows.b)
+
+    def test_controller_get_does_not_open_any_cursor(self):
+        self.load_controller()
+        g = self.lua.globals(); g.method = 'GET'; g.act_delete_nodes()
+        self.assertEqual((g.http_status, g.deletes), (405, 0))
+        self.assertEqual(g.native_cursors, 0)
+
+    def test_controller_preserves_native_pending_edits(self):
+        self.load_controller()
+        g = self.lua.globals(); g.pending = True; g.act_delete_nodes()
+        self.assertEqual((g.http_status, g.response.error, g.deletes, g.commits), (409, 'pending_changes', 0, 0))
+
+    def test_controller_fails_closed_if_session_changes_unavailable(self):
+        self.load_controller()
+        g = self.lua.globals(); g.session_pending = 'unavailable'; g.act_delete_nodes()
+        self.assertEqual((g.http_status, g.response.error, g.deletes, g.native_cursors), (500, 'delete_failed', 0, 0))
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

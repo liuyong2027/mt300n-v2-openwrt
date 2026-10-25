@@ -120,7 +120,7 @@
         },
         {
           "name": "Validate runtime, Wi-Fi and node management",
-          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8 PyYAML==6.0.3\n.test-venv/bin/python -m unittest discover -s tr3600/ssrplus -p test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py\n.test-venv/bin/python tr3600/ssrplus/test_server_status.py\n.test-venv/bin/python tr3600/ssrplus/test_yaml_nodes.py\n.test-venv/bin/python tr3600/ssrplus/test_bulk_delete.py\nnode --test tr3600/ssrplus/test_bulk_delete.js\nlua5.1 tr3600/test-wifi.lua\nnode --check tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js"
+          "run": "python3 -m venv .test-venv\n.test-venv/bin/pip install lupa==2.8 PyYAML==6.0.3\n.test-venv/bin/python -m unittest discover -s tr3600/ssrplus -p test_profile.py\n.test-venv/bin/python tr3600/ssrplus/test_connectivity.py\n.test-venv/bin/python tr3600/ssrplus/test_ss_server_ui.py\n.test-venv/bin/python tr3600/ssrplus/test_unified_ss.py\n.test-venv/bin/python tr3600/ssrplus/test_server_status.py\n.test-venv/bin/python tr3600/ssrplus/test_yaml_nodes.py\n.test-venv/bin/python tr3600/ssrplus/test_bulk_delete.py\nnode --test tr3600/ssrplus/test_bulk_delete.js\nlua5.1 tr3600/test-wifi.lua\nnode --check tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js\nnode tr3600/test-wifi-ui.cjs\nnode tr3600/test-usb-ui.cjs"
         },
         {
           "name": "Retain legacy namespace regression coverage",

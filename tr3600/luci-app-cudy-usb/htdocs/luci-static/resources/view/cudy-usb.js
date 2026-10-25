@@ -47,14 +47,14 @@ return view.extend({
 		});
 		var select=E('select',{'class':'cbi-input-select'});
 		devices.forEach(function(d) {
-			select.appendChild(E('option',{'value':d.uuid,'disabled':d.duplicate},
+			select.appendChild(E('option',{'value':d.uuid,'disabled':d.duplicate ? true : null},
 				d.device+' · '+(d.label || '无卷标')+' · '+d.fstype+' · '+d.uuid+(d.duplicate ? '（UUID 重复）' : '')));
 		});
 		var name=E('input',{'class':'cbi-input-text','value':'USB','maxlength':32});
 		var access=E('select',{'class':'cbi-input-select'},[
 			E('option',{'value':'0'},'局域网访客读写'),E('option',{'value':'1'},'局域网访客只读')
 		]);
-		var button=E('button',{'class':'btn cbi-button-apply','disabled':!devices.some(function(d){return !d.duplicate;}),'click':function(){
+		var button=E('button',{'class':'btn cbi-button-apply','disabled':devices.some(function(d){return !d.duplicate;}) ? null : true,'click':function(){
 			var shared=name.value;
 			if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(shared) || shared.toLowerCase()==='global') {
 				ui.addNotification(null,E('p',{},'共享名称限 1–32 位英文字母、数字、下划线或短横线，以字母或数字开头。'),'error'); return;

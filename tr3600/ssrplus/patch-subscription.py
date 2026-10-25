@@ -54,6 +54,18 @@ def yaml_importer(text):
         '(result.type ~= "clash" and not yaml_nodes and result.server:match("[^0-9a-zA-Z%-_%.%s]"))')
 
 
+def align_server_table(text):
+    # Template children emit supporting markup, not a data cell. Only actual
+    # CBI options may contribute a title or description column.
+    for name in ('render_titles', 'render_descriptions'):
+        start = text.index('function ' + name + '()')
+        end = text.index('\nend', start) + len('\nend')
+        block = text[start:end]
+        fixed = once(block, 'if not k.optional then', 'if not k.optional and k.option then')
+        text = text[:start] + fixed + text[end:]
+    return text
+
+
 def patch(root):
     package = root / 'feeds/helloworld/luci-app-ssr-plus'
     changed = {}
@@ -69,7 +81,7 @@ def patch(root):
     changed[ui] = once(changed[ui], 'o:value("v2rayN/9.99", "v2rayN")',
         'o:value("v2rayN/9.99", "v2rayN")\no:value("mihomo/1.18.0", "Mihomo (mihomo/1.18.0)")')
     table = package / 'luasrc/view/shadowsocksr/server_table.htm'
-    text = table.read_text(encoding='utf-8')
+    text = align_server_table(table.read_text(encoding='utf-8'))
     # Both header renderers have the same child loop; patch their distinct prefixes.
     title = '\t%><tr class="tr cbi-section-table-titles <%=anonclass%>"<%=titlename%>><%\n'
     text = once(text, title, title + '\t%><th class="th cbi-section-table-cell ssr-node-number-header"><%:No.%></th><%\n')

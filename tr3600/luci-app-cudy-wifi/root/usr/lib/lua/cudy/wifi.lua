@@ -72,9 +72,12 @@ local function put_state(u,b)
     restore(u,'usteer',b.steer,b.steering,steer_fields)
     assert(u:commit('wireless')); assert(u:commit('usteer'))
 end
-local function activate(env,boot)
+local function activate(u,env,boot)
     if boot then return true end
-    return env.run('/sbin/wifi reload') and env.run('/etc/init.d/usteer restart')
+    if not env.run('/sbin/wifi reload') then return false end
+    local enabled = false
+    u:foreach('usteer','usteer',function(s) if s.enabled ~= '0' then enabled = true end end)
+    return env.run(enabled and '/etc/init.d/usteer restart' or '/etc/init.d/usteer stop')
 end
 
 function M.apply(u,env,boot)
@@ -87,9 +90,9 @@ function M.apply(u,env,boot)
     if c.enabled == '0' then
         if not backup then return true,'双频合一已关闭，原无线配置保持不变' end
         local live = state(u,backup.ap2g,backup.ap5g,backup.steer)
-        local ok = pcall(function() put_state(u,backup); assert(activate(env,boot)) end)
+        local ok = pcall(function() put_state(u,backup); assert(activate(u,env,boot)) end)
         if not ok then
-            pcall(function() put_state(u,live); activate(env,boot) end)
+            pcall(function() put_state(u,live); activate(u,env,boot) end)
             return nil,'恢复无线配置失败，已尝试恢复操作前配置；原备份保留'
         end
         if not env.erase() then return nil,'无线配置已恢复，但原备份清理失败，请重试' end
@@ -141,10 +144,10 @@ function M.apply(u,env,boot)
             min_snr='0',min_connect_snr='0',roam_trigger_snr='0',roam_scan_snr='0'}
         for field,value in pairs(values) do assert(u:set('usteer',steer,field,value)) end
         assert(u:commit('wireless')); assert(u:commit('usteer'))
-        assert(activate(env,boot))
+        assert(activate(u,env,boot))
     end)
     if not ok then
-        local restored = pcall(function() put_state(u,live); assert(activate(env,boot)) end)
+        local restored = pcall(function() put_state(u,live); assert(activate(u,env,boot)) end)
         if not backup and restored then env.erase() end
         return nil,'应用失败，已尝试恢复操作前配置，请检查系统日志'
     end

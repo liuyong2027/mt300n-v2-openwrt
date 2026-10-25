@@ -13,6 +13,8 @@ import tempfile
 repo=Path(__file__).resolve().parents[2]
 source=json.loads((repo/'reports/ssrplus-source.json').read_text())
 assert source['xray_version']=='26.10.21',source
+field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload']
+assert source['candidate_revision']==2 and source['integrated_field_fixes']==field_fixes
 images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
 assert len(images)==1,images
 image=images[0]
@@ -70,6 +72,9 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     jsmin=repo/'openwrt/staging_dir/hostpkg/bin/jsmin'
     minified_wifi_js=subprocess.check_output([str(jsmin)],input=wifi_js.read_bytes())
     assert (root/'www/luci-static/resources/view/cudy-wifi.js').read_bytes()==minified_wifi_js
+    usb_js=repo/'tr3600/luci-app-cudy-usb/htdocs/luci-static/resources/view/cudy-usb.js'
+    minified_usb_js=subprocess.check_output([str(jsmin)],input=usb_js.read_bytes())
+    assert (root/'www/luci-static/resources/view/cudy-usb.js').read_bytes()==minified_usb_js
     assert (root/'lib/upgrade/cudy-tr3600.sh').read_bytes()==(repo/'tr3600/cudy-upgrade.sh').read_bytes()
     assert (root/'lib/upgrade/keep.d/cudy-dynu-ddns').read_text()=='/etc/config/ddns\n'
     subscription_package=repo/'openwrt/feeds/helloworld/luci-app-ssr-plus'
@@ -93,6 +98,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     assert 'math.max(first_index - 1, 0)' in server_table
     assert (repo/'tr3600/ssrplus/bulk-delete.js').read_text().rstrip() in server_table
     assert 'ssr-bulk-node' in server_table and 'ssr-bulk-all' in server_table
+    assert server_table.count('if not k.optional and k.option then')==2
     server_status=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/status.lua').read_text()
     assert (repo/'tr3600/ssrplus/server-status.lua').read_text().rstrip() in server_status
     assert 'Process_list:find("ssr.server")' not in server_status
@@ -231,6 +237,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
     proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.1.1',
         'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
+        'candidate_revision':2,'integrated_field_fixes_verified':field_fixes,
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
         'actual_xray_version':xray_version,
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
