@@ -1,0 +1,269 @@
+"""Verify the packed image, not just the build tree, before publishing an artifact."""
+import hashlib
+import json
+import os
+import re
+from pathlib import Path
+import shutil
+import subprocess
+import struct
+import tarfile
+import tempfile
+
+repo=Path(__file__).resolve().parents[2]
+source=json.loads((repo/'reports/ssrplus-source.json').read_text())
+assert source['xray_version']=='26.10.21',source
+field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload']
+assert source['candidate_revision']==2 and source['integrated_field_fixes']==field_fixes
+images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
+assert len(images)==1,images
+image=images[0]
+assert image.stat().st_size < 237824*1024
+with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as temp:
+    temp=Path(temp)
+    # Low-privilege packed checks must reach these public image files; their
+    # expected failure must come from SO_MARK, not a private temp-directory ACL.
+    temp.chmod(0o755)
+    with tarfile.open(image) as archive:
+        roots=[m for m in archive.getmembers() if m.isfile() and m.name.endswith('/root')]
+        assert len(roots)==1
+        kernels=[m for m in archive.getmembers() if m.isfile() and m.name.endswith('/kernel')]
+        assert len(kernels)==1
+        assert archive.extractfile(kernels[0]).read(4)==bytes.fromhex('d00dfeed')
+        payload=temp/'root.squashfs'
+        payload.write_bytes(archive.extractfile(roots[0]).read())
+        header=payload.read_bytes()[:96]
+        assert header[:4]==b'hsqs' and struct.unpack_from('<I',header,12)[0]==1048576
+        assert struct.unpack_from('<H',header,20)[0]==4
+    root=temp/'rootfs'
+    subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
+    subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0'
+    for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw',
+        'usr/share/luci/menu.d/luci-app-mango-proxy.json',
+        'usr/share/luci/menu.d/luci-app-cudy-ss.json','usr/libexec/rpcd/cudy.ss',
+        'usr/share/rpcd/acl.d/luci-app-cudy-ss.json','usr/libexec/cudy-ss-worker',
+        'www/luci-static/resources/view/cudy-ss.js','etc/config/cudy_ss','usr/libexec/cudy-ss-zt',
+        'usr/libexec/cudy-ss-zt-guard','usr/libexec/cudy-ss-zt-watch','lib/upgrade/keep.d/cudy-ss',
+        'usr/lib/cudy-ss/config.lua','usr/lib/cudy-ss/ss-zt.lua','usr/lib/cudy-ss/ss-server-migrate.lua']:
+        assert not (root/absent).exists(),absent
+    assert not list((root/'usr/libexec').glob('mango-*'))
+    for required in ['etc/init.d/shadowsocksr','usr/bin/xray','usr/libexec/cudy-ss-netns',
+        'usr/lib/cudy-ss/migrate.lua','usr/lib/cudy-ss/server-runtime.lua','usr/libexec/cudy-ss-gate',
+        'usr/lib/cudy-ss/remove-private.lua','usr/lib/lua/cudy/ssr-server.lua','usr/libexec/cudy-ssr-serve',
+        'usr/share/shadowsocksr/gen_cudy_ss_server.lua','usr/share/shadowsocksr/yaml_nodes.lua',
+        'usr/libexec/cudy-ssr-server-firewall',
+        'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct','usr/libexec/cudy-ddns-curl',
+        'etc/uci-defaults/80-cudy-ddns-direct',
+        'etc/init.d/cudy_ss_core','usr/lib/cudy-webfiles/bin/cudy-webfiles',
+        'usr/lib/cudy-webfiles/bin/filebrowser','usr/sbin/smbd','usr/bin/zerotier-one',
+        'sbin/usteerd','etc/config/cudy_wifi','etc/config/usteer','usr/lib/lua/cudy/wifi.lua',
+        'usr/libexec/cudy-wifi-config','usr/libexec/cudy-wifi-apply',
+        'www/luci-static/resources/view/cudy-wifi.js','usr/share/luci/menu.d/zz-cudy-wifi-tabs.json']:
+        assert (root/required).is_file(),required
+    wifi_package=repo/'tr3600/luci-app-cudy-wifi'
+    assert (root/'etc/config/cudy_wifi').read_bytes()==(wifi_package/'root/etc/config/cudy_wifi').read_bytes()
+    assert "option steering '0'" in (root/'etc/config/cudy_wifi').read_text()
+    assert (root/'etc/config/usteer').read_bytes()==(repo/'tr3600/network-root/etc/config/usteer').read_bytes()
+    assert "option enabled '0'" in (root/'etc/config/usteer').read_text()
+    assert "option band_steering_interval '0'" in (root/'etc/config/usteer').read_text()
+    assert (root/'usr/lib/lua/cudy/wifi.lua').read_bytes()==(wifi_package/'root/usr/lib/lua/cudy/wifi.lua').read_bytes()
+    wifi_js=wifi_package/'htdocs/luci-static/resources/view/cudy-wifi.js'
+    jsmin=repo/'openwrt/staging_dir/hostpkg/bin/jsmin'
+    minified_wifi_js=subprocess.check_output([str(jsmin)],input=wifi_js.read_bytes())
+    assert (root/'www/luci-static/resources/view/cudy-wifi.js').read_bytes()==minified_wifi_js
+    usb_js=repo/'tr3600/luci-app-cudy-usb/htdocs/luci-static/resources/view/cudy-usb.js'
+    minified_usb_js=subprocess.check_output([str(jsmin)],input=usb_js.read_bytes())
+    assert (root/'www/luci-static/resources/view/cudy-usb.js').read_bytes()==minified_usb_js
+    assert (root/'lib/upgrade/cudy-tr3600.sh').read_bytes()==(repo/'tr3600/cudy-upgrade.sh').read_bytes()
+    assert (root/'lib/upgrade/keep.d/cudy-dynu-ddns').read_text()=='/etc/config/ddns\n'
+    subscription_package=repo/'openwrt/feeds/helloworld/luci-app-ssr-plus'
+    for relative in ('usr/share/shadowsocksr/subscribe.lua','usr/share/shadowsocksr/yaml_nodes.lua',
+        'usr/share/shadowsocksr/shadowsocksr.config','etc/uci-defaults/luci-ssr-plus'):
+        assert (root/relative).read_bytes()==(subscription_package/'root'/relative).read_bytes(),relative
+    assert (root/'usr/share/shadowsocksr/yaml_nodes.lua').read_bytes()==(repo/'tr3600/ssrplus/yaml_nodes.lua').read_bytes()
+    access_defaults=(root/'usr/share/shadowsocksr/shadowsocksr.config').read_text()
+    assert not re.search(r'(?m)^\s*list\s+wan_fw_ips\b',access_defaults)
+    for name in ('white.list','deny.list'):
+        assert (root/'etc/ssrplus'/name).read_bytes()==b'',name
+    assert (root/'usr/share/shadowsocksr/bulk_delete.lua').read_bytes()==(repo/'tr3600/ssrplus/bulk_delete.lua').read_bytes()
+    bulk_controller=(root/'usr/lib/lua/luci/controller/shadowsocksr.lua').read_text()
+    assert (repo/'tr3600/ssrplus/bulk-delete-controller.lua').read_text().rstrip() in bulk_controller
+    assert 'post("act_delete_nodes")' in bulk_controller
+    subscription_ui=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/servers.lua').read_text()
+    assert 'mihomo/1.18.0' in subscription_ui
+    assert '过期/重置/套餐/剩余/网址/QQ群/官网/防失联/回国/邮箱客服/支持AI' in subscription_ui
+    server_table=(root/'usr/lib/lua/luci/view/shadowsocksr/server_table.htm').read_text()
+    assert 'ssr-numbered-server-table' in server_table and 'counter-reset: ssr-node-number' in server_table
+    assert 'math.max(first_index - 1, 0)' in server_table
+    assert (repo/'tr3600/ssrplus/bulk-delete.js').read_text().rstrip() in server_table
+    assert 'ssr-bulk-node' in server_table and 'ssr-bulk-all' in server_table
+    assert server_table.count('if not k.optional and k.option then')==2
+    server_status=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/status.lua').read_text()
+    assert (repo/'tr3600/ssrplus/server-status.lua').read_text().rstrip() in server_status
+    assert 'Process_list:find("ssr.server")' not in server_status
+    server_ui=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/server-config.lua').read_text()
+    assert (repo/'tr3600/ssrplus/unified-access-ui.lua').read_text().rstrip() in server_ui
+    for name in ['usr/bin/xray','bin/busybox','usr/sbin/smbd','usr/bin/zerotier-one',
+        'usr/lib/cudy-ddns-direct/socket-mark.so','usr/libexec/cudy-ddns-direct']:
+        data=(root/name).read_bytes()
+        assert data[:6]==b'\x7fELF\x02\x01' and struct.unpack_from('<H',data,18)[0]==183,name
+    xray_command=['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/xray')]
+    xray_version=subprocess.check_output(xray_command+['version'],text=True).splitlines()[0]
+    assert xray_version.split()[:2]==['Xray',source['xray_version']],xray_version
+    metadata=repo/'reports/image-metadata.json'
+    subprocess.run([str(repo/'openwrt/staging_dir/host/bin/fwtool'),'-i',str(metadata),str(image)],check=True)
+    devices=json.loads(metadata.read_text())['supported_devices']
+    assert 'cudy,tr3600-v1' in devices and 'R126' in devices
+    kernels=list((repo/'openwrt/build_dir').glob('target-*/linux-mediatek_filogic/linux-6.12.*'))
+    assert len(kernels)==1
+    symbols=(kernels[0]/'System.map').read_text()
+    assert '__param_dual_boot' in symbols and '__param_rootfs_volume' in symbols
+    assert not (root/'etc/cudy-webfiles').exists()
+    assert not (root/'etc/cudy-ss').exists()
+    manifest=json.loads((root/'usr/lib/cudy-webfiles/manifest.json').read_text())
+    assert manifest==json.loads((repo/'tr3600/cudy-webfiles/build-output/manifest.json').read_text())
+    assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/cudy-webfiles').read_bytes()).hexdigest()==manifest['helperSHA256']
+    assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/filebrowser').read_bytes()).hexdigest()==manifest['quantum']['sha256']
+    config=(repo/'openwrt/.config').read_text()
+    for package in ['luci-app-ssr-plus','dnsmasq-full','kmod-nft-socket','kmod-nft-tproxy','kmod-veth','luci-compat','luci-app-cudy-ss','zerotier',
+        'luci-app-cudy-wifi','usteer','wpad-mbedtls']:
+        assert 'CONFIG_PACKAGE_'+package+'=y' in config,package
+    assert 'CONFIG_PACKAGE_luci-app-mango-proxy=y' not in config
+    # Parse every actual installed Lua file and every shell entrypoint using target tools.
+    syntax=0
+    for base in ['usr/lib/cudy-ss','usr/lib/lua/cudy','usr/share/shadowsocksr','usr/libexec','etc/init.d','etc/uci-defaults']:
+        for path in (root/base).glob('*'):
+            if not path.is_file():continue
+            try:text=path.read_text()
+            except UnicodeDecodeError:continue
+            if path.suffix=='.lua' or text.startswith('#!/usr/bin/lua'):
+                if path.parent.name in ('cudy-ss','cudy') or path.name.startswith(('cudy-ss','gen_cudy_')) or path.name in ('yaml_nodes.lua','subscribe.lua','bulk_delete.lua'):
+                    subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),'-e',
+                        'assert(loadfile('+json.dumps(str(path))+'))'],check=True);syntax+=1
+            elif text.startswith('#!') and ('cudy' in path.name or path.name=='shadowsocksr'):
+                subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'bin/busybox'),'sh','-n',str(path)],check=True);syntax+=1
+    for relative in ('model/cbi/shadowsocksr/server-config.lua','model/cbi/shadowsocksr/server.lua',
+        'model/cbi/shadowsocksr/servers.lua',
+        'model/cbi/shadowsocksr/status.lua','controller/shadowsocksr.lua'):
+        path=root/'usr/lib/lua/luci'/relative
+        assert path.is_file(),relative
+        subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),'-e',
+            'assert(loadfile('+json.dumps(str(path))+'))'],check=True)
+        syntax+=1
+    # Exercise native libuci/nixio from the packed image. A Lua-only mock can
+    # accidentally supply cursor helpers that the installed native API lacks.
+    for name in ['usr/bin/lua','usr/lib/lua/uci.so','usr/lib/lua/nixio.so','usr/lib/lua/nixio/fs.lua']:
+        assert (root/name).is_file(),name
+    native_environment=os.environ.copy()
+    native_environment['LUA_PATH']=str(root/'usr/lib/lua/?.lua')+';'+str(root/'usr/lib/lua/?/init.lua')
+    native_environment['LUA_CPATH']=str(root/'usr/lib/lua/?.so')
+    yaml_sandbox=temp/'yaml-connections'
+    yaml_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
+        str(repo/'tr3600/ssrplus/test-yaml-packed.lua'),str(root),str(yaml_sandbox),
+        str(repo/'tr3600/ssrplus/yaml-nodes-fixture.yaml'),xray_version],
+        env=native_environment,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    (repo/'reports/yaml-nodes-packed-verification.log').write_text(yaml_result.stdout)
+    print(yaml_result.stdout,end='');yaml_result.check_returncode()
+    yaml_protocols=['anytls','vmess','hysteria2']
+    for protocol in yaml_protocols:
+        subprocess.run(xray_command+['run','-test','-config',str(yaml_sandbox/(protocol+'.json'))],check=True)
+    native_sandbox=temp/'native-uci'
+    assert not native_sandbox.exists()
+    native_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
+        str(repo/'tr3600/ssrplus/test-native-uci.lua'),str(root/'usr/lib/cudy-ss/migrate.lua'),str(native_sandbox)],
+        env=native_environment,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    (repo/'reports/native-uci-packed-verification.log').write_text(native_result.stdout)
+    print(native_result.stdout,end='')
+    native_result.check_returncode()
+    native_cases=['seeded_nil','missing_global_access_control','preserve_user_selection']
+    for case in native_cases:
+        assert 'PASS '+case+': native UCI, private SS preserved, repeat no-op' in native_result.stdout,case
+    assert 'PASS all synthetic native-UCI migration checks; no production configuration used' in native_result.stdout
+    private_migration_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
+        str(repo/'tr3600/ssrplus/test-remove-private.lua'),
+        str(root/'usr/lib/cudy-ss/remove-private.lua'),str(temp/'private-deletion-native-uci')],env=native_environment,text=True,
+        stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    (repo/'reports/private-ss-deletion-packed-verification.log').write_text(private_migration_result.stdout)
+    print(private_migration_result.stdout,end='')
+    private_migration_result.check_returncode()
+    assert 'PASS all 5 native private SS deletion cases' in private_migration_result.stdout
+    # The distro QEMU rejects SO_MARK before reaching the host kernel. Use the
+    # pinned test-only syscall-forwarding build, without changing packed bytes.
+    qemu_build=json.loads((repo/'reports/ddns-qemu-build.json').read_text())
+    ddns_qemu=repo/qemu_build['executable']
+    assert hashlib.sha256(ddns_qemu.read_bytes()).hexdigest()==qemu_build['executable_sha256']
+    assert qemu_build['transparent_patch_sha256']==hashlib.sha256((repo/'tr3600/ssrplus/qemu-transparent.py').read_bytes()).hexdigest()
+    server_report=repo/'reports/ss-server-packed-verification.json'
+    subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_unified_ss_packed.py'),
+        '--root',str(root),'--report',str(server_report),'--qemu',str(ddns_qemu)],check=True)
+    server_checks=json.loads(server_report.read_text())
+    ddns_report=repo/'reports/ddns-direct-packed-verification.json'
+    subprocess.run(['python3',str(repo/'tr3600/ssrplus/test_ddns_direct.py'),
+        '--root',str(root),'--report',str(ddns_report),'--qemu',str(ddns_qemu)],check=True)
+    ddns_checks=json.loads(ddns_report.read_text())
+    assert ddns_checks['packed']['emulator_sha256']==qemu_build['executable_sha256']
+    ddns_checks['test_emulator_build']=qemu_build
+    # Extra parser regression checks, in addition to all seven encrypted ciphers.
+    for cipher in ['aes-128-gcm','aes-256-gcm','chacha20-ietf-poly1305']:
+        cfg={'log':{'loglevel':'warning'},'dns':{'queryStrategy':'UseIPv4','servers':['198.18.255.1']},
+            'inbounds':[{'tag':'ordinary-ss','listen':'0.0.0.0','port':8388,'protocol':'shadowsocks',
+            'settings':{'method':cipher,'password':'synthetic-test-password-only-12345','network':'tcp,udp'}}],
+            'outbounds':[{'protocol':'freedom','settings':{'domainStrategy':'UseIPv4'}}]}
+        path=temp/'test.json';path.write_text(json.dumps(cfg))
+        subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
+    # A stock Xray build lacks these feed-provided protocols. Parse each actual
+    # outbound with synthetic settings before accepting the packaged core.
+    enhanced_outbounds={
+        'shadowsocksr':{'address':'127.0.0.1','port':8388,'method':'aes-128-cfb',
+            'password':'synthetic-test-password-only-12345','protocol':'origin','obfs':'plain'},
+        'anytls':{'address':'127.0.0.1','port':443,'password':'synthetic-test-password-only-12345'},
+        'tuic':{'address':'127.0.0.1','port':443,'version':5,
+            'uuid':'00000000-0000-4000-8000-000000000001','password':'synthetic-test-password-only-12345',
+            'serverName':'example.com','congestionControl':'bbr','udpRelayMode':'native'},
+        'snell':{'address':'127.0.0.1','port':8388,'psk':'synthetic-test-password-only-12345','version':4}
+    }
+    for protocol,settings in enhanced_outbounds.items():
+        outbound={'protocol':protocol,'settings':settings,'streamSettings':{'network':'raw'}}
+        if protocol=='anytls':
+            outbound['streamSettings'].update(security='tls',tlsSettings={'serverName':'example.com'})
+        path=temp/('test-'+protocol+'.json')
+        path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
+        subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
+    out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
+    name='cudy-tr3600-v1-ssrplus-1.2.0-sysupgrade.bin'
+    shutil.copyfile(image,out/name)
+    digest=hashlib.sha256(image.read_bytes()).hexdigest()
+    (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
+    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.1.1',
+        'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
+        'candidate_revision':2,'integrated_field_fixes_verified':field_fixes,
+        'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
+        'actual_xray_version':xray_version,
+        'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
+        'actual_arm64_native_uci_migration_cases_passed':len(native_cases),
+        'actual_arm64_private_ss_deletion_cases_passed':5,
+        'yaml_node_import':'integrated; AnyTLS, VMess, Hysteria2; existing policy/DNS',
+        'actual_arm64_yaml_connection_configs_tested':yaml_protocols,
+        'subscription_default_notice_filters':['邮箱客服','支持AI'],
+        'subscription_user_agent_option':'mihomo/1.18.0',
+        'node_numbering':'display order; continuous across pages; CSS counters follow drag order',
+        'node_bulk_delete':'current-page selection; POST/CSRF; service-reference protection; single commit; no restart',
+        'empty_access_defaults':['wan_fw_ips','white.list','deny.list'],
+        'wifi_unification':'retained; automatic band steering defaults off; saved settings retained',
+        'build_recipe_commit':os.environ.get('GITHUB_SHA'),
+        'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
+        'private_ss':'removed without credential migration; dedicated firewall sections removed',
+        'ordinary_ss':'shared namespace; TCP REDIRECT and UDP TPROXY follow SSR client policy',
+        'ss_server_end_to_end_checks':server_checks,
+        'ddns_direct_socket_checks':ddns_checks,
+        'private_ss_ipv6_supported':False,
+        'actual_arm64_server_ciphers_tested':len(server_checks['methods']),'actual_installed_syntax_checks':syntax,
+        'hardware_flash_or_boot_tested':False}
+    (out/'BUILD-VERIFICATION.json').write_text(json.dumps(proof,indent=2)+'\n')
+    (out/'README.txt').write_text((repo/'tr3600/ssrplus/README.txt').read_text())
+    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.2.0.txt',out/'刷机与验收说明.txt')
+    shutil.copyfile(repo/'reports/resolved.config',out/'resolved.config')
+    shutil.copyfile(repo/'reports/ssrplus-source.json',out/'SOURCE.json')
+    print(json.dumps(proof,indent=2))
+

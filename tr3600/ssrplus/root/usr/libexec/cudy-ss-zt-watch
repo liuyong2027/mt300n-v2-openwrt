@@ -1,0 +1,8 @@
+#!/bin/sh
+while sleep 30; do
+    /usr/libexec/cudy-ss-zt-guard || continue
+    if /usr/libexec/cudy-ss-zt needs-apply; then
+        /usr/libexec/cudy-ss-lock /etc/init.d/cudy_ss_core restart >/dev/null 2>&1 || :
+    fi
+done
+

@@ -1,0 +1,4 @@
+#!/bin/sh
+# The launcher validates the shared object and SO_MARK before executing curl.
+# LD_PRELOAD is set only in that child process, never in the DDNS shell.
+exec /usr/libexec/cudy-ddns-direct "$@"

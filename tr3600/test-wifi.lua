@@ -57,7 +57,7 @@ local function fixture()
         e.backup=nil; return true
     end
     function e.run(command)
-        assert(command == '/sbin/wifi reload' or command == '/etc/init.d/usteer restart')
+        assert(command == '/sbin/wifi reload' or command == '/etc/init.d/usteer restart' or command == '/etc/init.d/usteer stop')
         e.commands[#e.commands+1]=command
         if e.fail_command == command then e.fail_command=nil; return false end
         return true
@@ -100,6 +100,21 @@ end)
 test('steering can be disabled independently; Wi-Fi remains unified',function()
     local d,u,e=fixture(); d.cudy_wifi.main.steering='0'; assert(engine.apply(u,e,false))
     assert(d.wireless.ap2.ssid==d.wireless.ap5.ssid and d.usteer.main.enabled=='0' and d.wireless.ap5.bss_transition=='0')
+    assert(e.commands[#e.commands]=='/etc/init.d/usteer stop')
+end)
+
+test('disabled steering never restarts a daemon whose disabled start returns failure',function()
+    local d,u,e=fixture(); d.cudy_wifi.main.steering='0'
+    local run=e.run
+    e.run=function(command) if command=='/etc/init.d/usteer restart' then return false end;return run(command)end
+    assert(engine.apply(u,e,false)); assert(e.backup)
+    assert(d.wireless.ap2.ssid=='Unified-Test' and d.wireless.ap5.ssid=='Unified-Test')
+    assert(#e.commands==2 and e.commands[2]=='/etc/init.d/usteer stop')
+end)
+
+test('a real steering stop failure still restores the previous wireless settings',function()
+    local d,u,e,original=fixture();d.cudy_wifi.main.steering='0';e.fail_command='/etc/init.d/usteer stop'
+    assert(not engine.apply(u,e,false));assert(equal(d.wireless,original.wireless));assert(equal(d.usteer,original.usteer))
 end)
 test('blank common password reuses valid selected 5 GHz key without exposing it',function()
     local d,u,e=fixture(); d.cudy_wifi.main.key=''; local ok,message=engine.apply(u,e,false)

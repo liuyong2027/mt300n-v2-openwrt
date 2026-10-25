@@ -39,16 +39,26 @@ return view.extend({
 		o = s.option(form.Value,'key','共同无线密码','留空沿用所选 5 GHz 网络当前密码。');
 		o.password = true; o.depends('enabled','1');
 		o.validate = function(section,value) { return !value || /^[\x20-\x7e]{8,63}$/.test(value) || '请输入 8–63 位可打印英文字符密码'; };
-		o = s.option(form.Flag,'steering','自动频段引导','仅在信号足够时建议支持的设备切换至 5 GHz；关闭后仍保持同名双频网络，由终端自行选择。');
-		o.default = '1'; o.rmempty = false; o.depends('enabled','1');
+		o = s.option(form.Flag,'steering','自动频段引导','默认关闭，可按需手动开启。关闭后仍保持同名双频网络，由终端自行选择；开启后仅在信号足够时建议支持的设备切换至 5 GHz。');
+		o.default = '0'; o.rmempty = false; o.depends('enabled','1');
 		this.map = m;
 		return m.render();
 	},
 	handleSaveApply: function() {
-		return this.map.save().then(function() { return uci.apply(); }).then(function() {
+		return this.map.save().then(function() { return uci.changes(); }).then(function(changes) {
+			var pending = Object.keys(changes || {}).some(function(name) {
+				return Array.isArray(changes[name]) && changes[name].length > 0;
+			});
+			// A repeated apply must still run the Wi-Fi helper when UCI has no changes.
+			if (!pending) return;
+			// Confirm the saved settings before the helper deliberately reloads Wi-Fi.
+			return uci.callApply(10,true).then(function() { return uci.callConfirm(); });
+		}).then(function() {
 			return fs.exec('/usr/libexec/cudy-wifi-apply',['apply']);
 		}).then(function(result) {
 			ui.addNotification(null,E('p',{},result.stdout || result.stderr || '请重新连接无线并检查配置状态。'),result.code === 0 ? 'info' : 'error');
+		}).catch(function(error) {
+			ui.addNotification(null,E('p',{},'双频合一应用失败：'+(error.message || String(error))),'error');
 		});
 	}
 });

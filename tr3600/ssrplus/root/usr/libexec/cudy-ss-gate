@@ -1,0 +1,38 @@
+#!/bin/sh
+# Atomic, separate gate: SSR restarts cannot briefly send SS clients directly.
+set -eu
+umask 077
+mkdir -p /etc/cudy-ss /var/lock
+mkdir -p /var/run/cudy-ss
+exec 4>/var/lock/cudy-ss-route-gate.lock
+flock -w 10 4
+action=${1:-close}
+if [ "$action" = started ]; then
+    touch /var/run/cudy-ss/ssr-ready
+    action=refresh
+elif [ "$action" = close ]; then
+    rm -f /var/run/cudy-ss/ssr-ready
+fi
+if [ "$action" = refresh ]; then
+    active=$(uci -q get 'shadowsocksr.@global[0].global_server' || :)
+    if [ -z "$active" ] || [ "$active" = nil ]; then action=open
+    elif [ -f /var/run/cudy-ss/ssr-ready ] && nft list table inet ss_spec >/dev/null 2>&1; then action=open
+    else action=close; fi
+fi
+case "$action" in open|close) ;; *) exit 2;; esac
+temp=$(mktemp /etc/cudy-ss/.route-guard.XXXXXX)
+trap 'rm -f "$temp"' EXIT HUP INT TERM
+{
+    echo 'destroy table inet cudy_ss_gate'
+    echo 'table inet cudy_ss_gate {'
+    echo 'chain gate { type filter hook prerouting priority -312; policy accept;'
+    echo 'iifname "css-host" ct direction reply return'
+    [ "$action" != close ] || echo 'iifname "css-host" counter drop'
+    echo '}'
+    echo '}'
+} > "$temp"
+nft -c -f "$temp"
+nft -f "$temp"
+chmod 600 "$temp"
+mv "$temp" /etc/cudy-ss/route-guard.nft
+

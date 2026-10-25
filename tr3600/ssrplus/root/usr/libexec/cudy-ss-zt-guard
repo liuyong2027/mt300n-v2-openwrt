@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+umask 077
+if [ "${CUDY_SS_OPERATION_LOCK:-}" != 1 ] || [ "$(readlink /proc/$$/fd/9 2>/dev/null)" != "$(readlink -f /var/lock/cudy-ss-operation.lock)" ]; then
+    /usr/libexec/cudy-ss-zt guard-ok && exit 0
+    exec /usr/libexec/cudy-ss-lock /usr/libexec/cudy-ss-zt-guard "$@"
+fi
+mkdir -p /etc/cudy-ss /var/lock
+chmod 700 /etc/cudy-ss
+exec 8>/var/lock/cudy-ss-guard.lock
+flock -w 5 8
+/usr/libexec/cudy-ss-zt guard-ok && exit 0
+temp=$(mktemp /etc/cudy-ss/.guard.XXXXXX)
+trap 'rm -f "$temp"' EXIT HUP INT TERM
+# Invalid or not-yet-migrated server_config produces the closed guard.
+/usr/libexec/cudy-ss-zt guard > "$temp"
+nft -c -f "$temp"
+nft -f "$temp"
+chmod 600 "$temp"
+mv "$temp" /etc/cudy-ss/guard.nft
