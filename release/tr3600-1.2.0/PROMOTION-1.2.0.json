@@ -1,0 +1,16 @@
+{
+  "version": "1.2.0",
+  "release_tag": "tr3600-v1.2.0",
+  "release_type": "stable",
+  "build_commit": "681632e6ef5cd319e197f573a9bb32370d15ff8b",
+  "source_tree": "6e1588bf4914db5b6295aa88f2dc435acc537557",
+  "build_run": 40169099711,
+  "candidate_revision": 2,
+  "accepted_image_sha256": "eb6918e162e3d472c0709fb3f4156dabc2ab0f9f23d7948acd174f6bf470696f",
+  "image_bytes": 53811475,
+  "promoted_without_rebuild_or_modification": true,
+  "hardware_acceptance": "passed",
+  "owner_authorized_publication": true,
+  "router_flash_during_publication": false,
+  "build_proof_preserved": "Original candidate build-stage fields are historical; later acceptance is recorded separately."
+}

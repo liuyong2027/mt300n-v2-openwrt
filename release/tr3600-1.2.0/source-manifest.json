@@ -1,0 +1,2120 @@
+[
+  {
+    "path": ".github/workflows/capacity.yml",
+    "mode": "100644",
+    "sha": "b584736ce27e2c2f862430c494c88e47744398bd",
+    "size": 5059
+  },
+  {
+    "path": ".github/workflows/release20-r7-ui1.yml",
+    "mode": "100644",
+    "sha": "2867abe3d74bebda1093ae7c5d0c55a8467c81fd",
+    "size": 8148
+  },
+  {
+    "path": ".github/workflows/release20-r8-fix1.yml",
+    "mode": "100644",
+    "sha": "8c18e9c56e06ccf1f49e5da606a91b43106fe2ae",
+    "size": 8818
+  },
+  {
+    "path": ".github/workflows/release20-r8-ui2.yml",
+    "mode": "100644",
+    "sha": "66bf7d509768823bc670279c3b5ad500b4e858f7",
+    "size": 8776
+  },
+  {
+    "path": ".github/workflows/release20-rc1.yml",
+    "mode": "100644",
+    "sha": "001321b6f825d4fea2383b00fdc696a5d7684e03",
+    "size": 9171
+  },
+  {
+    "path": ".github/workflows/release20-rc2-dev.yml",
+    "mode": "100644",
+    "sha": "6da40ad604ea23a89d0fecbc5d73512445fe14ee",
+    "size": 10305
+  },
+  {
+    "path": ".github/workflows/release20-rc2-guardfix1-dev.yml",
+    "mode": "100644",
+    "sha": "8181fe4348ed49e85ebeb0c0f6934eb83f7fb39b",
+    "size": 12744
+  },
+  {
+    "path": ".github/workflows/release20-rc2-loadingdiag.yml",
+    "mode": "100644",
+    "sha": "7ec802d33f4c1927842a4d886be6a155134a5541",
+    "size": 22930
+  },
+  {
+    "path": ".github/workflows/release20-test-failover1.yml",
+    "mode": "100644",
+    "sha": "669c926ceeeb056710c6b604debdb5c743311fca",
+    "size": 12897
+  },
+  {
+    "path": ".github/workflows/release20.yml",
+    "mode": "100644",
+    "sha": "31b4e8822dec470da527866a576b55d95d362b3e",
+    "size": 21275
+  },
+  {
+    "path": ".github/workflows/tr3600-prerelease-retirement.yml",
+    "mode": "100644",
+    "sha": "e239ff2c745e6fedc88fb435b1d2b065e7f807ed",
+    "size": 4496
+  },
+  {
+    "path": ".github/workflows/tr3600-publish-1.0.0.yml",
+    "mode": "100644",
+    "sha": "14bf260176413c980eb6ee9c782c0493061480ec",
+    "size": 1856
+  },
+  {
+    "path": ".github/workflows/tr3600-release-filename.yml",
+    "mode": "100644",
+    "sha": "d3e78ba5020a9b902fc49cc74d1de94c9b6cceee",
+    "size": 1867
+  },
+  {
+    "path": ".github/workflows/tr3600-ssrplus.yml",
+    "mode": "100644",
+    "sha": "bb76b95978e1860c77055b9aacaf9b523f58eea8",
+    "size": 8848
+  },
+  {
+    "path": ".github/workflows/tr3600-test.yml",
+    "mode": "100644",
+    "sha": "433f962967ddfad32270bdc400f4b437f16c6c6e",
+    "size": 20392
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-1.1.0-rc1.yml",
+    "mode": "100644",
+    "sha": "5fb0212bfaa171278dc04d069510fd80633f5f2d",
+    "size": 24970
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-1.1.0-rc2.yml",
+    "mode": "100644",
+    "sha": "1283cd6c529d4786824323895bcb93642de22b91",
+    "size": 25352
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-1.1.0-rc3.yml",
+    "mode": "100644",
+    "sha": "c4f6aca9a77b36900c090b89bcadf053bb3e0bcc",
+    "size": 29007
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-1.1.0.yml",
+    "mode": "100644",
+    "sha": "68707a990da55d93bb569a898a4910e5be3809b1",
+    "size": 33323
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-1.1.1.yml",
+    "mode": "100644",
+    "sha": "dc0b3a465e4e01ba95f78e9bdf65f771d318ae13",
+    "size": 34034
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-boot-readiness.yml",
+    "mode": "100644",
+    "sha": "79db68fa8f3f8fc88c13f539cb44b99872d480a4",
+    "size": 3013
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-hashfix.yml",
+    "mode": "100644",
+    "sha": "a5aca87d89c1b8c737ba22c81cb274c6dc7eb47a",
+    "size": 5316
+  },
+  {
+    "path": ".github/workflows/tr3600-webfiles-storage.yml",
+    "mode": "100644",
+    "sha": "ae97176ff0b393c382603c102b4a9afdc5fff4fd",
+    "size": 4946
+  },
+  {
+    "path": ".gitignore",
+    "mode": "100644",
+    "sha": "4dc5f31e6183b5ee80d8d06eda03b5854b9c9eb0",
+    "size": 68
+  },
+  {
+    "path": "README.md",
+    "mode": "100644",
+    "sha": "18497dccd44c61c13bde1c1ebc751107d76ecfe2",
+    "size": 1757
+  },
+  {
+    "path": "mt300n-v2-build-kit.zip",
+    "mode": "100644",
+    "sha": "9501e567d51532762c08bbbbde3fc78bc53605b8",
+    "size": 11637
+  },
+  {
+    "path": "mt300n-v2-round2.zip",
+    "mode": "100644",
+    "sha": "c6f78670aa9ab9a5922e13b8aad59531f1e7ab7f",
+    "size": 96439
+  },
+  {
+    "path": "release/asset-naming/tr3600-rc1.py",
+    "mode": "100644",
+    "sha": "6e9da33ac008317f11adf2a47c5d6bf4379db07d",
+    "size": 6831
+  },
+  {
+    "path": "release/prerelease-retirement/approved-inventory.json",
+    "mode": "100644",
+    "sha": "35ea35c0f3fa227515817931ca131d5c2bb83abf",
+    "size": 48020
+  },
+  {
+    "path": "release/prerelease-retirement/retire.py",
+    "mode": "100644",
+    "sha": "02f7a6af615bf5df9f74f7a41aa293d259fc8587",
+    "size": 4575
+  },
+  {
+    "path": "release/publish-release.py",
+    "mode": "100644",
+    "sha": "a4d4792fe577fcce8856069d1f03c2994caebc13",
+    "size": 3861
+  },
+  {
+    "path": "release/tr3600-1.0.0/HARDWARE-ACCEPTANCE-1.0.0.json",
+    "mode": "100644",
+    "sha": "2874ec6efd036c08a43a72d6029d7fac7c9517e2",
+    "size": 1066
+  },
+  {
+    "path": "release/tr3600-1.0.0/RELEASE-1.0.0.txt",
+    "mode": "100644",
+    "sha": "a2fea7af6516e5bbd7d6cfc3d7356751676eaa78",
+    "size": 3044
+  },
+  {
+    "path": "release/tr3600-1.0.0/UPGRADE-1.0.0.txt",
+    "mode": "100644",
+    "sha": "cc9ec733507d0f66281fe4206d9296cc99f65137",
+    "size": 1518
+  },
+  {
+    "path": "release/tr3600-1.0.0/publish.py",
+    "mode": "100644",
+    "sha": "125440db7d5cfcdb9152e606d6e8aa2e6af88f46",
+    "size": 10019
+  },
+  {
+    "path": "release/tr3600-1.0.0/release-spec.json",
+    "mode": "100644",
+    "sha": "789124a5414c50f5dc46523c667fe45c5c79fcc6",
+    "size": 1793
+  },
+  {
+    "path": "release/tr3600-1.0.0/source-manifest.json",
+    "mode": "100644",
+    "sha": "76347ec5bcaa05e1282a0dadb43374943abc58f9",
+    "size": 21778
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc1/prepare.py",
+    "mode": "100644",
+    "sha": "4bfd5de1cab967c4273a1d53b97dc22cdad21e63",
+    "size": 5101
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc1/publish.py",
+    "mode": "100644",
+    "sha": "94f7bbb329921d50c931c78b7441c40d591f0497",
+    "size": 5842
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc2/asset_names.py",
+    "mode": "100644",
+    "sha": "3cccb665ab959fa73aba65eda653f1a98833e7c9",
+    "size": 1157
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc2/prepare.py",
+    "mode": "100644",
+    "sha": "cc06813b8713e7bef3993fe5af4319c247da3044",
+    "size": 2747
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc2/publish.py",
+    "mode": "100644",
+    "sha": "3d7347bb4c4f607b524f6ffcccfa3a1cc7552da7",
+    "size": 6185
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc2/test_asset_names.py",
+    "mode": "100644",
+    "sha": "83b04109f778929fa76333aac3e916b8d23fbb30",
+    "size": 3317
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc3/asset_names.py",
+    "mode": "100644",
+    "sha": "3cccb665ab959fa73aba65eda653f1a98833e7c9",
+    "size": 1157
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc3/prepare.py",
+    "mode": "100644",
+    "sha": "578b4ea276d8491a7e5d304c6c66d35019c5b37d",
+    "size": 2937
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc3/publish.py",
+    "mode": "100644",
+    "sha": "213fc0b7e12028f2fa2ed601ea9379fa0e1e43e0",
+    "size": 6375
+  },
+  {
+    "path": "release/tr3600-1.1.0-rc3/test_asset_names.py",
+    "mode": "100644",
+    "sha": "2328bee4e76f50c05e649d851057aee706dcf86a",
+    "size": 3318
+  },
+  {
+    "path": "release/tr3600-1.1.0/COMPONENT-ACCEPTANCE.json",
+    "mode": "100644",
+    "sha": "956a3955353306f93418e4376ae6fcdd28fc2e23",
+    "size": 1396
+  },
+  {
+    "path": "release/tr3600-1.1.0/asset_names.py",
+    "mode": "100644",
+    "sha": "3cccb665ab959fa73aba65eda653f1a98833e7c9",
+    "size": 1157
+  },
+  {
+    "path": "release/tr3600-1.1.0/prepare.py",
+    "mode": "100644",
+    "sha": "82fbc4ad81597961c1fec1995b48647c023a2c08",
+    "size": 3303
+  },
+  {
+    "path": "release/tr3600-1.1.0/publish.py",
+    "mode": "100644",
+    "sha": "7309f40a899efa1abfcff39a4fa0f09a0cc2d537",
+    "size": 6611
+  },
+  {
+    "path": "release/tr3600-1.1.0/test_asset_names.py",
+    "mode": "100644",
+    "sha": "e5558fde4d10ef21d9c792acf5300c7a84d91a7a",
+    "size": 3286
+  },
+  {
+    "path": "release/tr3600-1.1.1-LED-SCOPE.txt",
+    "mode": "100644",
+    "sha": "da34c07118415f0d670befa199c196d2c6dd69b9",
+    "size": 385
+  },
+  {
+    "path": "release/tr3600-1.1.1/COMPONENT-ACCEPTANCE.json",
+    "mode": "100644",
+    "sha": "888f79a2eadbe7cf533e33fb7040400008b0826c",
+    "size": 1592
+  },
+  {
+    "path": "release/tr3600-1.1.1/asset_names.py",
+    "mode": "100644",
+    "sha": "3cccb665ab959fa73aba65eda653f1a98833e7c9",
+    "size": 1157
+  },
+  {
+    "path": "release/tr3600-1.1.1/prepare.py",
+    "mode": "100755",
+    "sha": "2e481f34e659aaa87e5a9f44d72a6a60b73725ad",
+    "size": 3645
+  },
+  {
+    "path": "release/tr3600-1.1.1/publish.py",
+    "mode": "100755",
+    "sha": "d5fa450905010a4a9db913616b0a179a3e7cd926",
+    "size": 6953
+  },
+  {
+    "path": "release/tr3600-1.1.1/test_asset_names.py",
+    "mode": "100755",
+    "sha": "5bca11ef9c7652931bcc68cc124650efc56a77fe",
+    "size": 3286
+  },
+  {
+    "path": "release/tr3600-webfiles-hashfix/annotate.py",
+    "mode": "100644",
+    "sha": "1a8a39bdf83d5302129489c67c11f714829a4293",
+    "size": 2017
+  },
+  {
+    "path": "release/tr3600-webfiles-storage/README.txt",
+    "mode": "100644",
+    "sha": "cc0056c787af1e676dd25095d3e8e4b2ca92bb8d",
+    "size": 1167
+  },
+  {
+    "path": "release/tr3600-webfiles-storage/annotate.py",
+    "mode": "100644",
+    "sha": "9873017419f559cea86b9c31543725fe1981a1bc",
+    "size": 2270
+  },
+  {
+    "path": "release20-profiles-source.zip.b64",
+    "mode": "100644",
+    "sha": "05e082ec226d3389c36a39f20505653e21a07a9a",
+    "size": 654298
+  },
+  {
+    "path": "release20-r7-ui1-source.zip.b64",
+    "mode": "100644",
+    "sha": "900c7800c410ca6202025ec819ab413f8c4915bf",
+    "size": 390689
+  },
+  {
+    "path": "release20-r8-fix1-source.zip.b64",
+    "mode": "100644",
+    "sha": "55cc29bda97a5d10bbed9278b7da9245ed9be22e",
+    "size": 445581
+  },
+  {
+    "path": "release20-r8-ui2-source.zip.b64",
+    "mode": "100644",
+    "sha": "392591149d25be9f13e35a7be495873e92451b37",
+    "size": 418198
+  },
+  {
+    "path": "release20-rc1-source.zip.b64",
+    "mode": "100644",
+    "sha": "47ffda732368a040c9172af2dabc9facd1cfe27c",
+    "size": 467025
+  },
+  {
+    "path": "release20-rc2-dev-source.zip.b64",
+    "mode": "100644",
+    "sha": "be2a80a4c58ab73552c89e6b9e9e9059fcb21e8a",
+    "size": 526289
+  },
+  {
+    "path": "release20-rc2-guardfix1-dev-source.zip.b64",
+    "mode": "100644",
+    "sha": "9e37d187d568959fe3e0cb92f2925a81fb6adefc",
+    "size": 539785
+  },
+  {
+    "path": "release20-rc2-loadingdiag-source.zip.b64",
+    "mode": "100644",
+    "sha": "32ae011641c71faa7eeca9aa95599fc4a9a7c892",
+    "size": 630949
+  },
+  {
+    "path": "release20-source.zip.b64",
+    "mode": "100644",
+    "sha": "64d143f2d1a19c65bf906baae018e855f3a307e8",
+    "size": 648114
+  },
+  {
+    "path": "release20-test-failover1-source.zip.b64",
+    "mode": "100644",
+    "sha": "053c0094ba2a747cc80e2a021289f906ab75a777",
+    "size": 685530
+  },
+  {
+    "path": "tr3600/999-ubi-add-configurable-rootdev.patch",
+    "mode": "100644",
+    "sha": "77e65e76899bd936cd18194d713144f0a7ffdbd1",
+    "size": 3019
+  },
+  {
+    "path": "tr3600/LED-STATUS.txt",
+    "mode": "100644",
+    "sha": "7facdc282b66f3e7f2874f5dea8596319cbeb1d7",
+    "size": 3337
+  },
+  {
+    "path": "tr3600/README.txt",
+    "mode": "100644",
+    "sha": "72e90ced2f99720597736ca15493075158973bae",
+    "size": 9850
+  },
+  {
+    "path": "tr3600/RELEASE-NOTES.txt",
+    "mode": "100644",
+    "sha": "94f45e78247020c5412124f25ce6a3e364683e0f",
+    "size": 3575
+  },
+  {
+    "path": "tr3600/USB-SHARING.md",
+    "mode": "100644",
+    "sha": "f2d7fa2bc888cebe044dd63ac94fc693afe09ab0",
+    "size": 2916
+  },
+  {
+    "path": "tr3600/VENDOR-DUAL-IMAGE-NOTE.txt",
+    "mode": "100644",
+    "sha": "e3733507af8d203176330b101e0b38ad61d723c9",
+    "size": 5037
+  },
+  {
+    "path": "tr3600/WEBFILES-BOOT-FIX.txt",
+    "mode": "100644",
+    "sha": "77f35244d710f088d3293cd670b01d9ef5f4c659",
+    "size": 1564
+  },
+  {
+    "path": "tr3600/WIFI-UNIFICATION.md",
+    "mode": "100644",
+    "sha": "617cc8efd47b0b840439ecd66eeaf58eb8c7afc1",
+    "size": 2240
+  },
+  {
+    "path": "tr3600/check-removed.py",
+    "mode": "100644",
+    "sha": "3623acea83829d7e1bf1a24cacf49cad19d4e83b",
+    "size": 1434
+  },
+  {
+    "path": "tr3600/check-required.py",
+    "mode": "100644",
+    "sha": "2594cdee03b2dbe3d155bef7727593ea900d9843",
+    "size": 974
+  },
+  {
+    "path": "tr3600/cudy-upgrade.sh",
+    "mode": "100644",
+    "sha": "fed4ffe6326f773b0144d916f5623eb57facae05",
+    "size": 2834
+  },
+  {
+    "path": "tr3600/cudy-webfiles/.gitignore",
+    "mode": "100644",
+    "sha": "eb679ca60cd3e1cfbd2ecfa70a74c485f042d6de",
+    "size": 14
+  },
+  {
+    "path": "tr3600/cudy-webfiles/Makefile",
+    "mode": "100644",
+    "sha": "d66f2c9dafdf9db9b5fb8135bcc5a539d16add20",
+    "size": 1427
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/etc/config/cudy_webfiles",
+    "mode": "100644",
+    "sha": "9da7c259dec2cc04c42b55060728f66388e52dc4",
+    "size": 356
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/etc/init.d/cudy-webfiles",
+    "mode": "100644",
+    "sha": "8dff94082bf93fe5035538effe9689db0815e48e",
+    "size": 1162
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/etc/uci-defaults/98-cudy-webfiles",
+    "mode": "100644",
+    "sha": "937d44b35d76f4488f3c32dfdffd21ac3f0bc083",
+    "size": 331
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/lib/upgrade/keep.d/cudy-webfiles",
+    "mode": "100644",
+    "sha": "f8b8077a00f0560bde463876110a303014ff618d",
+    "size": 46
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/NOTICE.txt",
+    "mode": "100644",
+    "sha": "65a16cc928b4990b2f0d6e44ccf8062349c0c121",
+    "size": 645
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/adapter.lua",
+    "mode": "100644",
+    "sha": "4c7ad6d8a5d847b2dcab33159c907df1f8b77c92",
+    "size": 2034
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/installed-marker",
+    "mode": "100644",
+    "sha": "d7b6343b8f58fd459e540830c5c80c7dd823ab68",
+    "size": 39
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/licenses/Go-BSD-3-Clause.txt",
+    "mode": "100644",
+    "sha": "2a7cf70da6e498df9c11ab6a5eaa2ddd7af34da4",
+    "size": 1453
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/licenses/Integration-MIT.txt",
+    "mode": "100644",
+    "sha": "b7acc03d4bbbd26f0c6d1207dcbc5a85f9fe939b",
+    "size": 1088
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/licenses/MuPDF-AGPL-3.0.txt",
+    "mode": "100644",
+    "sha": "be3f7b28e564e7dd05eaf59d64adba1a4065ac0e",
+    "size": 34523
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/licenses/Quantum-Apache-2.0.txt",
+    "mode": "100644",
+    "sha": "ba16bdb88dc4b50a5dbd5d45309d777d608474e9",
+    "size": 11355
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/licenses/go-fitz-COPYING.txt",
+    "mode": "100644",
+    "sha": "dba13ed2ddf783ee8118c6a581dbf75305f816a3",
+    "size": 34520
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/cudy-webfiles/prepare-storage.lua",
+    "mode": "100644",
+    "sha": "1e7b93b37f4aeca3d4c5ad39faab342f5717ec64",
+    "size": 190
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/lib/lua/cudy/webfiles-storage.lua",
+    "mode": "100644",
+    "sha": "331fa716e9ef51711b8ff89ccb4afda7622640bf",
+    "size": 1755
+  },
+  {
+    "path": "tr3600/cudy-webfiles/root/usr/libexec/rpcd/cudy.webfiles",
+    "mode": "100644",
+    "sha": "5b8a65bf827ff0e3185270319961456916052fd7",
+    "size": 65
+  },
+  {
+    "path": "tr3600/fixtures/README.txt",
+    "mode": "100644",
+    "sha": "872c247dfd4e8cd650bcf7f47c923aea5e32bbe2",
+    "size": 937
+  },
+  {
+    "path": "tr3600/fixtures/mac80211-f0a60eee.uc",
+    "mode": "100644",
+    "sha": "d61786fa65023521d16fdf6bc499c2d26ee2d275",
+    "size": 3060
+  },
+  {
+    "path": "tr3600/fixtures/mango-firewall-95-original.sh",
+    "mode": "100644",
+    "sha": "56f1c27a82d77d058e2605f8510f1d0b8abe793e",
+    "size": 2027
+  },
+  {
+    "path": "tr3600/fixtures/samba-5caa62e0.init",
+    "mode": "100644",
+    "sha": "468ba553a2b87ba3cb8d1ca2b9f638f820764a3d",
+    "size": 7996
+  },
+  {
+    "path": "tr3600/fixtures/zerotier-5caa62e0.init",
+    "mode": "100644",
+    "sha": "01aff425f37cf212cae6dd2da3ae7461f8d164a5",
+    "size": 2812
+  },
+  {
+    "path": "tr3600/hardware-fixes.patch",
+    "mode": "100644",
+    "sha": "dab21a10a92590253e4ee56d63d3f896ef79630e",
+    "size": 3165
+  },
+  {
+    "path": "tr3600/led-integration.py",
+    "mode": "100755",
+    "sha": "c18eb4c9a6948e2f6f32ec06f396f2d87bc5ad05",
+    "size": 2045
+  },
+  {
+    "path": "tr3600/led-probe/mango-connectivity-probe",
+    "mode": "100755",
+    "sha": "86269e58ae0557d18a7366d06f532cbce5ce6773",
+    "size": 1560
+  },
+  {
+    "path": "tr3600/led-probe/mango-probe",
+    "mode": "100755",
+    "sha": "927a84cce37d1ccb146de61d3aeb72b9f1da88dc",
+    "size": 1773
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/Makefile",
+    "mode": "100644",
+    "sha": "59bf95a26524ed07fc94a8a6ceea864f254cf4d0",
+    "size": 302
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/htdocs/luci-static/resources/view/cudy-led.js",
+    "mode": "100644",
+    "sha": "6f35cde1f38e086730ba95a90c7ee0075eecb9c6",
+    "size": 2051
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/etc/config/cudy_led",
+    "mode": "100644",
+    "sha": "1ea3f71a8fc0b57b27f554853011791b069201b2",
+    "size": 112
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/etc/hotplug.d/ntp/95-cudy-led",
+    "mode": "100755",
+    "sha": "79f410b47001fee1737153f5f31145077922f4a5",
+    "size": 362
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/etc/init.d/cudy_led",
+    "mode": "100755",
+    "sha": "7f91890daa9a3af05a881164282e87d95764e18d",
+    "size": 1039
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/etc/uci-defaults/92-cudy-led",
+    "mode": "100755",
+    "sha": "57e37e9c7348aefe8cfc51fdcc308ada3066f4ea",
+    "size": 76
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/lib/upgrade/keep.d/cudy-led",
+    "mode": "100644",
+    "sha": "17b4e4deef1f28896a0e9e3e44114d4c7de9979c",
+    "size": 21
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua",
+    "mode": "100644",
+    "sha": "030b7437a3471576dd8b3c90d28e8f9d46975456",
+    "size": 11141
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led.lua",
+    "mode": "100644",
+    "sha": "be0150897cfa82a45fe2978ab7d14027fb4d6036",
+    "size": 3749
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/libexec/cudy-led-apply",
+    "mode": "100755",
+    "sha": "5884953ca72c23880e9fd7864a0a63fa7bb6b5c3",
+    "size": 313
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/libexec/cudy-led-control",
+    "mode": "100755",
+    "sha": "622715cf06af0c0e150f06829ff0e7060cf8f5e6",
+    "size": 829
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/libexec/cudy-led-run",
+    "mode": "100755",
+    "sha": "dffc618b961102b8e233bd14dc3884a6297439aa",
+    "size": 148
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/libexec/cudy-led-upgrade",
+    "mode": "100755",
+    "sha": "a91e5503847f919b68195ce000f9e8f471929dfa",
+    "size": 388
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/share/luci/menu.d/luci-app-cudy-led.json",
+    "mode": "100644",
+    "sha": "62617e45eb4e25679205d930e1fe21ccab6cba7b",
+    "size": 166
+  },
+  {
+    "path": "tr3600/luci-app-cudy-led/root/usr/share/rpcd/acl.d/luci-app-cudy-led.json",
+    "mode": "100644",
+    "sha": "eeb15ac53592736bf935a02bd4ca1ec6f66bb5a8",
+    "size": 172
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/Makefile",
+    "mode": "100644",
+    "sha": "59efe8324c3682c141a33ad994bedf40088b07c9",
+    "size": 334
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/htdocs/luci-static/resources/view/cudy-ss.js",
+    "mode": "100644",
+    "sha": "501ea50083eba819fae4218c703463263a46ba0b",
+    "size": 8963
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/etc/config/cudy_ss",
+    "mode": "100644",
+    "sha": "cee753dfb15525c38451312a617eb91b2eca1aba",
+    "size": 90
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/etc/init.d/cudy_ss",
+    "mode": "100644",
+    "sha": "e10fdfe423152b90cea38cc25650d82d7514d437",
+    "size": 689
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/etc/uci-defaults/95-cudy-ss",
+    "mode": "100644",
+    "sha": "2b0d5071bb66fed7fd722a85b06aa3781d8c1cc9",
+    "size": 1271
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/lib/upgrade/keep.d/cudy-ss",
+    "mode": "100644",
+    "sha": "32e2d3da388f64a6877b9594dd3884e00418e477",
+    "size": 34
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/lib/mango/ss-transaction.lua",
+    "mode": "100644",
+    "sha": "ee03d7876d338f62a0ef3e6444b05bf996749d72",
+    "size": 2299
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/lib/mango/ss-zt.lua",
+    "mode": "100644",
+    "sha": "18b82ecbc6178134caad19ec04840b46c75ac803",
+    "size": 6687
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/libexec/cudy-ss-job",
+    "mode": "100644",
+    "sha": "c179a7285337c35c11895d6359e298183ee94a7c",
+    "size": 1269
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/libexec/cudy-ss-worker",
+    "mode": "100644",
+    "sha": "753b71508c9751da90416c658f032284d9dbfba9",
+    "size": 8250
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/libexec/cudy-ss-zt",
+    "mode": "100644",
+    "sha": "a449ba4914db024da931c3e996c07fa59e9fd713",
+    "size": 3452
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/libexec/cudy-ss-zt-guard",
+    "mode": "100644",
+    "sha": "36f1c885f9db7517e28c9cc7671bc045d0ec6c8e",
+    "size": 932
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/libexec/cudy-ss-zt-watch",
+    "mode": "100644",
+    "sha": "0307bd3369f9285537f901bc16c935fd9e5622bc",
+    "size": 381
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/libexec/rpcd/cudy.ss",
+    "mode": "100644",
+    "sha": "e73e9c78d15b5eb6e3848f415c80ae39d7529157",
+    "size": 3834
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/share/luci/menu.d/luci-app-cudy-ss.json",
+    "mode": "100644",
+    "sha": "78c367461fd20aa3e14203889e140de9efb7ccd1",
+    "size": 184
+  },
+  {
+    "path": "tr3600/luci-app-cudy-ss/root/usr/share/rpcd/acl.d/luci-app-cudy-ss.json",
+    "mode": "100644",
+    "sha": "3b84b3c9566076bb54528c8b6fb504ef07ae9b7a",
+    "size": 216
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/Makefile",
+    "mode": "100644",
+    "sha": "c412ff31a3d3a083903a8f3abf04c3551a7f8838",
+    "size": 324
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/htdocs/luci-static/resources/view/cudy-usb.js",
+    "mode": "100644",
+    "sha": "bab536b9b90769f92d8e52914c0260de16368211",
+    "size": 5472
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/etc/config/cudy_usb",
+    "mode": "100644",
+    "sha": "234ca8026f19587d5e31f92a30b9b29707ac2568",
+    "size": 43
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/etc/hotplug.d/block/99-cudy-usb",
+    "mode": "100644",
+    "sha": "717da319149dbab7f9a52420d9b3cb8a64989120",
+    "size": 178
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/etc/init.d/cudy_usb",
+    "mode": "100644",
+    "sha": "049bd4d69fbd0a6b0a8559c071cec624d5187335",
+    "size": 118
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/etc/uci-defaults/94-cudy-usb",
+    "mode": "100644",
+    "sha": "098bc6e99edffde51ff099a3e46ba268c2ef1fcb",
+    "size": 163
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/lib/upgrade/keep.d/cudy-usb",
+    "mode": "100644",
+    "sha": "b54ac13b474b93d72491504e119f93d0dd203d7b",
+    "size": 45
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/usr/lib/lua/cudy/usb-runtime.lua",
+    "mode": "100644",
+    "sha": "23c927e81c9da83871895d7a705a28db327e87cf",
+    "size": 7019
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/usr/lib/lua/cudy/usb.lua",
+    "mode": "100644",
+    "sha": "574bae76b306ad80692e432c81928ad19ece7245",
+    "size": 10128
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/usr/libexec/cudy-usb",
+    "mode": "100644",
+    "sha": "197e2aa7e396212c4f158e0770f5daa8cf3aab15",
+    "size": 230
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/usr/libexec/cudy-usb-main",
+    "mode": "100644",
+    "sha": "c9dd70b2a13fedff0972d5d726df0d419583c47e",
+    "size": 1238
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/usr/share/luci/menu.d/zz-cudy-usb-tabs.json",
+    "mode": "100644",
+    "sha": "0889c1150aa4c1d441864d9316471f3e2430e827",
+    "size": 682
+  },
+  {
+    "path": "tr3600/luci-app-cudy-usb/root/usr/share/rpcd/acl.d/luci-app-cudy-usb.json",
+    "mode": "100644",
+    "sha": "1dfb50b16bc5bb5d131f7a41eb222ada31848750",
+    "size": 289
+  },
+  {
+    "path": "tr3600/luci-app-cudy-webfiles/Makefile",
+    "mode": "100644",
+    "sha": "0a1cc603b9ab27510b5d8910c39cd27d237364ac",
+    "size": 222
+  },
+  {
+    "path": "tr3600/luci-app-cudy-webfiles/htdocs/luci-static/resources/view/cudy-webfiles.js",
+    "mode": "100644",
+    "sha": "aa392847d1a13a1d2f22a8e5d8674f8ac2e9e65e",
+    "size": 15030
+  },
+  {
+    "path": "tr3600/luci-app-cudy-webfiles/root/usr/share/luci/menu.d/luci-app-cudy-webfiles.json",
+    "mode": "100644",
+    "sha": "8d1afad0a4b00ab238eb4bbd1d7fad30b99b7680",
+    "size": 162
+  },
+  {
+    "path": "tr3600/luci-app-cudy-webfiles/root/usr/share/rpcd/acl.d/luci-app-cudy-webfiles.json",
+    "mode": "100644",
+    "sha": "896cd3a2b9898b558595cd1a0c18be2e59805cc7",
+    "size": 554
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/Makefile",
+    "mode": "100644",
+    "sha": "b6af2ba6e63e54b1eb1f9440ee916b33de3c7f08",
+    "size": 294
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/htdocs/luci-static/resources/view/cudy-wifi.js",
+    "mode": "100644",
+    "sha": "e74d19c79a15bd80d0ef5aed976bec5b3ec27330",
+    "size": 3838
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/etc/config/cudy_wifi",
+    "mode": "100644",
+    "sha": "7a81429ef3e1d510950a61956e56b9ce027d3f27",
+    "size": 91
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/etc/init.d/cudy_wifi",
+    "mode": "100755",
+    "sha": "19abecd0c00b463bb179540ffb9216cecb7f705d",
+    "size": 177
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/etc/uci-defaults/93-cudy-wifi",
+    "mode": "100755",
+    "sha": "c25157881ee0385785e8f19d2fcd451e091824c4",
+    "size": 78
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/lib/upgrade/keep.d/cudy-wifi",
+    "mode": "100644",
+    "sha": "39cd7f5358c3196612e0a7a7efaaeba9a315466b",
+    "size": 49
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/usr/lib/lua/cudy/wifi.lua",
+    "mode": "100644",
+    "sha": "559d610296a785a90b089938e44efebc6d10befd",
+    "size": 8370
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/usr/libexec/cudy-wifi-apply",
+    "mode": "100755",
+    "sha": "f364685a5bb183da266f294750de2b3232c70e23",
+    "size": 140
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/usr/libexec/cudy-wifi-config",
+    "mode": "100755",
+    "sha": "e2eb5ff57cb6ab0c9fb10d425c8644e5e05e7e0d",
+    "size": 1305
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/usr/share/luci/menu.d/zz-cudy-wifi-tabs.json",
+    "mode": "100644",
+    "sha": "fcf9bd1b736ad928fcbb9a8cae1eed1511fa17d4",
+    "size": 821
+  },
+  {
+    "path": "tr3600/luci-app-cudy-wifi/root/usr/share/rpcd/acl.d/luci-app-cudy-wifi.json",
+    "mode": "100644",
+    "sha": "c5bb85fd39d866bd7a249a54ca7eb1afc36eecf6",
+    "size": 199
+  },
+  {
+    "path": "tr3600/network-defaults.py",
+    "mode": "100644",
+    "sha": "301a38a25144ee6ab0b44acb2217ebdfbb2d2808",
+    "size": 1321
+  },
+  {
+    "path": "tr3600/network-root/etc/config/usteer",
+    "mode": "100644",
+    "sha": "668a31403431beb45a1251115b4d50b253f8350d",
+    "size": 164
+  },
+  {
+    "path": "tr3600/network-root/etc/hotplug.d/iface/95-cudy-tr3600-eee",
+    "mode": "100755",
+    "sha": "e7b33c7d48047a0325c5d053a52e5b618504d4a6",
+    "size": 766
+  },
+  {
+    "path": "tr3600/network-root/etc/hotplug.d/iface/96-cudy-zt-direct",
+    "mode": "100644",
+    "sha": "5a81479e4e4c8553c79683c919abdf75cd73c321",
+    "size": 113
+  },
+  {
+    "path": "tr3600/network-root/etc/uci-defaults/91-cudy-retire-services",
+    "mode": "100755",
+    "sha": "6f9023d1cbc12709ae7ac7af6b11fc85d42e78c1",
+    "size": 1540
+  },
+  {
+    "path": "tr3600/network-root/etc/uci-defaults/96-cudy-zt-direct",
+    "mode": "100644",
+    "sha": "2d54cf6397748a23dd5ab9c4f14465c13ec32ec9",
+    "size": 1083
+  },
+  {
+    "path": "tr3600/network-root/etc/uci-defaults/97-cudy-dynu-https",
+    "mode": "100755",
+    "sha": "53a76b7967c1e54bf30070e305b5400d8d005efe",
+    "size": 182
+  },
+  {
+    "path": "tr3600/network-root/lib/upgrade/keep.d/cudy-dynu-ddns",
+    "mode": "100644",
+    "sha": "cd852f891bff86e18c05c27ec5ac7095b4f3c974",
+    "size": 202
+  },
+  {
+    "path": "tr3600/network-root/lib/upgrade/keep.d/cudy-zt-direct",
+    "mode": "100644",
+    "sha": "432643c72c0365cc884c006306afb8606f55524b",
+    "size": 32
+  },
+  {
+    "path": "tr3600/network-root/usr/lib/ddns/update_cudy_dynu_https.sh",
+    "mode": "100755",
+    "sha": "0a878ed7a96eee672e2decab166468a3889070cf",
+    "size": 1335
+  },
+  {
+    "path": "tr3600/network-root/usr/lib/lua/cudy/dynu-migrate.lua",
+    "mode": "100644",
+    "sha": "8a6101e2dacd17ee2a4d153381b67329d5cdac80",
+    "size": 1292
+  },
+  {
+    "path": "tr3600/network-root/usr/lib/lua/cudy/zt-direct.lua",
+    "mode": "100644",
+    "sha": "feef24809a9763a8aaedfa98680b804c68503d1d",
+    "size": 3616
+  },
+  {
+    "path": "tr3600/network-root/usr/libexec/cudy-dynu-resolve",
+    "mode": "100755",
+    "sha": "41009484f341e1797bf286a2b44519ede29362f1",
+    "size": 2189
+  },
+  {
+    "path": "tr3600/network-root/usr/libexec/cudy-zt-direct",
+    "mode": "100644",
+    "sha": "d847e96d31bea48739e794d5950bc01ce25810b6",
+    "size": 174
+  },
+  {
+    "path": "tr3600/network-root/usr/libexec/cudy-zt-direct-run",
+    "mode": "100644",
+    "sha": "2f70ae9f222f5e53b035f54b6d52d33f936b6e03",
+    "size": 1560
+  },
+  {
+    "path": "tr3600/network-root/usr/share/ddns/custom/cudy-dynu-https.json",
+    "mode": "100644",
+    "sha": "1aa3da05b6926f6e2383c359ee3cce4a7069f7c6",
+    "size": 129
+  },
+  {
+    "path": "tr3600/port.py",
+    "mode": "100755",
+    "sha": "382c1e6b37222b90bc1b22bd22beaf7f19624651",
+    "size": 7931
+  },
+  {
+    "path": "tr3600/preserve-verification.py",
+    "mode": "100644",
+    "sha": "a8258dadfe05cb4d58f1faa2ed987f70d8d27083",
+    "size": 1119
+  },
+  {
+    "path": "tr3600/ss-integration.py",
+    "mode": "100644",
+    "sha": "33396a77258a6e440b7742fc62999649273f7a25",
+    "size": 1337
+  },
+  {
+    "path": "tr3600/ssrplus/CANDIDATE-1.2.0.txt",
+    "mode": "100644",
+    "sha": "02b98517eda6b6d8d12aba9e08344e8241b18450",
+    "size": 3371
+  },
+  {
+    "path": "tr3600/ssrplus/README.txt",
+    "mode": "100644",
+    "sha": "7193cd420d1ae370d452faf95a54797572311273",
+    "size": 6524
+  },
+  {
+    "path": "tr3600/ssrplus/build-test-qemu.sh",
+    "mode": "100644",
+    "sha": "ba7da04e6277f7790e069224a3b2ee1c8640aabd",
+    "size": 2431
+  },
+  {
+    "path": "tr3600/ssrplus/bulk-delete-controller.lua",
+    "mode": "100644",
+    "sha": "ed16bead47b647f5527838cb660f7c1fa5ce74ac",
+    "size": 1815
+  },
+  {
+    "path": "tr3600/ssrplus/bulk-delete.js",
+    "mode": "100644",
+    "sha": "2162340a5777b5237cc52fd86535fba35f688abf",
+    "size": 3137
+  },
+  {
+    "path": "tr3600/ssrplus/bulk_delete.lua",
+    "mode": "100644",
+    "sha": "5dd9d1f3516f3d9487aa25a551a538e2d19a571b",
+    "size": 1913
+  },
+  {
+    "path": "tr3600/ssrplus/check_config.py",
+    "mode": "100644",
+    "sha": "7798503cea4b65f9032c48ab7f1522c706f0f693",
+    "size": 3081
+  },
+  {
+    "path": "tr3600/ssrplus/config.lua",
+    "mode": "100644",
+    "sha": "95d29856c2dacaac536a214b00b78d92fedc926f",
+    "size": 5493
+  },
+  {
+    "path": "tr3600/ssrplus/cudy-ddns-direct/Makefile",
+    "mode": "100644",
+    "sha": "bba2bd9f0181483e835a31b091c1e43bc084faad",
+    "size": 1515
+  },
+  {
+    "path": "tr3600/ssrplus/cudy-ddns-direct/files/80-cudy-ddns-direct",
+    "mode": "100644",
+    "sha": "5cdc07670dac90abc102dd420432b0b0e8b33d2d",
+    "size": 1665
+  },
+  {
+    "path": "tr3600/ssrplus/cudy-ddns-direct/files/cudy-ddns-curl",
+    "mode": "100644",
+    "sha": "4b018cd877029ee56409628f10446ef3dafe6d36",
+    "size": 201
+  },
+  {
+    "path": "tr3600/ssrplus/cudy-ddns-direct/src/launcher.c",
+    "mode": "100644",
+    "sha": "f263209f74fd39220a8c60fea0a96575e501986c",
+    "size": 2677
+  },
+  {
+    "path": "tr3600/ssrplus/cudy-ddns-direct/src/socket-mark.c",
+    "mode": "100644",
+    "sha": "d0a7828301f60acc0e5107665b73c1216188f3c7",
+    "size": 1412
+  },
+  {
+    "path": "tr3600/ssrplus/led-adapter.lua",
+    "mode": "100644",
+    "sha": "1669b49e69286d36a37739c000d977da20ed496c",
+    "size": 1310
+  },
+  {
+    "path": "tr3600/ssrplus/migration.sh",
+    "mode": "100644",
+    "sha": "e32e667fc9655769f03a3f20deab7a5374c9d060",
+    "size": 2857
+  },
+  {
+    "path": "tr3600/ssrplus/patch-bulk-delete.py",
+    "mode": "100644",
+    "sha": "e096c1ef2dc42a4453284a845f8880b5228eef7a",
+    "size": 6246
+  },
+  {
+    "path": "tr3600/ssrplus/patch-ddns.py",
+    "mode": "100644",
+    "sha": "9770dfc6b704dfc7806d65468a09b42c09f9244b",
+    "size": 2525
+  },
+  {
+    "path": "tr3600/ssrplus/patch-ss-server.py",
+    "mode": "100644",
+    "sha": "02a18ed2e5ad43a71421fa5567dec8c28a7cc3a2",
+    "size": 10684
+  },
+  {
+    "path": "tr3600/ssrplus/patch-ssr.py",
+    "mode": "100644",
+    "sha": "67c81411927f7675163c2d8ea5f8df7511114be0",
+    "size": 1841
+  },
+  {
+    "path": "tr3600/ssrplus/patch-subscription.py",
+    "mode": "100644",
+    "sha": "a43d25a3760ded286285ab4a0d1ee6fef85ece4d",
+    "size": 7761
+  },
+  {
+    "path": "tr3600/ssrplus/preflight-unified.py",
+    "mode": "100644",
+    "sha": "aeea0ecc227ca3c9c084fffaac11cc896167190b",
+    "size": 5787
+  },
+  {
+    "path": "tr3600/ssrplus/profile.py",
+    "mode": "100644",
+    "sha": "c4b5b5cbce8eec8c062722dd98551581e34bbe79",
+    "size": 16527
+  },
+  {
+    "path": "tr3600/ssrplus/qemu-so-mark.patch",
+    "mode": "100644",
+    "sha": "59e4742f308a07527ac79bf497844dac3912ca53",
+    "size": 1093
+  },
+  {
+    "path": "tr3600/ssrplus/qemu-transparent.py",
+    "mode": "100644",
+    "sha": "4a76b1b8c0d55092a3160cac051d9ed9219817f3",
+    "size": 2511
+  },
+  {
+    "path": "tr3600/ssrplus/root/etc/init.d/cudy_ss",
+    "mode": "100644",
+    "sha": "d2cda2985635b0536d039b67aee9cd0c067d0bd1",
+    "size": 948
+  },
+  {
+    "path": "tr3600/ssrplus/root/etc/init.d/cudy_ss_core",
+    "mode": "100644",
+    "sha": "372756c63a4102603968b89d3d2bda3fe5907bde",
+    "size": 1135
+  },
+  {
+    "path": "tr3600/ssrplus/root/lib/upgrade/keep.d/cudy-ssrplus",
+    "mode": "100644",
+    "sha": "daf5803aa1d2846029e191637d047993227b3264",
+    "size": 19
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/lib/cudy-ss/check-prefix.lua",
+    "mode": "100644",
+    "sha": "9d12051b3596c2c5cb0f61788897f220154a44e2",
+    "size": 915
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/lib/cudy-ss/migrate.lua",
+    "mode": "100644",
+    "sha": "43ca114b6288a3131ff143298dc69d7191d5bd83",
+    "size": 5552
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/lib/lua/cudy/ssr-server.lua",
+    "mode": "100644",
+    "sha": "04bc8fb4642ef14d5ea27f0d18cd81890de57e2a",
+    "size": 6823
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-gate",
+    "mode": "100644",
+    "sha": "8d3720a4925e64d81c783d1b376d7ee5af328b3f",
+    "size": 1262
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-lock",
+    "mode": "100644",
+    "sha": "7a0abba8dbb9542b94b5dd26f7b0a85c6e85e34c",
+    "size": 300
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-netns",
+    "mode": "100644",
+    "sha": "ad6de96159cf8147082a571b2d460df1466353fe",
+    "size": 1911
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-process",
+    "mode": "100644",
+    "sha": "479f9cb368203cf6d3597468ca5d4e828120261b",
+    "size": 1141
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-ssr-interfaces",
+    "mode": "100644",
+    "sha": "a8f8dfccd7cf313a60cc7c7a7b9e2f33c1eab426",
+    "size": 1191
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-zt",
+    "mode": "100644",
+    "sha": "c2dfb012f327659cb73457153c1e4cdb04a753ef",
+    "size": 3030
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-zt-guard",
+    "mode": "100644",
+    "sha": "b7543465e3cb90aee2f6ddd16fd32b3148324f73",
+    "size": 720
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ss-zt-watch",
+    "mode": "100644",
+    "sha": "50e39f34e74b9db4ae297092dae7df956c585739",
+    "size": 225
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ssr-server-firewall",
+    "mode": "100644",
+    "sha": "ed62b0af0b5e9486fe7c6e8b927e80ee02bffcca",
+    "size": 1637
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/libexec/cudy-ssr-server-rules",
+    "mode": "100644",
+    "sha": "058e29a31bd247d469cb2cd602b15a47bb15da73",
+    "size": 1587
+  },
+  {
+    "path": "tr3600/ssrplus/root/usr/share/shadowsocksr/gen_cudy_ss_server.lua",
+    "mode": "100644",
+    "sha": "c4fe0401e622ac4735bd701c4f30b283bc68ae74",
+    "size": 398
+  },
+  {
+    "path": "tr3600/ssrplus/server-access-ui.lua",
+    "mode": "100644",
+    "sha": "a99792040eec5523249131c9ed0eed4ff5a2f3d9",
+    "size": 8239
+  },
+  {
+    "path": "tr3600/ssrplus/server-status.lua",
+    "mode": "100644",
+    "sha": "011aaba31455a326ef41bd67def7315a6660c6d0",
+    "size": 2823
+  },
+  {
+    "path": "tr3600/ssrplus/ss-server-defaults.sh",
+    "mode": "100644",
+    "sha": "314bfbbd51ac49dc659ca53253e6209ae2cf8946",
+    "size": 782
+  },
+  {
+    "path": "tr3600/ssrplus/ss-server-migrate.lua",
+    "mode": "100644",
+    "sha": "9dc3b9d40a8159b86a86eb7009d7dfc44db43639",
+    "size": 2077
+  },
+  {
+    "path": "tr3600/ssrplus/test-native-uci.lua",
+    "mode": "100644",
+    "sha": "6a1363fd036f01e6d6d2be8df3d3c62bfff42cf3",
+    "size": 13402
+  },
+  {
+    "path": "tr3600/ssrplus/test-remove-private.lua",
+    "mode": "100644",
+    "sha": "4cc69d44a480e254b8dbbedb748f5516427f6bb1",
+    "size": 4864
+  },
+  {
+    "path": "tr3600/ssrplus/test-ss-server-migration.lua",
+    "mode": "100644",
+    "sha": "97f53132ad55adce3bae30054cee91f8307eede7",
+    "size": 7981
+  },
+  {
+    "path": "tr3600/ssrplus/test-yaml-packed.lua",
+    "mode": "100644",
+    "sha": "573298a69eb685123b9a8696fcbddb0fbc3d424c",
+    "size": 2202
+  },
+  {
+    "path": "tr3600/ssrplus/test_bulk_delete.js",
+    "mode": "100644",
+    "sha": "ef7de0d217ba2cd3c5cea81501ce44fcd76cc97e",
+    "size": 4466
+  },
+  {
+    "path": "tr3600/ssrplus/test_bulk_delete.py",
+    "mode": "100644",
+    "sha": "a60d0f3f80c945b58c504577098fb8ac2d67aca8",
+    "size": 7075
+  },
+  {
+    "path": "tr3600/ssrplus/test_connectivity.py",
+    "mode": "100644",
+    "sha": "1aa85e36824ee5967f6d927e50119bb4fa1a7a89",
+    "size": 3120
+  },
+  {
+    "path": "tr3600/ssrplus/test_ddns_direct.py",
+    "mode": "100644",
+    "sha": "07ff090456053adceabe0558b009df82ae8ad55a",
+    "size": 24478
+  },
+  {
+    "path": "tr3600/ssrplus/test_network.py",
+    "mode": "100644",
+    "sha": "a699daae4e1438309a1ffa679f6feb756220a594",
+    "size": 6142
+  },
+  {
+    "path": "tr3600/ssrplus/test_profile.py",
+    "mode": "100644",
+    "sha": "7a4d05d9c545813be013105309fd6fe8451ac00d",
+    "size": 21372
+  },
+  {
+    "path": "tr3600/ssrplus/test_server_status.py",
+    "mode": "100644",
+    "sha": "4ea95a0fa4f1516c748cacb21d52adb4c2ebdfae",
+    "size": 6437
+  },
+  {
+    "path": "tr3600/ssrplus/test_ss_server.py",
+    "mode": "100644",
+    "sha": "2b030087b1ddbd1abebd600043830f319025bedf",
+    "size": 31395
+  },
+  {
+    "path": "tr3600/ssrplus/test_ss_server_ui.py",
+    "mode": "100644",
+    "sha": "8786a282c5d0444fedd164e7d2c4e3626d7db1e2",
+    "size": 10004
+  },
+  {
+    "path": "tr3600/ssrplus/test_unified_ss.py",
+    "mode": "100644",
+    "sha": "dcdfd3a8d8bb6353ea5e9519d0482d870d633117",
+    "size": 8430
+  },
+  {
+    "path": "tr3600/ssrplus/test_unified_ss_packed.py",
+    "mode": "100644",
+    "sha": "c12a29a466ef57cbb189641877e85d31ad2f407d",
+    "size": 16424
+  },
+  {
+    "path": "tr3600/ssrplus/test_yaml_nodes.py",
+    "mode": "100644",
+    "sha": "28613fbaff9dffd371637a1b2f01d7c60f1d9764",
+    "size": 4397
+  },
+  {
+    "path": "tr3600/ssrplus/unified-access-ui.lua",
+    "mode": "100644",
+    "sha": "4d9662e86a7f8d95fb8f16778f1d0ebe63486323",
+    "size": 1565
+  },
+  {
+    "path": "tr3600/ssrplus/unified-migration.sh",
+    "mode": "100644",
+    "sha": "a66a50f27e1cfce1bac2c09b03e871026b002878",
+    "size": 1015
+  },
+  {
+    "path": "tr3600/ssrplus/unified-model.lua",
+    "mode": "100644",
+    "sha": "6c854b7e7685f46d60d4e002e0e75e1cd58db1c9",
+    "size": 5631
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/etc/init.d/cudy_ss",
+    "mode": "100644",
+    "sha": "7729140bc329f33d401c763b5c415377f44c450f",
+    "size": 761
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/etc/init.d/cudy_ss_core",
+    "mode": "100644",
+    "sha": "2edf298095d84fadb3c242168427f7a4b1994cae",
+    "size": 794
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/lib/cudy-ss/remove-private.lua",
+    "mode": "100644",
+    "sha": "36c906c0b0d18195f99f36dddbd7ed6a08c7eeaf",
+    "size": 3180
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/lib/cudy-ss/server-runtime.lua",
+    "mode": "100644",
+    "sha": "6fb1803e12ef6860bae640cf9fdad504c04332aa",
+    "size": 3501
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/libexec/cudy-ss-process",
+    "mode": "100644",
+    "sha": "d2ef704a593eedb7a368e16719276e46ea7802d3",
+    "size": 1267
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/libexec/cudy-ss-ssr-interfaces",
+    "mode": "100644",
+    "sha": "058c3141f9f8095aff5faba2ee0e41b6136d38e6",
+    "size": 1469
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/libexec/cudy-ssr-serve",
+    "mode": "100644",
+    "sha": "e5bb6016d05ca456ff9f50f195eac12b515fd2b9",
+    "size": 1364
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/libexec/cudy-ssr-server-firewall",
+    "mode": "100644",
+    "sha": "b5dddd4164729effec4178b4c54a78a9114fee73",
+    "size": 2292
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/libexec/cudy-ssr-server-rules",
+    "mode": "100644",
+    "sha": "e31ddaae5295d2cbb059af9612317d054bf71d80",
+    "size": 901
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/libexec/cudy-ssr-server-watch",
+    "mode": "100644",
+    "sha": "1a564c1776037283f9f0c92c8fcdd77f5bdce890",
+    "size": 666
+  },
+  {
+    "path": "tr3600/ssrplus/unified-root/usr/libexec/cudy-ssr-servers",
+    "mode": "100644",
+    "sha": "504a60ab52328c21a5b726ce9fb1ee734a3ef9d7",
+    "size": 487
+  },
+  {
+    "path": "tr3600/ssrplus/unify-ss.py",
+    "mode": "100644",
+    "sha": "9cdc8616813fde971c91267db9bb73354ef48b20",
+    "size": 5798
+  },
+  {
+    "path": "tr3600/ssrplus/upgrade-led.py",
+    "mode": "100644",
+    "sha": "c0cca1c087dcb7a82c3f27ebb33a76513e8ea377",
+    "size": 378
+  },
+  {
+    "path": "tr3600/ssrplus/verify.py",
+    "mode": "100644",
+    "sha": "098d94792ea0ac76e7a7f1517debb32f473c9179",
+    "size": 19836
+  },
+  {
+    "path": "tr3600/ssrplus/yaml-nodes-fixture.yaml",
+    "mode": "100644",
+    "sha": "97692ed1340249c39e86451359a2235ac9fbb7d2",
+    "size": 1183
+  },
+  {
+    "path": "tr3600/ssrplus/yaml_nodes.lua",
+    "mode": "100644",
+    "sha": "4735fe65673d588986b71f597888dd8a784fc2a2",
+    "size": 9430
+  },
+  {
+    "path": "tr3600/support.patch",
+    "mode": "100644",
+    "sha": "f92915097ccaa7efe01cea1efc1051433065e35e",
+    "size": 7896
+  },
+  {
+    "path": "tr3600/test-common-probe-wrapper.sh",
+    "mode": "100755",
+    "sha": "12914401ae746795bf9b2f0f799352b0d5ff1512",
+    "size": 2214
+  },
+  {
+    "path": "tr3600/test-common-probe.sh",
+    "mode": "100755",
+    "sha": "98af11c5ed16b77c1b999f177fed881594c3be71",
+    "size": 3125
+  },
+  {
+    "path": "tr3600/test-dynu-https.py",
+    "mode": "100644",
+    "sha": "f15acbaa2614efb4b9542a173c802a53a228c3d9",
+    "size": 5375
+  },
+  {
+    "path": "tr3600/test-dynu-migration.lua",
+    "mode": "100644",
+    "sha": "b018bb2839bc5b496bf0e1d35fc9d62ffb0a8672",
+    "size": 3026
+  },
+  {
+    "path": "tr3600/test-feature-retirement.py",
+    "mode": "100644",
+    "sha": "e5c47c52cdf1369f56457f3e14de487c23fb9b6e",
+    "size": 7406
+  },
+  {
+    "path": "tr3600/test-led-integration.py",
+    "mode": "100755",
+    "sha": "7db4e8c44b18cd44138099f566c05ac08e932260",
+    "size": 4309
+  },
+  {
+    "path": "tr3600/test-led-lifecycle.sh",
+    "mode": "100755",
+    "sha": "9c141ccfa8dff19989ecf2b1bb95d6ecc49e5a5e",
+    "size": 3001
+  },
+  {
+    "path": "tr3600/test-led-probe-ownership.lua",
+    "mode": "100644",
+    "sha": "5ad44fb9203957a036cc5c0cd459d5423395c015",
+    "size": 8994
+  },
+  {
+    "path": "tr3600/test-led-probe.sh",
+    "mode": "100755",
+    "sha": "62af33450558d17b69cc1e6bbfbbe3d1d50852e5",
+    "size": 1909
+  },
+  {
+    "path": "tr3600/test-led-runtime.lua",
+    "mode": "100644",
+    "sha": "31da3ccfabbccf2b21cca82db7b61f03407e78ec",
+    "size": 13181
+  },
+  {
+    "path": "tr3600/test-led-shared-packed.py",
+    "mode": "100644",
+    "sha": "4fd52f21004b58e2bcabc4d6622a67e57e1dfe28",
+    "size": 1811
+  },
+  {
+    "path": "tr3600/test-led-ui.cjs",
+    "mode": "100644",
+    "sha": "0e2815a4de9da3746af6a41236f6fe4e5c0df4a1",
+    "size": 2570
+  },
+  {
+    "path": "tr3600/test-led.lua",
+    "mode": "100644",
+    "sha": "825852f504d56ff3562f849b7e9609ca9fc38a50",
+    "size": 7561
+  },
+  {
+    "path": "tr3600/test-menu-tabs.cjs",
+    "mode": "100644",
+    "sha": "29759b76b8cb74aec59bbd10c734793233e2a2d8",
+    "size": 2420
+  },
+  {
+    "path": "tr3600/test-network-defaults.py",
+    "mode": "100644",
+    "sha": "3b399a1da962a28ab380cefae2506fc4e3f288f1",
+    "size": 2660
+  },
+  {
+    "path": "tr3600/test-network.sh",
+    "mode": "100755",
+    "sha": "b8cc400ba67f96f530612efd096f2bb15dbad8b9",
+    "size": 1200
+  },
+  {
+    "path": "tr3600/test-real-nixio.lua",
+    "mode": "100644",
+    "sha": "d324c3c644592c06bba86cd67cf61b2e3d672c7c",
+    "size": 2310
+  },
+  {
+    "path": "tr3600/test-ss-ci.sh",
+    "mode": "100644",
+    "sha": "b117221d050824c90540b19eadd6b8d1b8d87a71",
+    "size": 3346
+  },
+  {
+    "path": "tr3600/test-ss-guard-lock.sh",
+    "mode": "100644",
+    "sha": "29c28e9a42723f6ac9cc27cc7b8d95c733939a42",
+    "size": 5534
+  },
+  {
+    "path": "tr3600/test-ss-integration.py",
+    "mode": "100644",
+    "sha": "201631af39ba07bb28eb341d4f1fc6e87ac3b1a6",
+    "size": 2245
+  },
+  {
+    "path": "tr3600/test-ss-nft.sh",
+    "mode": "100644",
+    "sha": "f84baab2a7a7f24479aae8b0436e5f818afb3132",
+    "size": 1637
+  },
+  {
+    "path": "tr3600/test-ss-real.lua",
+    "mode": "100644",
+    "sha": "7f064794a2227b3257772aa2f5300cdcb9f5903f",
+    "size": 5796
+  },
+  {
+    "path": "tr3600/test-ss-settings.lua",
+    "mode": "100644",
+    "sha": "d51218aeca5b80ef70f6a005722c1f9175aaaac2",
+    "size": 5416
+  },
+  {
+    "path": "tr3600/test-ss-setup.lua",
+    "mode": "100644",
+    "sha": "e79051db0c753014be16597f05d6e4fc0b6a1199",
+    "size": 1565
+  },
+  {
+    "path": "tr3600/test-ss-transaction.lua",
+    "mode": "100644",
+    "sha": "2a1a5dd437808e13b22e367467bc6fb20b58a397",
+    "size": 8565
+  },
+  {
+    "path": "tr3600/test-ss-ui.cjs",
+    "mode": "100644",
+    "sha": "ebe0f3ef973a4775d34a4766a4fd95784d816730",
+    "size": 11495
+  },
+  {
+    "path": "tr3600/test-ss.lua",
+    "mode": "100644",
+    "sha": "66ce5d0172c39fda16387f75228158df0d3fc8b9",
+    "size": 2903
+  },
+  {
+    "path": "tr3600/test-upgrade.sh",
+    "mode": "100644",
+    "sha": "9bc4fe9d37dea93fc47ac1de218896bcd61d1392",
+    "size": 2274
+  },
+  {
+    "path": "tr3600/test-usb-integration.py",
+    "mode": "100644",
+    "sha": "d04db51f71b14e66b202d292492bfad095cdd7bb",
+    "size": 3571
+  },
+  {
+    "path": "tr3600/test-usb-real.lua",
+    "mode": "100644",
+    "sha": "c633b770b0e983db1b95905ba529e98d4c2ca847",
+    "size": 4012
+  },
+  {
+    "path": "tr3600/test-usb-ui.cjs",
+    "mode": "100644",
+    "sha": "8f7f675947844c8953638821c432cd9cc2cc460b",
+    "size": 4825
+  },
+  {
+    "path": "tr3600/test-usb.lua",
+    "mode": "100644",
+    "sha": "4d450215e6f9b618446a7c6fc7cec21ded0d298b",
+    "size": 8811
+  },
+  {
+    "path": "tr3600/test-webfiles-storage.lua",
+    "mode": "100644",
+    "sha": "494b723fbec3c33b6cc781688eb9b2c96eb05a96",
+    "size": 4014
+  },
+  {
+    "path": "tr3600/test-wifi-real-uci.lua",
+    "mode": "100644",
+    "sha": "1493c5ed572beb8d02d9e6c8d1ad07d3d8e01a2d",
+    "size": 2138
+  },
+  {
+    "path": "tr3600/test-wifi-real-uci.sh",
+    "mode": "100755",
+    "sha": "82ee7368ddb55363810385c7694abea02fa4c9e5",
+    "size": 1053
+  },
+  {
+    "path": "tr3600/test-wifi-ui.cjs",
+    "mode": "100644",
+    "sha": "dcda1d61dc39ce5a39a80b0edf7a45c2a453472f",
+    "size": 5186
+  },
+  {
+    "path": "tr3600/test-wifi.lua",
+    "mode": "100644",
+    "sha": "e3cd0442bdeb2d30c5ceb44ca1fcdb3bdf4aac19",
+    "size": 11515
+  },
+  {
+    "path": "tr3600/test-zt-direct-nft.sh",
+    "mode": "100644",
+    "sha": "a816695df6cade7926c7e9e51c8873f3fee6067e",
+    "size": 1711
+  },
+  {
+    "path": "tr3600/test-zt-direct.lua",
+    "mode": "100644",
+    "sha": "b83d8c921ecd159db4f1ff6dcfac3213b377b690",
+    "size": 2108
+  },
+  {
+    "path": "tr3600/test-zt-firewall-defaults.py",
+    "mode": "100644",
+    "sha": "58d069316c0aad39fa62893ee92184f8739f80e6",
+    "size": 3983
+  },
+  {
+    "path": "tr3600/test-zt-integration.py",
+    "mode": "100644",
+    "sha": "45b1253052ea7a224df12c5a6430af617fefbe59",
+    "size": 4157
+  },
+  {
+    "path": "tr3600/tr3600.config",
+    "mode": "100644",
+    "sha": "c95040428dadcf930a13bb6b89dfa80dd06d2b0e",
+    "size": 2413
+  },
+  {
+    "path": "tr3600/upgrade-integration.py",
+    "mode": "100644",
+    "sha": "bd4354cdf110831aad38f71e2bb999d0ea0deaca",
+    "size": 754
+  },
+  {
+    "path": "tr3600/usb-integration.py",
+    "mode": "100644",
+    "sha": "9ba1a617df6582fe2d287e6fe53388871d504ba1",
+    "size": 1953
+  },
+  {
+    "path": "tr3600/verify.py",
+    "mode": "100755",
+    "sha": "b26636c06d761f64112eabfec9f6226352cf67b5",
+    "size": 16377
+  },
+  {
+    "path": "tr3600/webfiles/.gitignore",
+    "mode": "100644",
+    "sha": "0eef63bc884e078bfaebaa69a7337d2c5855d13b",
+    "size": 23
+  },
+  {
+    "path": "tr3600/webfiles/Quantum-jti-fix.patch",
+    "mode": "100644",
+    "sha": "5d66674d83ee909b5c383e674a158b4bce9ff7f9",
+    "size": 2678
+  },
+  {
+    "path": "tr3600/webfiles/build-lock.json",
+    "mode": "100644",
+    "sha": "e2bd54097de3fbe29966b91ffdb34fc58d8d874d",
+    "size": 940
+  },
+  {
+    "path": "tr3600/webfiles/build.py",
+    "mode": "100755",
+    "sha": "17a1b846cb1e37517dd8e0dc99af96d6e5bfccb8",
+    "size": 4301
+  },
+  {
+    "path": "tr3600/webfiles/helper/binary_linux_test.go",
+    "mode": "100644",
+    "sha": "02009606073a9cb279dc42d0b10a5fee1c938776",
+    "size": 2491
+  },
+  {
+    "path": "tr3600/webfiles/helper/certificate_year_test.go",
+    "mode": "100644",
+    "sha": "f3bbd28d65b553d773aa1b7c0df0884681d99bcb",
+    "size": 2224
+  },
+  {
+    "path": "tr3600/webfiles/helper/go.mod",
+    "mode": "100644",
+    "sha": "08d87010662d5f30548542dd793d3bcddb577646",
+    "size": 35
+  },
+  {
+    "path": "tr3600/webfiles/helper/main_linux.go",
+    "mode": "100644",
+    "sha": "3b8baa0f4f9891c0a2618150652c8c85183b9119",
+    "size": 27128
+  },
+  {
+    "path": "tr3600/webfiles/helper/main_other.go",
+    "mode": "100644",
+    "sha": "d18698a294dcfeccea14367ddfb2dbae9ccbd54a",
+    "size": 2673
+  },
+  {
+    "path": "tr3600/webfiles/helper/managed_config.go",
+    "mode": "100644",
+    "sha": "b7b9ff0aa58c63d71184a5138439270e0d79fcb8",
+    "size": 2481
+  },
+  {
+    "path": "tr3600/webfiles/helper/managed_config_test.go",
+    "mode": "100644",
+    "sha": "da20f0c6ce59747feb3f5179187a0cf4332e62e4",
+    "size": 2994
+  },
+  {
+    "path": "tr3600/webfiles/helper/managed_linux.go",
+    "mode": "100644",
+    "sha": "ffab7c54fad68be514d2e63148aafc27ed920cc8",
+    "size": 17581
+  },
+  {
+    "path": "tr3600/webfiles/helper/managed_users.go",
+    "mode": "100644",
+    "sha": "60ec10db42a081add2a1a54c769742d33113cad5",
+    "size": 4157
+  },
+  {
+    "path": "tr3600/webfiles/helper/managed_users_linux.go",
+    "mode": "100644",
+    "sha": "0b61e5e4813694e3c656fa8e70876ea08d22ccea",
+    "size": 6981
+  },
+  {
+    "path": "tr3600/webfiles/helper/managed_users_test.go",
+    "mode": "100644",
+    "sha": "249f7a632b8f9dd3a49740d0e5699e8cc7467571",
+    "size": 2807
+  },
+  {
+    "path": "tr3600/webfiles/helper/multi_fixture_other.go",
+    "mode": "100644",
+    "sha": "5d7c93360616bc2990765bcb142d7a814d115725",
+    "size": 2240
+  },
+  {
+    "path": "tr3600/webfiles/helper/policy.go",
+    "mode": "100644",
+    "sha": "79993bb4393a3b182ddce5f9e84ecc91693550e4",
+    "size": 9576
+  },
+  {
+    "path": "tr3600/webfiles/helper/policy_test.go",
+    "mode": "100644",
+    "sha": "f9ac9e999e4e70f01a414011062b4d183247ecae",
+    "size": 5532
+  },
+  {
+    "path": "tr3600/webfiles/helper/public_domain.go",
+    "mode": "100644",
+    "sha": "b01b1c7e5941c26373c8dc6f81ae1fdf04bb4a31",
+    "size": 1215
+  },
+  {
+    "path": "tr3600/webfiles/helper/public_domain_test.go",
+    "mode": "100644",
+    "sha": "b6ebbe25da3c990c3dc5401f688b3b66c867532d",
+    "size": 4216
+  },
+  {
+    "path": "tr3600/webfiles/helper/public_gateway.go",
+    "mode": "100644",
+    "sha": "7d8a48987c8e59db405ee99d020aa0c96f530b0f",
+    "size": 7885
+  },
+  {
+    "path": "tr3600/webfiles/helper/public_gateway_test.go",
+    "mode": "100644",
+    "sha": "1552209b277e22339591aa3b26414bacc1eee703",
+    "size": 4533
+  },
+  {
+    "path": "tr3600/webfiles/helper/public_linux.go",
+    "mode": "100644",
+    "sha": "a6da5e370dd87e0e01b6348b797a44b4460db6e1",
+    "size": 16306
+  },
+  {
+    "path": "tr3600/webfiles/helper/public_ports_test.go",
+    "mode": "100644",
+    "sha": "010f56a191202b5cf1f1de1668e2f0cca534ebe8",
+    "size": 3085
+  },
+  {
+    "path": "tr3600/webfiles/helper/startup.go",
+    "mode": "100644",
+    "sha": "e811e47308593371f62c564b3a5453308e40db71",
+    "size": 1634
+  },
+  {
+    "path": "tr3600/webfiles/helper/startup_linux.go",
+    "mode": "100644",
+    "sha": "06c8ef5fe455d36378d13eb41603cba65d959d28",
+    "size": 6908
+  },
+  {
+    "path": "tr3600/webfiles/helper/startup_linux_test.go",
+    "mode": "100644",
+    "sha": "3a07adcd9d13b06dd689e39cd16c2b0032b2382f",
+    "size": 4523
+  },
+  {
+    "path": "tr3600/webfiles/helper/startup_test.go",
+    "mode": "100644",
+    "sha": "245224aad395a8972bb3044dbd417c18058feb0b",
+    "size": 3624
+  },
+  {
+    "path": "tr3600/webfiles/helper/status_report.go",
+    "mode": "100644",
+    "sha": "16aae177dc3ea879a81219ed127ccbc76c066f9a",
+    "size": 1977
+  },
+  {
+    "path": "tr3600/webfiles/helper/status_report_linux.go",
+    "mode": "100644",
+    "sha": "a2a162368aacc75c0ee893dc1c1d84a55accb683",
+    "size": 1826
+  },
+  {
+    "path": "tr3600/webfiles/helper/status_report_test.go",
+    "mode": "100644",
+    "sha": "1d4477f84a18dee14292f47ff4dbced34dccea07",
+    "size": 1963
+  },
+  {
+    "path": "tr3600/webfiles/helper/zerotier_linux.go",
+    "mode": "100644",
+    "sha": "ee8a445e426824f509d1e923218aa37142d73ca6",
+    "size": 6240
+  },
+  {
+    "path": "tr3600/webfiles/helper/zerotier_policy.go",
+    "mode": "100644",
+    "sha": "a07011a6050e3bc8ae92a5378d8307fcb1eaf1e7",
+    "size": 4486
+  },
+  {
+    "path": "tr3600/webfiles/helper/zerotier_policy_test.go",
+    "mode": "100644",
+    "sha": "4e596b67c71848c860f7978106989c5357c2e8d6",
+    "size": 3317
+  },
+  {
+    "path": "tr3600/webfiles/manifest-template.json",
+    "mode": "100644",
+    "sha": "ed01aa16c94801df29822e494c1ac9784d58e853",
+    "size": 6353
+  },
+  {
+    "path": "tr3600/webfiles/test_binary_guard.py",
+    "mode": "100644",
+    "sha": "07d46aa68492e4d0ae2c464b71595fe6be0939ed",
+    "size": 2003
+  },
+  {
+    "path": "tr3600/webfiles/test_integration.py",
+    "mode": "100644",
+    "sha": "c2d4db9e824936f05795312a539eea9ffd796a79",
+    "size": 3459
+  },
+  {
+    "path": "tr3600/webfiles/test_packed_boot.sh",
+    "mode": "100755",
+    "sha": "f554f84f3376ec6a86adb4151771792a1d5be32c",
+    "size": 990
+  },
+  {
+    "path": "tr3600/webfiles/verify.py",
+    "mode": "100755",
+    "sha": "3b61c64bf964d0d115eeb514b4019d2ac61c5e3a",
+    "size": 8612
+  },
+  {
+    "path": "tr3600/zt-firewall-defaults.py",
+    "mode": "100644",
+    "sha": "9eba47309e5e66c8fc007ed33c45528a004159a9",
+    "size": 1781
+  },
+  {
+    "path": "tr3600/zt-integration.py",
+    "mode": "100644",
+    "sha": "0d681f7d47c4e1738bf693dd4880a2a9a79d5e8b",
+    "size": 843
+  }
+]

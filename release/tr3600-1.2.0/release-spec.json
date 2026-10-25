@@ -1,0 +1,53 @@
+{
+  "repository": "liuyong2027/mt300n-v2-openwrt",
+  "tag": "tr3600-v1.2.0",
+  "commit": "681632e6ef5cd319e197f573a9bb32370d15ff8b",
+  "tree": "6e1588bf4914db5b6295aa88f2dc435acc537557",
+  "title": "Cudy TR3600 V1.0 — 1.2.0 正式版 · SSR Plus+",
+  "build_run": 40169099711,
+  "artifact_id": 12591842715,
+  "artifact_name": "cudy-tr3600-ssrplus-1.2.0-candidate-681632e6ef5cd319e197f573a9bb32370d15ff8b",
+  "artifact_digest": "e7130499e959133490bc7427c723b666e378bf684bf4358ad5412f4c98f0de89",
+  "assets": {
+    "BUILD-VERIFICATION-1.2.0.json": {
+      "bytes": 8681,
+      "sha256": "f775e025af18986c1057466c187343ba643dc73d9ee2ad58da9d74f140d55f46"
+    },
+    "cudy-tr3600-v1-ssrplus-1.2.0-sysupgrade.bin": {
+      "bytes": 53811475,
+      "sha256": "eb6918e162e3d472c0709fb3f4156dabc2ab0f9f23d7948acd174f6bf470696f"
+    },
+    "HARDWARE-ACCEPTANCE-1.2.0.json": {
+      "bytes": 2885,
+      "sha256": "da448386e9900509358dc7d1abd29340ceb3c0bd026ae82df9e2a877b3162a1b"
+    },
+    "PROMOTION-1.2.0.json": {
+      "bytes": 683,
+      "sha256": "9009c841dc28466ee251b814a2657b3e5a6740ac1d5161d812550dc1cb6a2aa5"
+    },
+    "RELEASE-1.2.0.txt": {
+      "bytes": 4231,
+      "sha256": "e392db4f90c184959ff60e144843e91861a9eda8904c5acf2ceff2cb6b89a06f"
+    },
+    "resolved.config": {
+      "bytes": 302940,
+      "sha256": "0ed34e83c05e78627ef57b6e1eb3ffcb208abb8d1ecd8b8c2aac58e1f33b647a"
+    },
+    "SHA256SUMS": {
+      "bytes": 818,
+      "sha256": "35cbb66a99ba171e41ce04194ba299e0c2497be4dddd77a7c262af0b40999ce5"
+    },
+    "SOURCE-1.2.0.zip": {
+      "bytes": 7179247,
+      "sha256": "22fe60607d21715e96dce2f538f9a77357e2bdca7bb7b703ada52ff28d8f3fdd"
+    },
+    "SOURCE-PROVENANCE-1.2.0.json": {
+      "bytes": 1958,
+      "sha256": "e42ecc0cdbbb71bd84a95642bdc26311d0c1f8959143b6a270156b3b8bd25857"
+    },
+    "UPGRADE-1.2.0.txt": {
+      "bytes": 1493,
+      "sha256": "9ece726d9359f3a3d87c147b04264416748db58269035f1f272b315a0fe4d700"
+    }
+  }
+}

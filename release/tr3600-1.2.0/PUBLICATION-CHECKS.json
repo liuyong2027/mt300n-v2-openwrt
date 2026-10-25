@@ -1,0 +1,13 @@
+{
+  "all_passed": true,
+  "checks": [
+    "real prepare reproduces all 10 expected asset sizes and SHA256 values",
+    "modified local asset rejected",
+    "all remote assets, notes and exact source tag checked",
+    "mismatched uploaded asset rejected",
+    "unexpected release asset rejected",
+    "conflicting existing tag rejected without any remote write"
+  ],
+  "network_requests": 0,
+  "remote_writes": 0
+}

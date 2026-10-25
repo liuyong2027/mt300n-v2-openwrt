@@ -1,0 +1,38 @@
+# Cudy TR3600 V1.0 / R126 — 1.2.0 正式版 · SSR Plus+
+
+**[下载固件 cudy-tr3600-v1-ssrplus-1.2.0-sysupgrade.bin](https://github.com/liuyong2027/mt300n-v2-openwrt/releases/download/tr3600-v1.2.0/cudy-tr3600-v1-ssrplus-1.2.0-sysupgrade.bin)**
+
+本正式版直接发布已通过刷机和整机重启验收的第二份 1.2.0 候选镜像，文件未重新编译或修改。已刷入 SHA256 相同的第二份候选固件，无需再次刷机。
+
+## 主要变化
+
+- 用 SSR Plus+ 替代 Mango，保留 ZeroTier、DDNS、双频 Wi-Fi、USB/Samba、WebFiles 和 LED 功能。
+- 普通 Shadowsocks 服务端的解密后 TCP、UDP 流量进入 SSR Plus+ 客户端分流；保留 Access Scope、加密方式和 TCP/UDP 设置。支持七种已验证的 AEAD/SS2022 加密方式。移除独立 ZeroTier 私有 SS 页面、服务及专用防火墙配置，不迁移其密码和端口；ZeroTier 本身及其通信放行规则保留。
+- 订阅支持从 Clash/Mihomo YAML 导入 AnyTLS、VMess、Hysteria2 等受支持节点参数；仅导入节点，分流、DNS、策略组、TUN 和监听器仍由 SSR Plus+ 管理。新增 mihomo/1.18.0 UA 选项及“邮箱客服”“支持AI”公告过滤词。
+- 节点列表增加连续编号、本页多选及批量删除；正在使用或被服务引用的节点受保护。批量删除未使用节点不会重启代理。修正表头对齐，“应用”和“自动切换”对应各自控件。
+- 修复双频合一页面“保存并应用”无效及 USB 分区选项不可选；保留双频合一，自动频段引导默认关闭。保留配置升级沿用已有频段引导选择，不强制覆盖。
+- 新配置的“强制走代理的 WAN IP”“不走代理的域名”“禁止连接的域名”默认为空；保留配置升级不清空已有名单。修正本机服务端状态判断、按服务类型显示说明，以及 HTTPS 连通性检查。
+
+## 验证范围
+
+构建运行 40169099711 的运行环境预检、完整编译、最终镜像及 ARM64 程序检查全部通过；13 组本地源码检查及固定上游补丁集成检查通过。普通 SS 的七种加密方式、TCP/UDP、访问范围与分流还通过独立命名空间及实际 ARM64 程序测试。
+
+第二份候选固件已实机刷入并核对内核、SquashFS 与交付镜像一致。保留配置升级检查，以及随后一次整机正常重启检查通过：代理与 TCP/UDP 规则自动恢复，ZeroTier、DDNS、双频合一、USB 挂载及共享正常。真实局域网 HTTPS、USB 目录访问、当前 VLESS 节点的两次 IPv4 UDP/3478 往返通过；重启前后全部 14 份配置保持一致，未手动重启 SSR Plus+。
+
+此前在同路由器热修正环境中，Hysteria2、VMess、AnyTLS 各一节点的 IPv4 UDP 往返通过，用户反馈关闭频段引导后原易卡顿的 720p 直播连续至少 15 分钟无卡顿。这些较早结果单独记录，不冒充第二份镜像重新做过的测试。
+
+本次重启后首次成功检查距开机约 155 分钟；日志支持代理自动启动，但未测量开机恢复耗时。本次未覆盖冷断电、IPv6 端到端或吞吐性能，不据此保证所有节点和应用表现。普通 SS 服务端入口仍为 IPv4，客户端 IPv6 代理属于独立功能。
+
+## 升级和文件
+
+仅适用于 Cudy TR3600 V1.0 / R126 对应定制 OpenWrt 的 sysupgrade；不是原厂固件直接迁移包。升级前下载配置备份，并另存 ZeroTier 身份。匹配设备的本项目固件可勾选“保留配置”，沿用节点、订阅、普通 SS、无线、ZeroTier 和 DDNS；独立私有 SS 按上述设计删除。不保留配置会恢复新默认值。
+
+固件：53,811,475 字节。
+
+SHA256：`eb6918e162e3d472c0709fb3f4156dabc2ab0f9f23d7948acd174f6bf470696f`
+
+随附 SHA256SUMS、精确配方源码 SOURCE-1.2.0.zip、构建证明、来源信息及去除个人信息的硬件验收摘要。构建证明中的 candidate/pending 字段保留构建时原始记录，后续验收与正式晋升状态以 HARDWARE-ACCEPTANCE-1.2.0.json 和 PROMOTION-1.2.0.json 为准。
+
+构建源码提交：`681632e6ef5cd319e197f573a9bb32370d15ff8b`。
+
+构建记录：https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/40169099711

@@ -1,0 +1,71 @@
+{
+  "version": "1.2.0",
+  "device": "Cudy TR3600 V1.0 / R126",
+  "accepted_image_sha256": "eb6918e162e3d472c0709fb3f4156dabc2ab0f9f23d7948acd174f6bf470696f",
+  "accepted_at": "2026-10-25T19:35:18.407861+08:00",
+  "result": "passed",
+  "source": "local inspection plus explicit owner confirmations",
+  "installed_kernel_and_squashfs_match_delivered_image": true,
+  "keep_settings_upgrade": {
+    "owner_confirmed": true,
+    "owner_confirmed_node_edits_were_before_flash": true,
+    "comparison_limit": "No immediate pre-flash snapshot after owner edits; do not claim all files byte-identical across upgrade.",
+    "ddns_account_and_hostname_preserved": true,
+    "existing_one_time_ddns_operational_migration_documented": true
+  },
+  "normal_reboot": {
+    "whole_router_reboots_issued": 1,
+    "manual_ssr_restart_performed": false,
+    "configuration_edits_performed": false,
+    "ssr_start_and_completion_counts": {
+      "start": 1,
+      "end": 1
+    },
+    "tcp_redirect_auto_restored": true,
+    "udp_tproxy_and_policy_routes_auto_restored": true,
+    "nodes_order_and_selected_node_preserved": true,
+    "all_14_config_files_and_canonical_fingerprints_identical": true,
+    "zerotier_online_identity_networks_and_addresses_preserved": true,
+    "zerotier_direct_udp_and_gateway_discovery_rules_loaded": true,
+    "ddns_running_and_public_dns_matches_wan": true,
+    "forced_ddns_provider_update_performed": false,
+    "dual_band_shared_ssid_and_credentials_preserved": true,
+    "automatic_band_steering_disabled": true,
+    "usteerd_running": false,
+    "usb_mount_and_samba_share_auto_restored": true,
+    "real_lan_usb_directory_listing": true,
+    "real_lan_google_https_status": 204,
+    "real_lan_baidu_https_status": 200,
+    "current_node_protocol": "vless",
+    "actual_ipv4_udp_3478": {
+      "requests": 2,
+      "successful_round_trips": 2,
+      "rtt_ms": [
+        1141.0,
+        1000.0
+      ],
+      "tproxy_counter_delta_packets": 2,
+      "tproxy_counter_delta_bytes": 96,
+      "exit_matches_tcp_proxy_and_differs_from_direct_wan": true
+    },
+    "startup_ready_time_measured": false,
+    "timing_limit": "First successful observation occurred about 155 minutes after boot; boot log markers support automatic startup, but this is not a measurement of initial readiness latency."
+  },
+  "earlier_live_fixed_environment": {
+    "distinct_from_rebuilt_image_acceptance": true,
+    "one_node_each_actual_ipv4_udp_3478": [
+      "hysteria2",
+      "vmess",
+      "anytls"
+    ],
+    "user_reported_720p_live_playback_minutes_at_least": 15,
+    "user_reported_buffering": false,
+    "band_steering": "disabled"
+  },
+  "not_covered": [
+    "cold power-loss recovery",
+    "IPv6 end-to-end forwarding",
+    "throughput or all-node performance"
+  ],
+  "privacy": "No passwords, URLs, identity material, DDNS hostname, public IPs or configuration dumps included."
+}
