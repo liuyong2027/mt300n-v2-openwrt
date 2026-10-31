@@ -17,7 +17,7 @@ IKEV2_REQUIRED = (
     'strongswan-mod-eap-mschapv2', 'strongswan-mod-eap-identity', 'strongswan-mod-eap-dynamic',
     'strongswan-mod-openssl', 'kmod-xfrm-interface', 'kmod-ipsec4',
     'zerotier', 'luci-app-zerotier-mini', 'lua', 'libuci-lua', 'ip-full', 'curl',
-    'coreutils-base64', 'flock'
+    'coreutils-base64', 'flock', 'dnsmasq-full'
 )
 XRAY_REQUIRED = (
     'luci', 'luci-i18n-base-zh-cn', 'luci-i18n-firewall-zh-cn', 'luci-i18n-package-manager-zh-cn',

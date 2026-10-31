@@ -9,7 +9,7 @@ return view.extend({
     },
     render: function() {
         var m = new form.Map('mango_ikev2', 'IKEv2 客户端',
-            '本镜像以 strongSwan 做路由器级 IKEv2 客户端。默认生产固件走 Xray，16 MiB 闪存放不下两套出口，因此 IKEv2 与 Xray 分属不同构建配置。split：国内 IP 直连，其余进隧道。中国 IP 列表：/usr/libexec/mango-ikev2-cn-update → /etc/mango-ikev2/cn-cidrs.txt。');
+            '本镜像以 strongSwan 做路由器级 IKEv2 客户端，与 Xray 固件互斥。启用后局域网 DNS 改由本机 dnsmasq 回答。split/global 的解析走隧道内的 1.1.1.1 与 8.8.8.8，避免国内 DNS 污染。gfw 只把列表中的域名交给隧道 DNS，并把解析出的 IPv4 送进隧道，其余走国内 DNS 直连。列表：/usr/libexec/mango-ikev2-cn-update 与 /usr/libexec/mango-ikev2-gfw-update。');
 
         var s = m.section(form.NamedSection, 'main', 'policy', '连接与分流');
         s.anonymous = true;
@@ -19,7 +19,8 @@ return view.extend({
 
         o = s.option(form.ListValue, 'mode', '分流模式');
         o.value('direct', '全部直连（不经隧道）');
-        o.value('split', '大陆分流（国内直连，境外 IKEv2）');
+        o.value('split', '大陆分流（国内 IP 直连，其余 IKEv2）');
+        o.value('gfw', 'GFW 域名分流（仅列表内域名走 IKEv2）');
         o.value('global', '全局隧道');
         o.rmempty = false;
 

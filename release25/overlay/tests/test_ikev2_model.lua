@@ -27,8 +27,15 @@ assert(nft:find('table inet mango_ikev2', 1, true))
 assert(nft:find('set cn4', 1, true))
 assert(nft:find('1.2.3.0/24', 1, true))
 assert(nft:find('meta mark set 0x101', 1, true))
+assert(nft:find('redirect to :53', 1, true))
+assert(nft:find('th dport 53 return', 1, true))
 assert(nft:find('oifname "xfrm-mango" masquerade', 1, true))
 assert(not nft:find('tproxy', 1, true))
+local dns = M.dnsmasq(eap)
+assert(dns:find('server=1.1.1.1', 1, true))
+assert(dns:find('server=8.8.8.8', 1, true))
+assert(dns:find('no-resolv', 1, true))
+assert(not dns:find('server=223.5.5.5\n', 1, true))
 
 local global = {}
 for k, v in pairs(eap) do global[k] = v end
@@ -59,7 +66,33 @@ assert(pswan:find('secret = "shared%-key"') or pswan:find('secret = "shared-key"
 assert(pswan:find('if_id_in = 7', 1, true))
 
 assert(not pcall(M.credentials, {server = 'bad host', auth = 'eap', username = 'a', password = 'b'}))
-assert(not pcall(M.policy, {mode = 'gfw', enabled = '1'}))
+assert(not pcall(M.policy, {mode = 'warp', enabled = '1'}))
 assert(not pcall(M.policy, {mode = 'split', enabled = '1', ifid = '0'}))
+
+local gfw = {}
+for k, v in pairs(eap) do gfw[k] = v end
+gfw.mode = 'gfw'
+gfw.gfw_domains = {'+google.com', '-accounts.google.com'}
+local gfw_nft = M.nft(gfw)
+assert(gfw_nft:find('set gfw4', 1, true))
+assert(gfw_nft:find('ip daddr @gfw4 meta mark set 0x101', 1, true))
+assert(not gfw_nft:find('jump fail_closed', 1, true))
+assert(gfw_nft:find('redirect to :53', 1, true))
+local gfw_dns = M.dnsmasq(gfw)
+assert(gfw_dns:find('server=223.5.5.5', 1, true))
+assert(gfw_dns:find('server=/google.com/1.1.1.1', 1, true))
+assert(gfw_dns:find('nftset=/google.com/4#inet#mango_ikev2#gfw4', 1, true))
+assert(gfw_dns:find('server=/accounts.google.com/223.5.5.5', 1, true))
+assert(not gfw_dns:find('nftset=/accounts.google.com/', 1, true))
+
+local raw = {'[AutoProxy 0.0.0.0]'}
+for i = 1, 100 do raw[#raw + 1] = '||site' .. i .. '.example.com' end
+raw[#raw + 1] = '@@||direct.example.com'
+raw[#raw + 1] = '/^https?:\\/\\/.*\\.regex\\.com/'
+local converted, count, skipped = M.convert_gfwlist(table.concat(raw, '\n'))
+assert(count == 100, count)
+assert(skipped == 1, skipped)
+assert(converted:find('-direct.example.com', 1, true))
+assert(converted:find('+site1.example.com', 1, true))
 
 print('PASS IKEv2 model swanctl/nft/validation')

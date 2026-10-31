@@ -63,7 +63,7 @@ if [ "$profile" = ikev2 ]; then
         luci-app-mango-ikev2 strongswan-minimal strongswan-swanctl \
         strongswan-mod-eap-mschapv2 strongswan-mod-eap-identity strongswan-mod-eap-dynamic \
         strongswan-mod-openssl kmod-xfrm-interface kmod-ipsec4 \
-        zerotier luci-app-zerotier-mini lua libuci-lua ip-full curl coreutils-base64 flock; do
+        zerotier luci-app-zerotier-mini lua libuci-lua ip-full curl coreutils-base64 flock dnsmasq-full; do
         grep -qx "CONFIG_PACKAGE_${pkg}=y" .config || {
             echo "Required package was dropped by Kconfig: $pkg" >&2
             exit 1
@@ -71,6 +71,7 @@ if [ "$profile" = ikev2 ]; then
     done
     ! grep -qx 'CONFIG_PACKAGE_xray-core=y' .config
     ! grep -qx 'CONFIG_PACKAGE_luci-app-mango-proxy=y' .config
+    ! grep -qx 'CONFIG_PACKAGE_dnsmasq=y' .config
 else
     for pkg in luci luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn luci-i18n-package-manager-zh-cn \
         xray-core luci-app-mango-proxy zerotier luci-app-zerotier-mini lua libuci-lua ip-full \

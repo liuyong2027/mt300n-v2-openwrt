@@ -28,12 +28,21 @@ local function host(v)
     return type(v) == 'string' and #v > 0 and #v <= 253 and v:match('^[%w][%w%.%-]*$') ~= nil
 end
 
+function M.domain(v)
+    return type(v) == 'string' and #v <= 253 and v:match('^[a-z0-9][a-z0-9%.%-]*%.[a-z][a-z]+$') ~= nil
+end
+
 local function escape(v)
     return (tostring(v):gsub('\\', '\\\\'):gsub('"', '\\"'))
 end
 
+-- Tunnel resolvers are never domestic. Router-originated queries use /32 routes
+-- via xfrm; LAN queries are redirected to local dnsmasq first.
+M.tunnel_dns = {'1.1.1.1', '8.8.8.8'}
+M.domestic_dns = {'223.5.5.5', '119.29.29.29'}
+
 function M.policy(p)
-    assert(p.mode == 'direct' or p.mode == 'split' or p.mode == 'global', 'Invalid mode')
+    assert(p.mode == 'direct' or p.mode == 'split' or p.mode == 'global' or p.mode == 'gfw', 'Invalid mode')
     local lan = p.lan_device or 'br-lan'
     assert(#lan <= 15 and lan:match('^[%w_.%-]+$'), 'Invalid LAN device')
     local ifid = tonumber(p.ifid or '42')
@@ -138,6 +147,68 @@ function M.swanctl(p)
     return table.concat(lines, '\n') .. '\n'
 end
 
+-- GFWList text -> +domain / -domain lines. Rejects wildcards, paths and regex.
+function M.convert_gfwlist(text)
+    assert(type(text) == 'string' and #text <= 512 * 1024 and text:find('[AutoProxy', 1, true), 'Invalid GFWList')
+    local proxy, direct, skipped = {}, {}, 0
+    for line in text:gmatch('[^\r\n]+') do
+        line = line:match('^%s*(.-)%s*$')
+        if line ~= '' and line:sub(1, 1) ~= '!' and line:sub(1, 1) ~= '[' then
+            local except = line:sub(1, 2) == '@@'
+            if except then line = line:sub(3) end
+            line = line:gsub('^||', ''):gsub('^|', ''):gsub('^https?://', ''):gsub('^%.', '')
+            line = line:gsub('[%^|]$', ''):gsub('/$', ''):lower()
+            if M.domain(line) then
+                if except then direct[line] = true else proxy[line] = true end
+            else
+                skipped = skipped + 1
+            end
+        end
+    end
+    local output, count = {}, 0
+    for domain in pairs(direct) do output[#output + 1] = '-' .. domain end
+    for domain in pairs(proxy) do
+        if not direct[domain] then
+            output[#output + 1] = '+' .. domain
+            count = count + 1
+        end
+    end
+    assert(count >= 100 and count <= 20000, 'Unexpected GFW domain count')
+    table.sort(output)
+    return table.concat(output, '\n') .. '\n', count, skipped
+end
+
+function M.dnsmasq(p)
+    local q = M.policy(p)
+    if not q.active then return '' end
+    local lines = {'no-resolv', 'filter-AAAA'}
+    local function add(s) lines[#lines + 1] = s end
+    if q.mode == 'gfw' then
+        for _, address in ipairs(M.domestic_dns) do add('server=' .. address) end
+        local seen = {}
+        for _, line in ipairs(p.gfw_domains or {}) do
+            local flag, name = line:match('^([+-])([a-z0-9%.%-]+)$')
+            if name and not seen[name] and M.domain(name) then
+                seen[name] = true
+                if flag == '+' then
+                    for _, address in ipairs(M.tunnel_dns) do
+                        add('server=/' .. name .. '/' .. address)
+                    end
+                    add('nftset=/' .. name .. '/4#inet#mango_ikev2#gfw4')
+                else
+                    for _, address in ipairs(M.domestic_dns) do
+                        add('server=/' .. name .. '/' .. address)
+                    end
+                end
+            end
+        end
+    else
+        -- split/global: domestic resolvers are not queried, so a poisoned answer cannot win.
+        for _, address in ipairs(M.tunnel_dns) do add('server=' .. address) end
+    end
+    return table.concat(lines, '\n') .. '\n'
+end
+
 function M.nft(p)
     local q = M.policy(p)
     local cn = {}
@@ -160,8 +231,12 @@ function M.nft(p)
         add('set cn4 { type ipv4_addr; flags interval; auto-merge; elements = { ' ..
             table.concat(cn, ', ') .. ' } }')
     end
+    if q.mode == 'gfw' and q.active then
+        -- Filled by dnsmasq nftset after a GFW domain resolves through the tunnel.
+        add('set gfw4 { type ipv4_addr; flags timeout; timeout 2h; }')
+    end
     add('chain guard { type filter hook forward priority -10; policy accept;')
-    if q.active then
+    if q.active and q.mode ~= 'gfw' then
         add('iifname "' .. q.lan .. '" jump fail_closed')
     end
     add('}')
@@ -170,19 +245,27 @@ function M.nft(p)
     if #cn > 0 then add('ip daddr @cn4 return') end
     add('oifname "xfrm-mango" return')
     add('ip6 daddr { fc00::/7, fe80::/10, ff00::/8 } return')
-    -- Outside the tunnel, public destinations must not leak while IKEv2 is active.
+    -- split/global: public destinations outside the tunnel must not leak.
     add('drop\n}')
     if q.active then
         add('chain capture {')
         add('fib daddr type local return')
         add('ip daddr @bypass4 return')
         if #cn > 0 then add('ip daddr @cn4 return') end
-        add('meta nfproto ipv4 meta mark set 0x101 accept')
+        if q.mode == 'gfw' then
+            add('ip daddr @gfw4 meta mark set 0x101 accept')
+        else
+            add('meta nfproto ipv4 meta mark set 0x101 accept')
+        end
         add('}')
         add('chain prerouting { type filter hook prerouting priority -160; policy accept;')
         add('ct direction reply return')
+        -- Port 53 is hijacked to local dnsmasq and must not enter the tunnel itself.
         add('meta l4proto { tcp, udp } th dport 53 return')
         add('iifname "' .. q.lan .. '" jump capture')
+        add('}')
+        add('chain dns_capture { type nat hook prerouting priority -105; policy accept;')
+        add('iifname "' .. q.lan .. '" meta nfproto ipv4 meta l4proto { tcp, udp } th dport 53 redirect to :53')
         add('}')
         add('chain postrouting { type nat hook postrouting priority srcnat; policy accept;')
         add('oifname "xfrm-mango" masquerade')

@@ -35,14 +35,70 @@ status() {
     swanctl --list-sas 2>/dev/null || echo "sas: unavailable"
 }
 
+mango_ikev2_dns_section() {
+    uci show dhcp 2>/dev/null | sed -n 's/^dhcp\.\([^=]*\)=dnsmasq$/\1/p' | head -n 1
+}
+
+mango_ikev2_dns_on() {
+    local sec
+    sec=$(mango_ikev2_dns_section)
+    [ -n "$sec" ] || return 1
+    mkdir -p /etc/mango-ikev2/dnsmasq.d
+    if [ ! -s /etc/mango-ikev2/dns-orig ]; then
+        {
+            echo "section=$sec"
+            echo "noresolv=$(uci -q get dhcp."$sec".noresolv || true)"
+            echo "filter_aaaa=$(uci -q get dhcp."$sec".filter_aaaa || true)"
+            uci -q get dhcp."$sec".server | tr ' ' '\n' | sed 's/^/server /'
+            uci -q get dhcp."$sec".confdir | tr ' ' '\n' | sed 's/^/confdir /'
+        } > /etc/mango-ikev2/dns-orig
+    fi
+    /usr/libexec/mango-ikev2-generate dnsmasq > /etc/mango-ikev2/dnsmasq.d/ikev2.conf || return 1
+    uci set dhcp."$sec".noresolv='1'
+    uci set dhcp."$sec".filter_aaaa='1'
+    uci -q delete dhcp."$sec".server
+    if ! uci -q get dhcp."$sec".confdir | tr ' ' '\n' | grep -qx /etc/mango-ikev2/dnsmasq.d; then
+        uci add_list dhcp."$sec".confdir='/etc/mango-ikev2/dnsmasq.d'
+    fi
+    uci commit dhcp
+    /etc/init.d/dnsmasq restart
+}
+
+mango_ikev2_dns_off() {
+    local sec line val
+    rm -f /etc/mango-ikev2/dnsmasq.d/ikev2.conf
+    [ -s /etc/mango-ikev2/dns-orig ] || return 0
+    sec=$(sed -n 's/^section=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+    [ -n "$sec" ] || return 0
+    uci -q delete dhcp."$sec".server
+    uci -q delete dhcp."$sec".confdir
+    while IFS= read -r line; do
+        case "$line" in
+            section=*|noresolv=*|filter_aaaa=*) ;;
+            'server '*) uci add_list dhcp."$sec".server="${line#server }" ;;
+            'confdir '*) uci add_list dhcp."$sec".confdir="${line#confdir }" ;;
+        esac
+    done < /etc/mango-ikev2/dns-orig
+    val=$(sed -n 's/^noresolv=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+    if [ -n "$val" ]; then uci set dhcp."$sec".noresolv="$val"; else uci -q delete dhcp."$sec".noresolv; fi
+    val=$(sed -n 's/^filter_aaaa=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+    if [ -n "$val" ]; then uci set dhcp."$sec".filter_aaaa="$val"; else uci -q delete dhcp."$sec".filter_aaaa; fi
+    uci commit dhcp
+    rm -f /etc/mango-ikev2/dns-orig
+    /etc/init.d/dnsmasq restart
+}
+
 mango_ikev2_teardown() {
     swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
     swanctl --unload-all 2>/dev/null || swanctl --unload-conns 2>/dev/null || :
     ip link del "$XFRM_IF" 2>/dev/null || :
     ip -4 rule del priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || :
     ip -4 route flush table 101 2>/dev/null || :
+    ip -4 route del 1.1.1.1/32 dev xfrm-mango 2>/dev/null || :
+    ip -4 route del 8.8.8.8/32 dev xfrm-mango 2>/dev/null || :
     nft delete table inet mango_ikev2 2>/dev/null || :
     rm -f /etc/swanctl/conf.d/mango.conf
+    mango_ikev2_dns_off || :
 }
 
 mango_ikev2_ensure_xfrm() {
@@ -75,12 +131,19 @@ mango_ikev2_apply() {
     if [ "$mode" = direct ]; then
         swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
         ip link del "$XFRM_IF" 2>/dev/null || :
+        mango_ikev2_dns_off || return 1
         /usr/libexec/mango-ikev2-fw || return 1
         return 0
     fi
     if [ ! -s /etc/mango-ikev2/cn-cidrs.txt ] && [ "$mode" = split ]; then
         /usr/libexec/mango-ikev2-cn-update || {
             echo 'split 模式需要中国 IP 列表，请先更新' >&2
+            return 1
+        }
+    fi
+    if [ "$mode" = gfw ] && [ ! -s /etc/mango-ikev2/gfw-domains.txt ]; then
+        /usr/libexec/mango-ikev2-gfw-update || {
+            echo 'gfw 模式需要域名列表，请先更新' >&2
             return 1
         }
     fi
@@ -91,5 +154,7 @@ mango_ikev2_apply() {
     /etc/init.d/swanctl start 2>/dev/null || /etc/init.d/swanctl restart || return 1
     swanctl --load-all --noprompt || return 1
     swanctl --initiate --ike mango --timeout 20 || return 1
+    # Install the nft set before dnsmasq starts adding GFW answers into it.
     /usr/libexec/mango-ikev2-fw || return 1
+    mango_ikev2_dns_on || return 1
 }

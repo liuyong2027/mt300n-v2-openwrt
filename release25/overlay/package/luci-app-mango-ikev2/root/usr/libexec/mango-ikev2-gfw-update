@@ -1,0 +1,25 @@
+#!/bin/sh
+# Refresh the GFW domain list used by gfw mode. HTTPS only; no credentials on argv.
+set -eu
+umask 077
+mkdir -p /etc/mango-ikev2 /var/etc/mango-ikev2 /var/lock
+exec 8>/var/lock/mango-ikev2-gfw.lock
+flock -n 8 || { echo '另一个 GFW 域名更新正在运行'; exit 75; }
+
+URL='https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt'
+raw=$(mktemp /var/etc/mango-ikev2/gfw.XXXXXX) || exit 1
+decoded=$(mktemp /var/etc/mango-ikev2/gfw-decoded.XXXXXX) || { rm -f "$raw"; exit 1; }
+cfg=$(mktemp /var/etc/mango-ikev2/curl.XXXXXX) || { rm -f "$raw" "$decoded"; exit 1; }
+trap 'rm -f "$raw" "$decoded" "$cfg"' EXIT
+
+printf 'url = "%s"\nproxy = ""\nnoproxy = "*"\n' "$URL" > "$cfg"
+curl -q -4 --globoff --config "$cfg" --silent --proto '=https' \
+    --connect-timeout 8 --max-time 45 --max-filesize 524288 \
+    --output "$raw" || { echo '下载 GFW 域名列表失败'; exit 1; }
+base64 -d < "$raw" > "$decoded" || { echo 'GFW 列表不是有效的 Base64'; exit 1; }
+lua /usr/libexec/mango-ikev2-generate gfw-convert < "$decoded" > "$raw.domains" || {
+    echo 'GFW 域名列表无法解析'
+    exit 1
+}
+mv "$raw.domains" /etc/mango-ikev2/gfw-domains.txt
+echo "已写入 GFW 域名：$(grep -c '^+' /etc/mango-ikev2/gfw-domains.txt)"
