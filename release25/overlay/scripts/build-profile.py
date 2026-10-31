@@ -13,9 +13,10 @@ USB_PROFILES = ('r3-usb-baseline', 'r3-usb-patched')
 USB_PACKAGES = ('kmod-usb-storage', 'kmod-fs-vfat', 'kmod-fs-exfat', 'block-mount')
 IKEV2_REQUIRED = (
     'luci', 'luci-i18n-base-zh-cn', 'luci-i18n-firewall-zh-cn', 'luci-i18n-package-manager-zh-cn',
-    'luci-app-mango-ikev2', 'strongswan-minimal', 'strongswan-swanctl',
-    'strongswan-mod-eap-mschapv2', 'strongswan-mod-eap-identity', 'strongswan-mod-eap-dynamic',
-    'strongswan-mod-openssl', 'kmod-xfrm-interface', 'kmod-ipsec4',
+    'luci-app-mango-ikev2', 'strongswan', 'strongswan-minimal', 'strongswan-swanctl',
+    'strongswan-mod-vici', 'strongswan-mod-eap-mschapv2', 'strongswan-mod-eap-identity',
+    'strongswan-mod-eap-dynamic', 'strongswan-mod-openssl', 'kmod-ipsec', 'kmod-ipsec4',
+    'kmod-ipsec6', 'kmod-xfrm-interface',
     'zerotier', 'luci-app-zerotier-mini', 'lua', 'libuci-lua', 'ip-full', 'curl',
     'coreutils-base64', 'flock', 'dnsmasq-full'
 )
