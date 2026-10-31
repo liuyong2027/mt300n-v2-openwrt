@@ -1,0 +1,30 @@
+#!/bin/sh
+# fw4 include and service helper; never edits UCI.
+(
+umask 077
+mkdir -p /var/lock /var/etc/mango-ikev2 || exit 1
+exec 8>/var/lock/mango-ikev2-resource.lock
+flock -w 90 8 || { echo '等待 IKEv2 防火墙任务超时' >&2; exit 75; }
+tmp="$(mktemp /var/etc/mango-ikev2/rules.XXXXXX)" || exit 1
+finish() {
+    local rc=$?
+    rm -f "$tmp"
+    exit "$rc"
+}
+trap finish EXIT
+/usr/libexec/mango-ikev2-generate nft > "$tmp" || exit 1
+/usr/sbin/nft -c -f "$tmp" || exit 1
+/usr/sbin/nft -f "$tmp" || exit 1
+enabled=$(uci -q get mango_ikev2.main.enabled)
+mode=$(uci -q get mango_ikev2.main.mode)
+if [ "$enabled" = 1 ] && [ "$mode" != direct ]; then
+    ip -4 route replace default dev xfrm-mango table 101 2>/dev/null || \
+        ip -4 route replace default via 0.0.0.0 dev xfrm-mango table 101 || exit 1
+    ip -4 rule show | grep -q '10001:.*fwmark 0x101.*lookup 101' ||
+        ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 || exit 1
+else
+    ip -4 rule del priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || :
+    ip -4 route flush table 101 2>/dev/null || :
+fi
+exit 0
+)

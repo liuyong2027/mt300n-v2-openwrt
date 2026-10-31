@@ -1,0 +1,95 @@
+#!/bin/sh /etc/rc.common
+# IKEv2 client with optional China IP split. Mutual exclusive with the Xray image.
+START=95
+STOP=10
+
+CONF_DIR=/var/etc/mango-ikev2
+XFRM_IF=xfrm-mango
+
+extra_command "status" "Show brief IKEv2 client state"
+
+boot() {
+    start
+}
+
+start() {
+    mango_ikev2_apply
+}
+
+stop() {
+    mango_ikev2_teardown
+}
+
+reload() {
+    mango_ikev2_apply
+}
+
+restart() {
+    stop
+    start
+}
+
+status() {
+    echo "enabled=$(uci -q get mango_ikev2.main.enabled) mode=$(uci -q get mango_ikev2.main.mode)"
+    ip link show "$XFRM_IF" 2>/dev/null || echo "xfrm: down"
+    swanctl --list-sas 2>/dev/null || echo "sas: unavailable"
+}
+
+mango_ikev2_teardown() {
+    swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
+    swanctl --unload-all 2>/dev/null || swanctl --unload-conns 2>/dev/null || :
+    ip link del "$XFRM_IF" 2>/dev/null || :
+    ip -4 rule del priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || :
+    ip -4 route flush table 101 2>/dev/null || :
+    nft delete table inet mango_ikev2 2>/dev/null || :
+    rm -f /etc/swanctl/conf.d/mango.conf
+}
+
+mango_ikev2_ensure_xfrm() {
+    local ifid mtu tunlink
+    ifid=$(uci -q get mango_ikev2.main.ifid)
+    mtu=$(uci -q get mango_ikev2.main.xfrm_mtu)
+    ifid=${ifid:-42}
+    mtu=${mtu:-1280}
+    tunlink=$(uci -q get network.wan.device)
+    [ -n "$tunlink" ] || tunlink=$(uci -q get network.wan.ifname)
+    [ -n "$tunlink" ] || tunlink=eth0.2
+    if ip link show "$XFRM_IF" >/dev/null 2>&1; then
+        ip link set "$XFRM_IF" mtu "$mtu" up || return 1
+        return 0
+    fi
+    ip link add "$XFRM_IF" type xfrm dev "$tunlink" if_id "$ifid" || return 1
+    ip link set "$XFRM_IF" mtu "$mtu" up || return 1
+}
+
+mango_ikev2_apply() {
+    local enabled mode
+    mkdir -p "$CONF_DIR" /etc/mango-ikev2 /etc/swanctl/conf.d
+    enabled=$(uci -q get mango_ikev2.main.enabled)
+    mode=$(uci -q get mango_ikev2.main.mode)
+    if [ "$enabled" != 1 ]; then
+        mango_ikev2_teardown
+        /usr/libexec/mango-ikev2-fw || :
+        return 0
+    fi
+    if [ "$mode" = direct ]; then
+        swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
+        ip link del "$XFRM_IF" 2>/dev/null || :
+        /usr/libexec/mango-ikev2-fw || return 1
+        return 0
+    fi
+    if [ ! -s /etc/mango-ikev2/cn-cidrs.txt ] && [ "$mode" = split ]; then
+        /usr/libexec/mango-ikev2-cn-update || {
+            echo 'split 模式需要中国 IP 列表，请先更新' >&2
+            return 1
+        }
+    fi
+    /usr/libexec/mango-ikev2-generate swanctl > "$CONF_DIR/swanctl.conf" || return 1
+    ln -sf "$CONF_DIR/swanctl.conf" /etc/swanctl/conf.d/mango.conf
+    mango_ikev2_ensure_xfrm || return 1
+    /etc/init.d/swanctl enable 2>/dev/null || :
+    /etc/init.d/swanctl start 2>/dev/null || /etc/init.d/swanctl restart || return 1
+    swanctl --load-all --noprompt || return 1
+    swanctl --initiate --ike mango --timeout 20 || return 1
+    /usr/libexec/mango-ikev2-fw || return 1
+}

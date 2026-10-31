@@ -1,0 +1,29 @@
+#!/usr/bin/lua
+local uci = require('uci').cursor()
+local model = dofile('/usr/lib/mango-ikev2/model.lua')
+local action = arg[1]
+local p = uci:get_all('mango_ikev2', 'main') or {mode = 'split', enabled = '0'}
+
+if action == 'nft' and p.mode == 'split' then
+    local list = {}
+    local file = io.open('/etc/mango-ikev2/cn-cidrs.txt', 'r')
+    if not file then file = io.open('/etc/mango-rules/cn-cidrs.txt', 'r') end
+    if file then
+        for line in file:lines() do
+            if line ~= '' then list[#list + 1] = line end
+        end
+        file:close()
+    end
+    p.cn_cidrs = list
+end
+
+if action == 'swanctl' then
+    io.write(model.swanctl(p))
+elseif action == 'nft' then
+    io.write(model.nft(p))
+elseif action == 'policy' then
+    local q = model.policy(p)
+    io.write(q.enabled and '1' or '0', ' ', q.mode, ' ', tostring(q.ifid), ' ', tostring(q.mtu), '\n')
+else
+    error('Unknown operation')
+end
