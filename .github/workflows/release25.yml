@@ -14,9 +14,9 @@
     "workflow_dispatch": {
       "inputs": {
         "build_image": {
-          "description": "Also compile the ikev2 sysupgrade image",
+          "description": "Compile the ikev2 sysupgrade image (a push always compiles)",
           "required": false,
-          "default": "false"
+          "default": "true"
         }
       }
     }
@@ -73,9 +73,11 @@
       ]
     },
     "build_ikev2": {
-      "name": "Optional IKEv2 image compile",
-      "if": "github.event_name == 'workflow_dispatch' && github.event.inputs.build_image == 'true'",
-      "needs": ["validate"],
+      "name": "Compile IKEv2 sysupgrade image",
+      "if": "github.event_name == 'push' || github.event.inputs.build_image == 'true'",
+      "needs": [
+        "validate"
+      ],
       "runs-on": "ubuntu-24.04",
       "timeout-minutes": 330,
       "defaults": {
@@ -106,27 +108,28 @@
           "run": "sudo apt-get update\nsudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev libelf-dev python3 python3-setuptools python3-pyelftools rsync swig unzip zlib1g-dev file wget curl zstd xz-utils bzip2 ccache xsltproc lua5.1 nftables qemu-user-static"
         },
         {
-          "name": "Prepare OpenWrt tree for IKEv2 profile",
-          "run": "bash scripts/prepare.sh 2>&1 | tee prepare-ikev2.log"
+          "name": "Prepare OpenWrt tree and production kernel",
+          "run": "set -euo pipefail\nbash scripts/prepare.sh 2>&1 | tee prepare-ikev2.log\npython3 scripts/kernel-profile.py configure --tree openwrt --profile \"$MANGO_KERNEL_PROFILE\"\nmake -C openwrt defconfig 2>&1 | tee diagnostic-defconfig.log\npython3 scripts/build-profile.py ikev2 --verify\ngrep -qx 'CONFIG_TARGET_SQUASHFS_BLOCK_SIZE=1024' openwrt/.config\n! grep -qx 'CONFIG_PACKAGE_dnsmasq=y' openwrt/.config\n! grep -qx 'CONFIG_PACKAGE_xray-core=y' openwrt/.config\ncp openwrt/.config reports/resolved.config\n(cd openwrt && ./scripts/diffconfig.sh) > reports/diffconfig.txt\n"
         },
         {
           "name": "Download and compile",
           "working-directory": "source25/openwrt",
-          "run": "make download -j4 2>&1 | tee ../download-ikev2.log\njobs=$(nproc); [ \"$jobs\" -le 4 ] || jobs=4\nmake -j\"$jobs\" V=s 2>&1 | tee ../build-ikev2.log"
+          "run": "set -euo pipefail\nmake download -j4 2>&1 | tee ../download-ikev2.log\njobs=$(nproc)\n[ \"$jobs\" -le 4 ] || jobs=4\nmem=$(awk '/MemTotal/ {print $2}' /proc/meminfo)\nif [ \"$mem\" -lt 12000000 ] && [ \"$jobs\" -gt 2 ]; then jobs=2; fi\necho \"Build jobs: $jobs; RAM KiB: $mem\"\nmake -j\"$jobs\" V=s 2>&1 | tee ../build-ikev2.log\n"
         },
         {
-          "name": "Check image margin",
-          "run": "python3 - <<'PY'\nfrom pathlib import Path\nimages=list(Path('openwrt/bin/targets/ramips/mt76x8').glob('*sysupgrade.bin'))\nassert len(images)==1, images\nsize=images[0].stat().st_size\n# Approximate usable firmware budget on GL-MT300N-V2; keep >=1 MiB free.\nlimit=16*1024*1024 - 512*1024\nmargin=limit-size\nprint({'image_bytes': size, 'margin_bytes': margin})\nassert margin >= 1024*1024, margin\nroots=list(Path('openwrt/build_dir').glob('target-*/root-ramips'))\nassert len(roots)==1\nassert (roots[0]/'etc/mango-release').read_text().strip()=='25'\nassert (roots[0]/'usr/lib/mango-ikev2/model.lua').is_file()\nassert not (roots[0]/'usr/bin/xray').exists()\nPY"
+          "name": "Check image size, kernel profile and SquashFS",
+          "run": "python3 - <<'PY'\nimport hashlib, json, re, struct\nfrom pathlib import Path\ntext = Path('openwrt/target/linux/ramips/image/mt76x8.mk').read_text()\nblock = re.search(r'define Device/glinet_gl-mt300n-v2\\n(.*?)\\nendef', text, re.S)\nassert block, 'device block missing'\nsize_match = re.search(r'IMAGE_SIZE\\s*:=\\s*(\\d+)k', block.group(1))\nassert size_match, 'IMAGE_SIZE missing'\nlimit = int(size_match.group(1)) * 1024\nimages = list(Path('openwrt/bin/targets/ramips/mt76x8').glob('*glinet_gl-mt300n-v2*squashfs-sysupgrade.bin'))\nassert len(images) == 1, images\ndata = images[0].read_bytes()\nsize = len(data)\nmargin = limit - size\nreport = {\n    'image': images[0].name,\n    'image_bytes': size,\n    'image_limit_bytes': limit,\n    'margin_bytes': margin,\n    'sha256': hashlib.sha256(data).hexdigest(),\n}\nprint(report)\nassert margin >= 1024 * 1024, margin\nmatches = []\nstart = 0\nwhile True:\n    o = data.find(b'hsqs', start)\n    if o < 0:\n        break\n    start = o + 4\n    if o + 96 <= len(data) and struct.unpack_from('<HH', data, o + 28) == (4, 0):\n        matches.append((o, struct.unpack_from('<I', data, o + 12)[0], struct.unpack_from('<H', data, o + 20)[0]))\nassert len(matches) == 1, matches\nassert matches[0][1:] == (1048576, 4), matches\nroots = list(Path('openwrt/build_dir').glob('target-*/root-ramips'))\nassert len(roots) == 1, roots\nroot = roots[0]\nassert (root / 'etc/mango-release').read_text().strip() == '25'\nassert (root / 'etc/mango-kernel-profile').read_text().strip() == 'production'\nassert (root / 'usr/lib/mango-ikev2/model.lua').is_file()\nassert not (root / 'usr/bin/xray').exists()\nreport['superblock'] = matches\nreport['version'] = '25'\nreport['profile'] = 'ikev2'\nreport['kernel_profile'] = 'production'\nPath('reports/firmware-format.json').write_text(json.dumps(report, indent=2) + '\\n')\nPY\n"
         },
         {
           "name": "Upload IKEv2 image",
           "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
           "with": {
             "name": "25-ikev2-image-${{ github.run_number }}",
-            "path": "source25/openwrt/bin/targets/ramips/mt76x8/*sysupgrade.bin\nsource25/prepare-ikev2.log\nsource25/build-ikev2.log\nsource25/reports/",
+            "path": "source25/openwrt/bin/targets/ramips/mt76x8/*sysupgrade.bin\nsource25/prepare-ikev2.log\nsource25/download-ikev2.log\nsource25/build-ikev2.log\nsource25/diagnostic-defconfig.log\nsource25/reports/",
             "retention-days": 14,
             "if-no-files-found": "warn"
-          }
+          },
+          "if": "always()"
         }
       ]
     }

@@ -27,11 +27,16 @@ MT300N-V2 仅 16 MiB 闪存。Release 24 生产镜像约 14.25 MiB，分区�
 
 ## 构建
 
+推送到 `cursor/ikev2-client-split-8c23` 且改动落在 `release25/**` 或 `.github/workflows/release25.yml` 时，GitHub Actions 会编译 IKEv2 sysupgrade.bin。产物在该次运行的 artifact `25-ikev2-image-<run>`，保留 14 天。编译使用生产内核配置，不调用会要求 `/usr/bin/xray` 的内核符号校验。
+
+本地：
+
 ```bash
 python3 release25/prepare.py
 cd source25
-MANGO_BUILD_PROFILE=ikev2 bash scripts/prepare.sh
-# 随后按既有流程 make
+MANGO_BUILD_PROFILE=ikev2 MANGO_KERNEL_PROFILE=production bash scripts/prepare.sh
+python3 scripts/kernel-profile.py configure --tree openwrt --profile "$MANGO_KERNEL_PROFILE"
+make -C openwrt defconfig
 ```
 
 默认 `MANGO_BUILD_PROFILE=standard` 仍产出 Xray 版，行为与 Release 24 一致。
@@ -39,5 +44,5 @@ MANGO_BUILD_PROFILE=ikev2 bash scripts/prepare.sh
 ## 验收范围
 
 - 本仓库含 swanctl/nft 生成与 shell/JS 语法回归。
-- 完整 `ikev2` 镜像需 CI 编译并通过 ≥1 MiB 分区余量门禁后再发布。
+- 镜像门禁读取设备 `IMAGE_SIZE`，要求剩余空间 ≥1 MiB，SquashFS 块大小为 1 MiB，且根文件系统不含 `xray`。
 - 实机连通性、吞吐、与特定 VPN 运营商兼容性不在本提交保证范围内。
