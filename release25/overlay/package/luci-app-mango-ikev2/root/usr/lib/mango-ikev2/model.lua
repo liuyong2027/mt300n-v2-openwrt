@@ -62,53 +62,87 @@ function M.policy(p)
     }
 end
 
-function M.credentials(p)
-    assert(host(p.server), 'Invalid server')
-    local auth = p.auth or 'eap'
+local function checked_secret(label, value)
+    assert(not tostring(value or ''):find('[%z\r\n"]'), 'Invalid ' .. label)
+    return value or ''
+end
+
+function M.credential_set(spec)
+    assert(host(spec.server), 'Invalid server')
+    local auth = spec.auth or 'eap'
     assert(auth == 'eap' or auth == 'psk', 'Unsupported auth')
-    local remote_id = nonempty(p.remote_id) and p.remote_id or p.server
+    local remote_id = nonempty(spec.remote_id) and spec.remote_id or spec.server
     assert(host(remote_id) or nonempty(remote_id), 'Invalid remote ID')
-    local local_id = p.local_id or ''
+    local local_id = spec.local_id or ''
+    local username = checked_secret('username', spec.username)
+    local password = checked_secret('password', spec.password)
+    local psk = checked_secret('PSK', spec.psk)
     if auth == 'eap' then
-        assert(nonempty(p.username), 'Missing EAP username')
-        assert(nonempty(p.password), 'Missing EAP password')
-        if local_id == '' then local_id = p.username end
+        assert(nonempty(username), 'Missing EAP username')
+        assert(nonempty(password), 'Missing EAP password')
+        if local_id == '' then local_id = username end
     else
-        assert(nonempty(p.psk), 'Missing PSK')
+        assert(nonempty(psk), 'Missing PSK')
         if local_id == '' then local_id = '%any' end
     end
-    assert(not tostring(p.username or ''):find('[%z\r\n"]'), 'Invalid username chars')
-    assert(not tostring(p.password or ''):find('[%z\r\n]'), 'Invalid password chars')
-    assert(not tostring(p.psk or ''):find('[%z\r\n]'), 'Invalid PSK chars')
     return {
-        server = p.server,
+        server = spec.server,
         remote_id = remote_id,
         local_id = local_id,
         auth = auth,
-        username = p.username or '',
-        password = p.password or '',
-        psk = p.psk or ''
+        username = username,
+        password = password,
+        psk = psk
     }
+end
+
+function M.credentials(p)
+    return M.credential_set({
+        server = p.server,
+        remote_id = p.remote_id,
+        auth = p.auth,
+        username = p.username,
+        password = p.password,
+        psk = p.psk,
+        local_id = p.local_id
+    })
 end
 
 function M.peers(p)
     local cred = M.credentials(p)
     local peers = {{name = 'mango', server = cred.server, remote_id = cred.remote_id, cred = cred}}
     local backup = p.server2
-    if type(backup) == 'string' and backup ~= '' then
-        assert(host(backup), 'Invalid backup server')
-        assert(backup ~= cred.server, 'Backup server must differ from the primary')
-        local remote2 = (type(p.remote_id2) == 'string' and p.remote_id2 ~= '') and p.remote_id2 or backup
-        assert(host(remote2) or nonempty(remote2), 'Invalid backup remote ID')
-        peers[#peers + 1] = {name = 'mango2', server = backup, remote_id = remote2, cred = cred}
+    if type(backup) ~= 'string' or backup == '' then return peers end
+    assert(host(backup), 'Invalid backup server')
+    assert(backup ~= cred.server, 'Backup server must differ from the primary')
+    local auth = nonempty(p.auth2) and p.auth2 or cred.auth
+    local username, password, psk = cred.username, cred.password, cred.psk
+    if auth == 'eap' and (nonempty(p.username2) or nonempty(p.password2) or auth ~= cred.auth) then
+        username, password = p.username2, p.password2
+    elseif auth == 'psk' and (nonempty(p.psk2) or auth ~= cred.auth) then
+        psk = p.psk2
     end
+    local backup_cred = M.credential_set({
+        server = backup,
+        remote_id = p.remote_id2,
+        auth = auth,
+        username = username,
+        password = password,
+        psk = psk,
+        local_id = p.local_id2
+    })
+    peers[#peers + 1] = {
+        name = 'mango2',
+        server = backup_cred.server,
+        remote_id = backup_cred.remote_id,
+        cred = backup_cred
+    }
     return peers
 end
 
 function M.swanctl(p)
     local q = M.policy(p)
     local peers = M.peers(p)
-    local c = peers[1].cred
     local lines = {'connections {'}
     for _, peer in ipairs(peers) do
         lines[#lines + 1] = '  ' .. peer.name .. ' {'
@@ -118,18 +152,19 @@ function M.swanctl(p)
         lines[#lines + 1] = '    keyingtries = 1'
         lines[#lines + 1] = '    dpd_delay = 30s'
         lines[#lines + 1] = '    dpd_timeout = 30s'
+        local cred = peer.cred
         lines[#lines + 1] = '    local {'
-        lines[#lines + 1] = '      id = "' .. escape(c.local_id) .. '"'
-        if c.auth == 'eap' then
+        lines[#lines + 1] = '      id = "' .. escape(cred.local_id) .. '"'
+        if cred.auth == 'eap' then
             lines[#lines + 1] = '      auth = eap-mschapv2'
-            lines[#lines + 1] = '      eap_id = "' .. escape(c.username) .. '"'
+            lines[#lines + 1] = '      eap_id = "' .. escape(cred.username) .. '"'
         else
             lines[#lines + 1] = '      auth = psk'
         end
         lines[#lines + 1] = '    }'
         lines[#lines + 1] = '    remote {'
         lines[#lines + 1] = '      id = "' .. escape(peer.remote_id) .. '"'
-        if c.auth == 'eap' then
+        if cred.auth == 'eap' then
             lines[#lines + 1] = '      auth = pubkey'
         else
             lines[#lines + 1] = '      auth = psk'
@@ -151,16 +186,32 @@ function M.swanctl(p)
     end
     lines[#lines + 1] = '}'
     lines[#lines + 1] = 'secrets {'
-    if c.auth == 'eap' then
-        lines[#lines + 1] = '  eap-mango {'
-        lines[#lines + 1] = '    id = "' .. escape(c.username) .. '"'
-        lines[#lines + 1] = '    secret = "' .. escape(c.password) .. '"'
-        lines[#lines + 1] = '  }'
-    else
-        lines[#lines + 1] = '  ike-mango {'
-        lines[#lines + 1] = '    id = "' .. escape(c.local_id) .. '"'
-        lines[#lines + 1] = '    secret = "' .. escape(c.psk) .. '"'
-        lines[#lines + 1] = '  }'
+    local seen = {}
+    for _, peer in ipairs(peers) do
+        local cred = peer.cred
+        if cred.auth == 'eap' then
+            local previous = seen['eap:' .. cred.username]
+            if previous == nil then
+                seen['eap:' .. cred.username] = cred.password
+                lines[#lines + 1] = '  eap-' .. peer.name .. ' {'
+                lines[#lines + 1] = '    id = "' .. escape(cred.username) .. '"'
+                lines[#lines + 1] = '    secret = "' .. escape(cred.password) .. '"'
+                lines[#lines + 1] = '  }'
+            else
+                assert(previous == cred.password, 'Same EAP username needs the same password')
+            end
+        else
+            local previous = seen['psk:' .. cred.local_id]
+            if previous == nil then
+                seen['psk:' .. cred.local_id] = cred.psk
+                lines[#lines + 1] = '  ike-' .. peer.name .. ' {'
+                lines[#lines + 1] = '    id = "' .. escape(cred.local_id) .. '"'
+                lines[#lines + 1] = '    secret = "' .. escape(cred.psk) .. '"'
+                lines[#lines + 1] = '  }'
+            else
+                assert(previous == cred.psk, 'Same local ID needs the same PSK')
+            end
+        end
     end
     lines[#lines + 1] = '}'
     return table.concat(lines, '\n') .. '\n'

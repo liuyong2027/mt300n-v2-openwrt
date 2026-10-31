@@ -32,12 +32,33 @@ return view.extend({
         o.placeholder = 'vpn.example.com';
 
         o = s.option(form.Value, 'server2', '备用服务器',
-            '留空则只重连主服务器。主服务器连续两次拨号失败后改连备用；备用同样失败两次后再切回主服务器。两条连接共用下面的账号或密钥。');
+            '留空则只重连主服务器。主服务器连续两次拨号失败后改连备用；备用同样失败两次后再切回主服务器。');
         o.datatype = 'host';
         o.rmempty = true;
 
         o = s.option(form.Value, 'remote_id2', '备用远端 ID', '可留空，默认与备用服务器地址相同');
         o.rmempty = true;
+
+        o = s.option(form.ListValue, 'auth2', '备用认证', '留空则使用主服务器的认证方式，以及下面的用户名、密码或密钥。');
+        o.value('', '与主服务器相同');
+        o.value('eap', '另一套 EAP 用户名密码');
+        o.value('psk', '另一套预共享密钥');
+        o.rmempty = true;
+
+        o = s.option(form.Value, 'username2', '备用用户名');
+        o.depends('auth2', 'eap');
+
+        o = s.option(form.Value, 'password2', '备用密码');
+        o.password = true;
+        o.depends('auth2', 'eap');
+
+        o = s.option(form.Value, 'psk2', '备用预共享密钥');
+        o.password = true;
+        o.depends('auth2', 'psk');
+
+        o = s.option(form.Value, 'local_id2', '备用本端 ID', '留空时，EAP 用备用用户名，PSK 用 %any');
+        o.depends('auth2', 'eap');
+        o.depends('auth2', 'psk');
 
         o = s.option(form.ListValue, 'auth', '认证方式');
         o.value('eap', 'EAP-MSCHAPv2（用户名密码）');

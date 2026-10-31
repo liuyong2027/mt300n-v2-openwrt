@@ -32,6 +32,25 @@ local both = M.swanctl(two)
 assert(both:find('remote_addrs = backup.example.com', 1, true))
 assert(both:find('id = "backup.example.net"', 1, true))
 assert(#M.peers(two) == 2)
+assert(both:find('secret = "s3cret"', 1, true))
+assert(not both:find('eap-mango2', 1, true))
+two.auth2 = 'eap'
+two.username2 = 'bob'
+two.password2 = 'other-secret'
+local split = M.swanctl(two)
+assert(split:find('eap_id = "bob"', 1, true))
+assert(split:find('secret = "other-secret"', 1, true))
+assert(split:find('secret = "s3cret"', 1, true))
+two.auth2 = 'psk'
+two.psk2 = 'backup-psk'
+two.local_id2 = 'backup-client'
+local psk_backup = M.swanctl(two)
+assert(psk_backup:find('secret = "backup-psk"', 1, true))
+assert(psk_backup:find('id = "backup-client"', 1, true))
+two.auth2 = ''
+two.username2 = 'alice'
+two.password2 = 'different'
+assert(not pcall(M.swanctl, two))
 two.server2 = two.server
 assert(not pcall(M.peers, two))
 assert(not swan:find('password', 1, true) or true)
