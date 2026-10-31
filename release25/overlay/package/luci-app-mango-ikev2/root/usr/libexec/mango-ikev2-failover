@@ -1,0 +1,68 @@
+#!/bin/sh
+# One dial attempt for the active IKEv2 server.
+# After two failed attempts, switch to the other configured server.
+set -eu
+STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
+enabled=$(uci -q get mango_ikev2.main.enabled || true)
+mode=$(uci -q get mango_ikev2.main.mode || true)
+[ "$enabled" = 1 ] || exit 0
+[ -n "$mode" ] && [ "$mode" != direct ] || exit 0
+
+server2=$(uci -q get mango_ikev2.main.server2 || true)
+mkdir -p "$STATE"
+active=$(cat "$STATE/active" 2>/dev/null || echo mango)
+case "$active" in
+    mango|mango2) ;;
+    *) active=mango ;;
+esac
+if [ "$active" = mango2 ] && [ -z "$server2" ]; then
+    active=mango
+fi
+
+sas=$(swanctl --list-sas 2>/dev/null || true)
+established() {
+    printf '%s\n' "$sas" | grep -q "^$1: .*ESTABLISHED"
+}
+
+if established "$active"; then
+    echo 0 > "$STATE/fail-count"
+    echo "$active" > "$STATE/active"
+    other=mango2
+    [ "$active" = mango2 ] && other=mango
+    if established "$other"; then
+        swanctl --terminate --ike "$other" --timeout 5 >/dev/null 2>&1 || true
+    fi
+    exit 0
+fi
+
+if swanctl --initiate --ike "$active" --timeout 15 >/dev/null 2>&1; then
+    echo 0 > "$STATE/fail-count"
+    echo "$active" > "$STATE/active"
+    exit 0
+fi
+
+count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
+case "$count" in
+    ''|*[!0-9]*) count=0 ;;
+esac
+count=$((count + 1))
+echo "$count" > "$STATE/fail-count"
+echo "$active" > "$STATE/active"
+
+# Two strikes on this server, then use the other one. Without a backup, keep retrying.
+if [ "$count" -ge 2 ] && [ -n "$server2" ]; then
+    if [ "$active" = mango ]; then
+        active=mango2
+    else
+        active=mango
+    fi
+    echo "$active" > "$STATE/active"
+    swanctl --terminate --ike mango --timeout 3 >/dev/null 2>&1 || true
+    swanctl --terminate --ike mango2 --timeout 3 >/dev/null 2>&1 || true
+    if swanctl --initiate --ike "$active" --timeout 15 >/dev/null 2>&1; then
+        echo 0 > "$STATE/fail-count"
+    else
+        echo 1 > "$STATE/fail-count"
+    fi
+fi
+exit 0

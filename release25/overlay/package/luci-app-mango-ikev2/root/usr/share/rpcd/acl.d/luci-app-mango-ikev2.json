@@ -1,0 +1,7 @@
+{
+  "luci-app-mango-ikev2": {
+    "description": "Configure Mango IKEv2 client and China split routing",
+    "read": {"uci": ["mango_ikev2"]},
+    "write": {"uci": ["mango_ikev2"]}
+  }
+}

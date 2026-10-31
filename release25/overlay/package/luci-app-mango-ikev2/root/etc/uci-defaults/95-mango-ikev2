@@ -1,0 +1,28 @@
+#!/bin/sh
+uci -q batch <<'EOF'
+set firewall.mango_ikev2=include
+set firewall.mango_ikev2.type='script'
+set firewall.mango_ikev2.path='/usr/libexec/mango-ikev2-fw'
+set firewall.mango_ikev2.fw4_compatible='1'
+set firewall.mango_ikev2_mark=rule
+set firewall.mango_ikev2_mark.name='Mango IKEv2 marked input'
+set firewall.mango_ikev2_mark.src='*'
+set firewall.mango_ikev2_mark.proto='tcp udp'
+set firewall.mango_ikev2_mark.mark='0x101/0xffffffff'
+set firewall.mango_ikev2_mark.family='ipv4'
+set firewall.mango_ikev2_mark.target='ACCEPT'
+commit firewall
+EOF
+if ! uci -q show ucitrack | grep -q "init='mango_ikev2'"; then
+    idx=$(uci add ucitrack mango_ikev2)
+    uci set "ucitrack.$idx.init=mango_ikev2"
+    uci commit ucitrack
+fi
+
+# Prefer IKEv2 client service on this image; Xray package is absent in the ikev2 profile.
+/etc/init.d/xray stop 2>/dev/null || :
+/etc/init.d/xray disable 2>/dev/null || :
+/etc/init.d/mango_proxy stop 2>/dev/null || :
+/etc/init.d/mango_proxy disable 2>/dev/null || :
+/etc/init.d/mango_ikev2 enable
+exit 0

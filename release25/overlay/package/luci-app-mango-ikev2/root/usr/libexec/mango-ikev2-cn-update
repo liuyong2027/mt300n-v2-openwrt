@@ -1,0 +1,33 @@
+#!/bin/sh
+# Refresh China IPv4 CIDRs used by split mode. HTTPS only; no credentials on argv.
+set -eu
+umask 077
+mkdir -p /etc/mango-ikev2 /var/etc/mango-ikev2 /var/lock
+exec 8>/var/lock/mango-ikev2-cn.lock
+flock -n 8 || { echo '另一个中国 IP 更新正在运行'; exit 75; }
+
+URL='https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt'
+tmp=$(mktemp /var/etc/mango-ikev2/cn.XXXXXX) || exit 1
+cfg=$(mktemp /var/etc/mango-ikev2/curl.XXXXXX) || { rm -f "$tmp"; exit 1; }
+trap 'rm -f "$tmp" "$cfg"' EXIT
+
+printf 'url = "%s"\nproxy = ""\nnoproxy = "*"\n' "$URL" > "$cfg"
+curl -q -4 --globoff --config "$cfg" --silent --proto '=https' \
+    --connect-timeout 8 --max-time 45 --max-filesize 1048576 \
+    --output "$tmp" || { echo '下载中国 IP 列表失败'; exit 1; }
+
+# Keep only IPv4 CIDR lines.
+awk '
+  /^([0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}$/ {
+    n=split($0,a,"[/.")
+    if (a[1]<=255 && a[2]<=255 && a[3]<=255 && a[4]<=255 && a[5]<=32) print $0
+  }
+' "$tmp" > "$tmp.valid"
+count=$(wc -l < "$tmp.valid")
+[ "$count" -ge 1000 ] || { echo "中国 IP 列表过短（$count）"; exit 1; }
+mv "$tmp.valid" /etc/mango-ikev2/cn-cidrs.txt
+echo "已写入中国 IP CIDR：$count"
+# Refresh firewall if the service is already managing split mode.
+if [ "$(uci -q get mango_ikev2.main.enabled)" = 1 ]; then
+    /usr/libexec/mango-ikev2-fw || true
+fi
