@@ -91,45 +91,64 @@ function M.credentials(p)
     }
 end
 
+function M.peers(p)
+    local cred = M.credentials(p)
+    local peers = {{name = 'mango', server = cred.server, remote_id = cred.remote_id, cred = cred}}
+    local backup = p.server2
+    if type(backup) == 'string' and backup ~= '' then
+        assert(host(backup), 'Invalid backup server')
+        assert(backup ~= cred.server, 'Backup server must differ from the primary')
+        local remote2 = (type(p.remote_id2) == 'string' and p.remote_id2 ~= '') and p.remote_id2 or backup
+        assert(host(remote2) or nonempty(remote2), 'Invalid backup remote ID')
+        peers[#peers + 1] = {name = 'mango2', server = backup, remote_id = remote2, cred = cred}
+    end
+    return peers
+end
+
 function M.swanctl(p)
     local q = M.policy(p)
-    local c = M.credentials(p)
-    local lines = {
-        'connections {',
-        '  mango {',
-        '    version = 2',
-        '    remote_addrs = ' .. escape(c.server),
-        '    vips = 0.0.0.0',
-        '    local {',
-        '      id = "' .. escape(c.local_id) .. '"'
-    }
-    if c.auth == 'eap' then
-        lines[#lines + 1] = '      auth = eap-mschapv2'
-        lines[#lines + 1] = '      eap_id = "' .. escape(c.username) .. '"'
-    else
-        lines[#lines + 1] = '      auth = psk'
+    local peers = M.peers(p)
+    local c = peers[1].cred
+    local lines = {'connections {'}
+    for _, peer in ipairs(peers) do
+        lines[#lines + 1] = '  ' .. peer.name .. ' {'
+        lines[#lines + 1] = '    version = 2'
+        lines[#lines + 1] = '    remote_addrs = ' .. escape(peer.server)
+        lines[#lines + 1] = '    vips = 0.0.0.0'
+        lines[#lines + 1] = '    keyingtries = 1'
+        lines[#lines + 1] = '    dpd_delay = 30s'
+        lines[#lines + 1] = '    dpd_timeout = 30s'
+        lines[#lines + 1] = '    local {'
+        lines[#lines + 1] = '      id = "' .. escape(c.local_id) .. '"'
+        if c.auth == 'eap' then
+            lines[#lines + 1] = '      auth = eap-mschapv2'
+            lines[#lines + 1] = '      eap_id = "' .. escape(c.username) .. '"'
+        else
+            lines[#lines + 1] = '      auth = psk'
+        end
+        lines[#lines + 1] = '    }'
+        lines[#lines + 1] = '    remote {'
+        lines[#lines + 1] = '      id = "' .. escape(peer.remote_id) .. '"'
+        if c.auth == 'eap' then
+            lines[#lines + 1] = '      auth = pubkey'
+        else
+            lines[#lines + 1] = '      auth = psk'
+        end
+        lines[#lines + 1] = '    }'
+        lines[#lines + 1] = '    children {'
+        lines[#lines + 1] = '      ' .. peer.name .. ' {'
+        lines[#lines + 1] = '        local_ts = 0.0.0.0/0'
+        lines[#lines + 1] = '        remote_ts = 0.0.0.0/0'
+        -- The watcher counts failures and switches servers. Charon must not redial by itself.
+        lines[#lines + 1] = '        start_action = none'
+        lines[#lines + 1] = '        close_action = none'
+        lines[#lines + 1] = '        dpd_action = clear'
+        lines[#lines + 1] = '        if_id_in = ' .. tostring(q.ifid)
+        lines[#lines + 1] = '        if_id_out = ' .. tostring(q.ifid)
+        lines[#lines + 1] = '      }'
+        lines[#lines + 1] = '    }'
+        lines[#lines + 1] = '  }'
     end
-    lines[#lines + 1] = '    }'
-    lines[#lines + 1] = '    remote {'
-    lines[#lines + 1] = '      id = "' .. escape(c.remote_id) .. '"'
-    if c.auth == 'eap' then
-        lines[#lines + 1] = '      auth = pubkey'
-    else
-        lines[#lines + 1] = '      auth = psk'
-    end
-    lines[#lines + 1] = '    }'
-    lines[#lines + 1] = '    children {'
-    lines[#lines + 1] = '      mango {'
-    lines[#lines + 1] = '        local_ts = 0.0.0.0/0'
-    lines[#lines + 1] = '        remote_ts = 0.0.0.0/0'
-    lines[#lines + 1] = '        start_action = start'
-    lines[#lines + 1] = '        close_action = start'
-    lines[#lines + 1] = '        dpd_action = start'
-    lines[#lines + 1] = '        if_id_in = ' .. tostring(q.ifid)
-    lines[#lines + 1] = '        if_id_out = ' .. tostring(q.ifid)
-    lines[#lines + 1] = '      }'
-    lines[#lines + 1] = '    }'
-    lines[#lines + 1] = '  }'
     lines[#lines + 1] = '}'
     lines[#lines + 1] = 'secrets {'
     if c.auth == 'eap' then

@@ -3,6 +3,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$root"
 lua5.1 tests/test_ikev2_model.lua
+sh tests/test_ikev2_failover.sh
 # Shell syntax for installed helpers.
 for f in package/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-* \
          package/luci-app-mango-ikev2/root/etc/init.d/mango_ikev2 \

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Recheck the active IKEv2 server every 30 seconds.
+trap 'exit 0' TERM INT
+while true; do
+    sleep 30 &
+    wait $! || exit 0
+    /usr/libexec/mango-ikev2-failover || true
+done

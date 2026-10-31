@@ -88,8 +88,23 @@ mango_ikev2_dns_off() {
     /etc/init.d/dnsmasq restart
 }
 
+mango_ikev2_watch_stop() {
+    if [ -f /var/run/mango-ikev2-watch.pid ]; then
+        kill "$(cat /var/run/mango-ikev2-watch.pid)" 2>/dev/null || :
+        rm -f /var/run/mango-ikev2-watch.pid
+    fi
+}
+
+mango_ikev2_watch_start() {
+    mango_ikev2_watch_stop
+    /usr/libexec/mango-ikev2-watch >/dev/null 2>&1 &
+    echo $! > /var/run/mango-ikev2-watch.pid
+}
+
 mango_ikev2_teardown() {
+    mango_ikev2_watch_stop
     swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
+    swanctl --terminate --ike mango2 --timeout 3 2>/dev/null || :
     swanctl --unload-all 2>/dev/null || swanctl --unload-conns 2>/dev/null || :
     ip link del "$XFRM_IF" 2>/dev/null || :
     ip -4 rule del priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || :
@@ -129,7 +144,9 @@ mango_ikev2_apply() {
         return 0
     fi
     if [ "$mode" = direct ]; then
+        mango_ikev2_watch_stop
         swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
+        swanctl --terminate --ike mango2 --timeout 3 2>/dev/null || :
         ip link del "$XFRM_IF" 2>/dev/null || :
         mango_ikev2_dns_off || return 1
         /usr/libexec/mango-ikev2-fw || return 1
@@ -153,8 +170,11 @@ mango_ikev2_apply() {
     /etc/init.d/swanctl enable 2>/dev/null || :
     /etc/init.d/swanctl start 2>/dev/null || /etc/init.d/swanctl restart || return 1
     swanctl --load-all --noprompt || return 1
-    swanctl --initiate --ike mango --timeout 20 || return 1
     # Install the nft set before dnsmasq starts adding GFW answers into it.
     /usr/libexec/mango-ikev2-fw || return 1
     mango_ikev2_dns_on || return 1
+    echo mango > "$CONF_DIR/active"
+    echo 0 > "$CONF_DIR/fail-count"
+    /usr/libexec/mango-ikev2-failover || true
+    mango_ikev2_watch_start
 }

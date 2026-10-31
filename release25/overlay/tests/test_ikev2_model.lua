@@ -19,7 +19,21 @@ assert(swan:find('version = 2', 1, true))
 assert(swan:find('auth = eap%-mschapv2'))
 assert(swan:find('remote_addrs = vpn%.example%.com') or swan:find('remote_addrs = vpn.example.com', 1, true))
 assert(swan:find('if_id_in = 42', 1, true))
+assert(swan:find('dpd_delay = 30s', 1, true))
+assert(swan:find('keyingtries = 1', 1, true))
+assert(swan:find('start_action = none', 1, true))
+assert(not swan:find('mango2', 1, true))
 assert(swan:find('secret = "s3cret"', 1, true))
+local two = {}
+for k, v in pairs(eap) do two[k] = v end
+two.server2 = 'backup.example.com'
+two.remote_id2 = 'backup.example.net'
+local both = M.swanctl(two)
+assert(both:find('remote_addrs = backup.example.com', 1, true))
+assert(both:find('id = "backup.example.net"', 1, true))
+assert(#M.peers(two) == 2)
+two.server2 = two.server
+assert(not pcall(M.peers, two))
 assert(not swan:find('password', 1, true) or true)
 
 local nft = M.nft(eap)

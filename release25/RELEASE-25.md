@@ -16,7 +16,8 @@ MT300N-V2 仅 16 MiB 闪存。Release 24 生产镜像约 14.25 MiB，分区�
 ## IKEv2 镜像能力
 
 - LuCI：`服务 → IKEv2 分流`
-- 认证：EAP-MSCHAPv2 或 PSK
+- 认证：EAP-MSCHAPv2 或 PSK。LuCI 可填主服务器和备用服务器，共用同一套账号或密钥。
+- 重连：约每 30 秒检查一次。当前服务器连续两次拨号失败后改连另一台；备用同样失败两次后再切回主服务器。未填备用时继续重试主服务器。对端无声断开由 30 秒 DPD 发现。
 - 流量：XFRM 接口 `xfrm-mango` + fwmark `0x101` 策略路由
 - `split`：中国 IPv4 CIDR 直连，其余进隧道。上游 DNS 固定为隧道内的 `1.1.1.1` / `8.8.8.8`，局域网 53 端口重定向到本机 dnsmasq，避免国内 DNS 污染。
 - `gfw`：仅 GFW 列表中的域名走隧道 DNS，解析得到的 IPv4 由 dnsmasq nftset 写入 `gfw4` 后进隧道；其余域名用 `223.5.5.5` / `119.29.29.29` 并直连。列表来自 gfwlist，`/usr/libexec/mango-ikev2-gfw-update` 写入 `/etc/mango-ikev2/gfw-domains.txt`。

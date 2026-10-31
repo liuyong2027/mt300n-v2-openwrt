@@ -31,6 +31,14 @@ return view.extend({
         o = s.option(form.Value, 'remote_id', '远端 ID', '可留空，默认与服务器地址相同');
         o.placeholder = 'vpn.example.com';
 
+        o = s.option(form.Value, 'server2', '备用服务器',
+            '留空则只重连主服务器。主服务器连续两次拨号失败后改连备用；备用同样失败两次后再切回主服务器。两条连接共用下面的账号或密钥。');
+        o.datatype = 'host';
+        o.rmempty = true;
+
+        o = s.option(form.Value, 'remote_id2', '备用远端 ID', '可留空，默认与备用服务器地址相同');
+        o.rmempty = true;
+
         o = s.option(form.ListValue, 'auth', '认证方式');
         o.value('eap', 'EAP-MSCHAPv2（用户名密码）');
         o.value('psk', '预共享密钥 PSK');
