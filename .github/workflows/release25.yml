@@ -58,7 +58,7 @@
         },
         {
           "name": "Run IKEv2 model and syntax checks",
-          "run": "sh tests/test_ikev2_model.sh\nlua5.1 -e 'local M=dofile(\"package/luci-app-mango-ikev2/root/usr/lib/mango-ikev2/model.lua\"); local p={enabled=\"1\",mode=\"split\",server=\"vpn.example.com\",auth=\"eap\",username=\"u\",password=\"p\",cn_cidrs={\"1.0.0.0/24\"}}; io.open(\"/tmp/ikev2.nft\",\"w\"):write(M.nft(p)):close()'\nnft -c -f /tmp/ikev2.nft\ntest -f config/mt300n-v2-ikev2.config\ngrep -q 'luci-app-mango-ikev2' config/mt300n-v2-ikev2.config\ngrep -q 'CONFIG_PACKAGE_xray-core is not set' config/mt300n-v2-ikev2.config\ntest \"$(cat files/etc/mango-release)\" = 25"
+          "run": "sh tests/test_ikev2_model.sh\nlua5.1 -e 'local M=dofile(\"package/luci-app-mango-ikev2/root/usr/lib/mango-ikev2/model.lua\"); local p={enabled=\"1\",mode=\"split\",server=\"vpn.example.com\",auth=\"eap\",username=\"u\",password=\"p\",cn_cidrs={\"1.0.0.0/24\"}}; local f=assert(io.open(\"/tmp/ikev2.nft\",\"w\")); f:write(M.nft(p)); f:close()'\nsudo nft -c -f /tmp/ikev2.nft\ntest -f config/mt300n-v2-ikev2.config\ngrep -q 'luci-app-mango-ikev2' config/mt300n-v2-ikev2.config\ngrep -q 'CONFIG_PACKAGE_xray-core is not set' config/mt300n-v2-ikev2.config\ntest \"$(cat files/etc/mango-release)\" = 25"
         },
         {
           "name": "Upload prepared source recipe",
