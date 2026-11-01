@@ -27,6 +27,11 @@ set firewall.zt_to_wan=forwarding
 set firewall.zt_to_wan.src='mangozt'
 set firewall.zt_to_wan.dest='wan'
 
+delete firewall.zt_to_lan
+set firewall.zt_to_lan=forwarding
+set firewall.zt_to_lan.src='mangozt'
+set firewall.zt_to_lan.dest='lan'
+
 # Ensure lan -> mangozt exists once.
 EOF
 
@@ -47,7 +52,10 @@ set firewall.allow_zt_udp.target='ACCEPT'
 commit firewall
 EOF
 
-if ! uci -q show ucitrack | grep -q "init='mango_ikev2'"; then
+# LuCI 25 tracks service reloads from /usr/share/ucitrack/*.json (shipped
+# with this package). Keep a legacy /etc/config/ucitrack entry when that
+# config exists, so an older LuCI still reloads after Save & Apply.
+if [ -f /etc/config/ucitrack ] && ! uci -q show ucitrack | grep -q "init='mango_ikev2'"; then
 	idx=$(uci add ucitrack mango_ikev2)
 	uci set "ucitrack.$idx.init=mango_ikev2"
 	uci commit ucitrack

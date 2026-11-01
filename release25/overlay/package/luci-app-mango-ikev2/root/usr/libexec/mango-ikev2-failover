@@ -59,6 +59,16 @@ established() {
 	printf '%s\n' "$sas" | grep -A8 "^$1: .*ESTABLISHED" | grep -q INSTALLED
 }
 
+# strongSwan installs the NordVPN address on the WAN interface. Masquerade
+# onto xfrm-mango needs that address on the tunnel device itself.
+pin_vip() {
+	local vip="$1"
+	[ -n "$vip" ] || return 0
+	ip link show xfrm-mango >/dev/null 2>&1 || return 0
+	ip -4 addr show dev xfrm-mango 2>/dev/null | grep -q "$vip" && return 0
+	ip addr replace "$vip/32" dev xfrm-mango || true
+}
+
 if established "$active"; then
 	echo 0 > "$STATE/fail-count"
 	echo "$active" > "$STATE/active"
@@ -73,6 +83,8 @@ if established "$active"; then
 		log_event ok "$active" "connected vip=${vip:-?}"
 		echo "$active" > "$STATE/logged-up"
 	fi
+	vip=$(printf '%s\n' "$sas" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	pin_vip "$vip"
 	exit 0
 fi
 
@@ -83,6 +95,7 @@ if swanctl --initiate --ike "$active" --child "$active" --timeout 15 >/dev/null 
 	echo "$active" > "$STATE/active"
 	echo "$active" > "$STATE/logged-up"
 	vip=$(swanctl --list-sas 2>/dev/null | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	pin_vip "$vip"
 	log_event ok "$active" "connected vip=${vip:-?}"
 	exit 0
 fi
@@ -108,6 +121,7 @@ if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
 		echo 0 > "$STATE/fail-count"
 		echo "$active" > "$STATE/logged-up"
 		vip=$(swanctl --list-sas 2>/dev/null | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+		pin_vip "$vip"
 		log_event ok "$active" "切换后连通 vip=${vip:-?}"
 	else
 		echo 1 > "$STATE/fail-count"

@@ -115,17 +115,6 @@ return view.extend({
 			'id': 'mango-ca-result',
 			'style': 'display:none;margin-top:10px;white-space:pre-wrap;max-height:160px;overflow:auto'
 		});
-		var fileInput = E('input', {
-			'type': 'file',
-			'accept': '.pem,.crt,.cer,application/x-pem-file,application/x-x509-ca-cert'
-		});
-		var pasteBox = E('textarea', {
-			'id': 'mango-ca-paste',
-			'rows': 6,
-			'style': 'width:100%;font-family:monospace',
-			'placeholder': '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----'
-		});
-
 		var formatInfo = function(n) {
 			n = n || {};
 			var lines = [
@@ -179,15 +168,11 @@ return view.extend({
 			'class': 'cbi-button cbi-button-apply',
 			'click': function(ev) {
 				var btn = ev.currentTarget;
-				var file = fileInput.files && fileInput.files[0];
-				if (!file) {
-					ui.addNotification(null, E('p', {}, ['请先选择 PEM/CRT 文件']), 'warning');
-					return;
-				}
 				btn.disabled = true;
 				result.style.display = 'block';
-				result.textContent = '正在上传…';
-				return ui.uploadFile('/tmp/mango-ikev2-upload-ca.pem', file).then(function() {
+				result.textContent = '请选择 PEM/CRT 文件…';
+				// ui.uploadFile always shows LuCI's own picker; do not add a second page-level file input.
+				return ui.uploadFile('/tmp/mango-ikev2-upload-ca.pem').then(function() {
 					return runInstall(btn, '/tmp/mango-ikev2-upload-ca.pem');
 				}).catch(function(err) {
 					result.textContent = '上传失败：' + (err && err.message ? err.message : err);
@@ -196,28 +181,6 @@ return view.extend({
 				});
 			}
 		}, ['上传并安装']);
-
-		var btnPaste = E('button', {
-			'class': 'cbi-button cbi-button-apply',
-			'click': function(ev) {
-				var btn = ev.currentTarget;
-				var pem = String(pasteBox.value || '').trim();
-				if (pem.indexOf('BEGIN CERTIFICATE') < 0) {
-					ui.addNotification(null, E('p', {}, ['请粘贴完整 PEM 证书内容']), 'warning');
-					return;
-				}
-				btn.disabled = true;
-				result.style.display = 'block';
-				result.textContent = '正在写入…';
-				return fs.write('/tmp/mango-ikev2-upload-ca.pem', pem + '\n').then(function() {
-					return runInstall(btn, '/tmp/mango-ikev2-upload-ca.pem');
-				}).catch(function(err) {
-					result.textContent = '写入失败：' + (err && err.message ? err.message : err);
-					ui.addNotification(null, E('p', {}, ['写入失败']), 'danger');
-					btn.disabled = false;
-				});
-			}
-		}, ['粘贴并安装']);
 
 		var btnRefresh = E('button', {
 			'class': 'cbi-button',
@@ -231,19 +194,24 @@ return view.extend({
 		return E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, ['根证书']),
 			E('div', { 'class': 'cbi-section-descr' }, [
-				'NordVPN IKEv2 需要根 CA（PEM）。安装后写入 swanctl 目录，并同步一份到 ipsec.d 兼容路径；随后尝试 reload strongSwan 凭据。'
+				'NordVPN IKEv2 需要根 CA。支持 PEM 文本，或 NordVPN 常见的 DER/CRT 二进制；安装后写入 swanctl，并同步到 ipsec.d，随后尝试 reload strongSwan 凭据。'
 			]),
 			info,
 			E('div', { 'style': 'margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, [
-				fileInput, btnUpload, btnRefresh
-			]),
-			E('div', { 'style': 'margin-top:12px' }, [
-				E('label', {}, ['或粘贴 PEM 内容：']),
-				pasteBox,
-				E('div', { 'style': 'margin-top:8px' }, [btnPaste])
+				btnUpload, btnRefresh
 			]),
 			result
 		]);
+	},
+
+	handleSaveApply: function(ev, mode) {
+		// This LuCI build does not reload mango_ikev2 from ucitrack.
+		// Commit first, then reload so the saved mode actually takes effect.
+		return this.handleSave(ev).then(function() {
+			return ui.changes.apply(mode == '0');
+		}).then(function() {
+			return fs.exec('/etc/init.d/mango_ikev2', ['reload']);
+		});
 	},
 
 	render: function(data) {

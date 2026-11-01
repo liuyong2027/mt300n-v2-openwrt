@@ -21,6 +21,7 @@
         "/usr/libexec/mango-ikev2-cn-update": [ "exec" ],
         "/usr/libexec/mango-ikev2-gfw-update": [ "exec" ],
         "/usr/libexec/mango-ikev2-ca-install": [ "exec" ],
+        "/etc/init.d/mango_ikev2": [ "exec" ],
         "/tmp/mango-ikev2-upload-ca.pem": [ "write" ]
       },
       "ubus": {

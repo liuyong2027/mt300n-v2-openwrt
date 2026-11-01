@@ -1,7 +1,7 @@
 #!/bin/sh
-# Install IKEv2 root CA PEM into swanctl + legacy ipsec.d paths.
-# usage: mango-ikev2-ca-install [pem-file]
-#        mango-ikev2-ca-install   # read PEM from stdin
+# Install IKEv2 root CA (PEM or DER) into swanctl + legacy ipsec.d paths.
+# usage: mango-ikev2-ca-install [cert-file]
+#        mango-ikev2-ca-install   # read cert from stdin
 set -eu
 
 CA_SWAN_DIR=/etc/swanctl/x509ca
@@ -10,8 +10,9 @@ CA_NAME=nordvpn-root-ca.pem
 CA_SWAN=$CA_SWAN_DIR/$CA_NAME
 CA_IPSEC=$CA_IPSEC_DIR/$CA_NAME
 TMP=/tmp/mango-ikev2-ca-$$.pem
+TMP2=/tmp/mango-ikev2-ca-$$.conv
 
-cleanup() { rm -f "$TMP"; }
+cleanup() { rm -f "$TMP" "$TMP2"; }
 trap cleanup EXIT INT TERM
 
 mkdir -p "$CA_SWAN_DIR" "$CA_IPSEC_DIR"
@@ -24,8 +25,24 @@ else
 	cat > "$TMP"
 fi
 
+# Accept PEM text, or DER binary (NordVPN often ships RootCA.der / .crt as DER).
+if grep -q 'BEGIN CERTIFICATE' "$TMP"; then
+	:
+elif command -v openssl >/dev/null 2>&1 && \
+	openssl x509 -inform DER -in "$TMP" -out "$TMP2" 2>/dev/null; then
+	mv "$TMP2" "$TMP"
+else
+	# No openssl/od on many OpenWrt images; treat non-PEM as DER and wrap.
+	{
+		echo '-----BEGIN CERTIFICATE-----'
+		base64 "$TMP"
+		echo '-----END CERTIFICATE-----'
+	} > "$TMP2"
+	mv "$TMP2" "$TMP"
+fi
+
 grep -q 'BEGIN CERTIFICATE' "$TMP" || {
-	echo '不是有效的 PEM 证书（缺少 BEGIN CERTIFICATE）' >&2
+	echo '证书转换后仍不是有效 PEM' >&2
 	exit 1
 }
 
