@@ -65,10 +65,18 @@ assert(nft:find('th dport 53 return', 1, true))
 assert(nft:find('oifname "xfrm-mango" masquerade', 1, true))
 assert(not nft:find('tproxy', 1, true))
 local dns = M.dnsmasq(eap)
-assert(dns:find('server=1.1.1.1', 1, true))
-assert(dns:find('server=8.8.8.8', 1, true))
 assert(dns:find('no-resolv', 1, true))
-assert(not dns:find('server=223.5.5.5\n', 1, true))
+assert(dns:find('filter-AAAA', 1, true))
+-- split: domestic default DNS; tunnel DNS only for optional GFW domain overrides
+assert(dns:find('server=223.5.5.5', 1, true))
+assert(dns:find('server=119.29.29.29', 1, true))
+assert(not dns:find('server=1.1.1.1\n', 1, true))
+assert(not dns:find('server=8.8.8.8\n', 1, true))
+eap.gfw_domains = {'+blocked.example'}
+local dns_gfwish = M.dnsmasq(eap)
+assert(dns_gfwish:find('server=/blocked.example/1.1.1.1', 1, true))
+assert(dns_gfwish:find('server=/blocked.example/8.8.8.8', 1, true))
+eap.gfw_domains = nil
 
 local global = {}
 for k, v in pairs(eap) do global[k] = v end
