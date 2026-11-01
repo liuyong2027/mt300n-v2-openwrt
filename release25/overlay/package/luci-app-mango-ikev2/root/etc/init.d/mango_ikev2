@@ -134,9 +134,19 @@ mango_ikev2_ensure_xfrm() {
     ip link set "$XFRM_IF" mtu "$mtu" up || return 1
 }
 
+# strongswan and strongswan-swanctl each start charon. The starter keeps
+# the pid, swanctl then gets "already running", and vici never loads the CA.
+mango_ikev2_claim_charon() {
+    if [ -x /etc/init.d/ipsec ]; then
+        /etc/init.d/ipsec disable 2>/dev/null || :
+        /etc/init.d/ipsec stop 2>/dev/null || :
+    fi
+}
+
 mango_ikev2_apply() {
     local enabled mode
     mkdir -p "$CONF_DIR" /etc/mango-ikev2 /etc/swanctl/conf.d
+    mango_ikev2_claim_charon
     enabled=$(uci -q get mango_ikev2.main.enabled)
     mode=$(uci -q get mango_ikev2.main.mode)
     if [ "$enabled" != 1 ]; then

@@ -18,6 +18,8 @@ node --check package/luci-app-mango-ikev2/htdocs/luci-static/resources/view/mang
 test -f package/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-ca-status
 test -f package/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-ca-install
 test -f package/luci-app-mango-ikev2/root/etc/uci-defaults/96-mango-wifi-led
+grep -q "init.d/ipsec disable" package/luci-app-mango-ikev2/root/etc/uci-defaults/95-mango-ikev2
+grep -q "mango_ikev2_claim_charon" package/luci-app-mango-ikev2/root/etc/init.d/mango_ikev2
 grep -q "Allow-ZeroTier-Direct" package/luci-app-mango-ikev2/root/etc/uci-defaults/95-mango-ikev2
 grep -q "mangozt" package/luci-app-mango-ikev2/root/etc/uci-defaults/95-mango-ikev2
 grep -q "phy0-ap0" package/luci-app-mango-ikev2/root/etc/uci-defaults/96-mango-wifi-led

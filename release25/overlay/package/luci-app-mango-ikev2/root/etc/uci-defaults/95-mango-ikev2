@@ -62,6 +62,11 @@ if [ -f /etc/config/ucitrack ] && ! uci -q show ucitrack | grep -q "init='mango_
 fi
 
 # Prefer IKEv2 client service on this image; Xray package is absent in the ikev2 profile.
+# Do this before START=90 so the legacy starter does not win the charon race.
+if [ -x /etc/init.d/ipsec ]; then
+	/etc/init.d/ipsec disable 2>/dev/null || :
+	/etc/init.d/ipsec stop 2>/dev/null || :
+fi
 /etc/init.d/xray stop 2>/dev/null || :
 /etc/init.d/xray disable 2>/dev/null || :
 /etc/init.d/mango_proxy stop 2>/dev/null || :
