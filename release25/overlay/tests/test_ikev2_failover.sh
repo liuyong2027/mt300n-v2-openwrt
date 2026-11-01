@@ -1,5 +1,5 @@
 #!/bin/sh
-# Failover counter: two failed dials switch to the other server.
+# Failover counter: two failed dials switch to the next server.
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 fail=$(mktemp -d)
@@ -12,6 +12,7 @@ case "$opt" in
     enabled) echo 1 ;;
     mode) echo split ;;
     server2) printf '%s\n' "${FAKE_SERVER2-}" ;;
+    server3) printf '%s\n' "${FAKE_SERVER3-}" ;;
 esac
 EOF
 cat > "$fail/bin/swanctl" <<'EOF'
@@ -40,9 +41,9 @@ run() {
     sh "$root/package/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-failover"
 }
 
-# Primary is up: no dial, counter cleared.
+# Primary is up (CHILD installed): no dial, counter cleared.
 export FAKE_SERVER2=backup.example.com
-printf '%s\n' 'mango: #1, ESTABLISHED, IKEv2' > "$FAKE_SAS"
+printf '%s\n' 'mango: #1, ESTABLISHED, IKEv2' '  mango: #1, reqid 1, INSTALLED, TUNNEL' > "$FAKE_SAS"
 echo 4 > "$fail/state/fail-count"
 echo mango > "$fail/state/active"
 export FAKE_INITIATE_OK=0
@@ -67,7 +68,7 @@ test "$(cat "$fail/state/fail-count")" = 1
 grep -q -- '--initiate --ike mango2 ' "$FAKE_LOG"
 
 # Backup up: stay there.
-printf '%s\n' 'mango2: #3, ESTABLISHED, IKEv2' > "$FAKE_SAS"
+printf '%s\n' 'mango2: #3, ESTABLISHED, IKEv2' '  mango2: #3, reqid 1, INSTALLED, TUNNEL' > "$FAKE_SAS"
 echo 1 > "$fail/state/fail-count"
 run
 test "$(cat "$fail/state/active")" = mango2
