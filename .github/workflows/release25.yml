@@ -4,8 +4,7 @@
     "push": {
       "branches": [
         "cursor/ikev2-client-split-8c23",
-        "codex/mt300n-v2-release25",
-        "ikev2-r25-rebuild"
+        "codex/mt300n-v2-release25"
       ],
       "paths": [
         "release25/**",
