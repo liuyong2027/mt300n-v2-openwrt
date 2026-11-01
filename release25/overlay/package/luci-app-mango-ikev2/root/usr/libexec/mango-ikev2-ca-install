@@ -1,0 +1,44 @@
+#!/bin/sh
+# Install IKEv2 root CA PEM into swanctl + legacy ipsec.d paths.
+# usage: mango-ikev2-ca-install [pem-file]
+#        mango-ikev2-ca-install   # read PEM from stdin
+set -eu
+
+CA_SWAN_DIR=/etc/swanctl/x509ca
+CA_IPSEC_DIR=/etc/ipsec.d/cacerts
+CA_NAME=nordvpn-root-ca.pem
+CA_SWAN=$CA_SWAN_DIR/$CA_NAME
+CA_IPSEC=$CA_IPSEC_DIR/$CA_NAME
+TMP=/tmp/mango-ikev2-ca-$$.pem
+
+cleanup() { rm -f "$TMP"; }
+trap cleanup EXIT INT TERM
+
+mkdir -p "$CA_SWAN_DIR" "$CA_IPSEC_DIR"
+
+if [ "${1:-}" != '' ]; then
+	src=$1
+	[ -s "$src" ] || { echo "证书文件不存在或为空：$src" >&2; exit 1; }
+	cp "$src" "$TMP"
+else
+	cat > "$TMP"
+fi
+
+grep -q 'BEGIN CERTIFICATE' "$TMP" || {
+	echo '不是有效的 PEM 证书（缺少 BEGIN CERTIFICATE）' >&2
+	exit 1
+}
+
+umask 022
+cp "$TMP" "$CA_SWAN"
+cp "$TMP" "$CA_IPSEC"
+chmod 644 "$CA_SWAN" "$CA_IPSEC"
+
+# Reload credentials so charon picks up the new CA without full reconnect when possible.
+if command -v swanctl >/dev/null 2>&1; then
+	swanctl --load-creds >/dev/null 2>&1 || swanctl --load-all >/dev/null 2>&1 || true
+fi
+
+echo "已安装到 $CA_SWAN"
+echo "已同步到 $CA_IPSEC"
+/usr/libexec/mango-ikev2-ca-status

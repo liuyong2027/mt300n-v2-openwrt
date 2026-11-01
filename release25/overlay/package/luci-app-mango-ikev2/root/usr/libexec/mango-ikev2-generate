@@ -19,7 +19,7 @@ if action == 'nft' and p.mode == 'split' then
     if #list == 0 then list = read_lines('/etc/mango-rules/cn-cidrs.txt') end
     p.cn_cidrs = list
 end
-if action == 'dnsmasq' and p.mode == 'gfw' then
+if action == 'dnsmasq' and (p.mode == 'gfw' or p.mode == 'split') then
     p.gfw_domains = read_lines('/etc/mango-ikev2/gfw-domains.txt')
 end
 

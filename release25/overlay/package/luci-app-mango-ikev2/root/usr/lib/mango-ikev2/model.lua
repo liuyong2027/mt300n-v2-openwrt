@@ -41,10 +41,32 @@ end
 M.tunnel_dns = {'1.1.1.1', '8.8.8.8'}
 M.domestic_dns = {'223.5.5.5', '119.29.29.29'}
 
+local function parse_lans(raw)
+    local list, seen = {}, {}
+    raw = tostring(raw or 'br-lan')
+    for name in raw:gmatch('%S+') do
+        assert(#name <= 15 and name:match('^[%w_.%-]+$'), 'Invalid LAN device')
+        if not seen[name] then
+            seen[name] = true
+            list[#list + 1] = name
+        end
+    end
+    assert(#list >= 1 and #list <= 8, 'Invalid LAN device list')
+    return list
+end
+
+local function nft_ifset(names)
+    if #names == 1 then
+        return '"' .. names[1] .. '"'
+    end
+    local parts = {}
+    for _, name in ipairs(names) do parts[#parts + 1] = '"' .. name .. '"' end
+    return '{ ' .. table.concat(parts, ', ') .. ' }'
+end
+
 function M.policy(p)
     assert(p.mode == 'direct' or p.mode == 'split' or p.mode == 'global' or p.mode == 'gfw', 'Invalid mode')
-    local lan = p.lan_device or 'br-lan'
-    assert(#lan <= 15 and lan:match('^[%w_.%-]+$'), 'Invalid LAN device')
+    local lans = parse_lans(p.lan_device or 'br-lan')
     local ifid = tonumber(p.ifid or '42')
     assert(ifid and ifid == math.floor(ifid) and ifid >= 1 and ifid <= 65535, 'Invalid XFRM ifid')
     local mtu = tonumber(p.xfrm_mtu or '1280')
@@ -54,7 +76,8 @@ function M.policy(p)
     return {
         enabled = p.enabled == '1' or p.enabled == true,
         mode = p.mode,
-        lan = lan,
+        lan = lans[1],
+        lans = lans,
         ifid = ifid,
         mtu = mtu,
         bypass = bypass,
@@ -80,7 +103,7 @@ function M.credential_set(spec)
     if auth == 'eap' then
         assert(nonempty(username), 'Missing EAP username')
         assert(nonempty(password), 'Missing EAP password')
-        if local_id == '' then local_id = username end
+        -- NordVPN: leave Local ID empty; do not default to username
     else
         assert(nonempty(psk), 'Missing PSK')
         if local_id == '' then local_id = '%any' end
@@ -108,38 +131,43 @@ function M.credentials(p)
     })
 end
 
-function M.peers(p)
-    local cred = M.credentials(p)
-    local peers = {{name = 'mango', server = cred.server, remote_id = cred.remote_id, cred = cred}}
-    local backup = p.server2
-    if type(backup) ~= 'string' or backup == '' then return peers end
-    assert(host(backup), 'Invalid backup server')
-    assert(backup ~= cred.server, 'Backup server must differ from the primary')
-    local auth = nonempty(p.auth2) and p.auth2 or cred.auth
-    local username, password, psk = cred.username, cred.password, cred.psk
-    if auth == 'eap' and (nonempty(p.username2) or nonempty(p.password2) or auth ~= cred.auth) then
-        username, password = p.username2, p.password2
-    elseif auth == 'psk' and (nonempty(p.psk2) or auth ~= cred.auth) then
-        psk = p.psk2
+local function add_backup_peer(peers, primary, name, server, remote_id, auth_opt, username_opt, password_opt, psk_opt, local_id_opt)
+    if type(server) ~= 'string' or server == '' then return end
+    assert(host(server), 'Invalid backup server')
+    for _, peer in ipairs(peers) do
+        assert(server ~= peer.server, 'Backup server must differ from other servers')
+    end
+    local auth = nonempty(auth_opt) and auth_opt or primary.auth
+    local username, password, psk = primary.username, primary.password, primary.psk
+    if auth == 'eap' and (nonempty(username_opt) or nonempty(password_opt) or auth ~= primary.auth) then
+        username, password = username_opt, password_opt
+    elseif auth == 'psk' and (nonempty(psk_opt) or auth ~= primary.auth) then
+        psk = psk_opt
     end
     local backup_cred = M.credential_set({
-        server = backup,
-        remote_id = p.remote_id2,
+        server = server,
+        remote_id = remote_id,
         auth = auth,
         username = username,
         password = password,
         psk = psk,
-        local_id = p.local_id2
+        local_id = local_id_opt
     })
     peers[#peers + 1] = {
-        name = 'mango2',
+        name = name,
         server = backup_cred.server,
         remote_id = backup_cred.remote_id,
         cred = backup_cred
     }
-    return peers
 end
 
+function M.peers(p)
+    local cred = M.credentials(p)
+    local peers = {{name = 'mango', server = cred.server, remote_id = cred.remote_id, cred = cred}}
+    add_backup_peer(peers, cred, 'mango2', p.server2, p.remote_id2, p.auth2, p.username2, p.password2, p.psk2, p.local_id2)
+    add_backup_peer(peers, cred, 'mango3', p.server3, p.remote_id3, p.auth3, p.username3, p.password3, p.psk3, p.local_id3)
+    return peers
+end
 function M.swanctl(p)
     local q = M.policy(p)
     local peers = M.peers(p)
@@ -153,8 +181,12 @@ function M.swanctl(p)
         lines[#lines + 1] = '    dpd_delay = 30s'
         lines[#lines + 1] = '    dpd_timeout = 30s'
         local cred = peer.cred
+        lines[#lines + 1] = '    encap = yes'
+        lines[#lines + 1] = '    proposals = aes128-sha256-curve25519,aes256-sha256-modp2048,default'
         lines[#lines + 1] = '    local {'
-        lines[#lines + 1] = '      id = "' .. escape(cred.local_id) .. '"'
+        if nonempty(cred.local_id) then
+            lines[#lines + 1] = '      id = "' .. escape(cred.local_id) .. '"'
+        end
         if cred.auth == 'eap' then
             lines[#lines + 1] = '      auth = eap-mschapv2'
             lines[#lines + 1] = '      eap_id = "' .. escape(cred.username) .. '"'
@@ -180,6 +212,7 @@ function M.swanctl(p)
         lines[#lines + 1] = '        dpd_action = clear'
         lines[#lines + 1] = '        if_id_in = ' .. tostring(q.ifid)
         lines[#lines + 1] = '        if_id_out = ' .. tostring(q.ifid)
+        lines[#lines + 1] = '        esp_proposals = aes128-sha1,aes256-sha1'
         lines[#lines + 1] = '      }'
         lines[#lines + 1] = '    }'
         lines[#lines + 1] = '  }'
@@ -272,8 +305,21 @@ function M.dnsmasq(p)
                 end
             end
         end
+    elseif q.mode == 'split' then
+        -- Domestic default so CN sites resolve nearby; GFW domains still use tunnel DNS.
+        for _, address in ipairs(M.domestic_dns) do add('server=' .. address) end
+        local seen = {}
+        for _, line in ipairs(p.gfw_domains or {}) do
+            local flag, name = line:match('^([+-])([a-z0-9%.%-]+)$')
+            if flag == '+' and name and not seen[name] and M.domain(name) then
+                seen[name] = true
+                for _, address in ipairs(M.tunnel_dns) do
+                    add('server=/' .. name .. '/' .. address)
+                end
+            end
+        end
     else
-        -- split/global: domestic resolvers are not queried, so a poisoned answer cannot win.
+        -- global: keep tunnel DNS only so a poisoned answer cannot win.
         for _, address in ipairs(M.tunnel_dns) do add('server=' .. address) end
     end
     return table.concat(lines, '\n') .. '\n'
@@ -305,9 +351,15 @@ function M.nft(p)
         -- Filled by dnsmasq nftset after a GFW domain resolves through the tunnel.
         add('set gfw4 { type ipv4_addr; flags timeout; timeout 2h; }')
     end
+    local lan_set = nft_ifset(q.lans or {q.lan})
     add('chain guard { type filter hook forward priority -10; policy accept;')
+    if q.active then
+        -- fw4 zones do not cover xfrm-mango; accept tunnel forward before fail-closed.
+        add('iifname ' .. lan_set .. ' oifname "xfrm-mango" accept')
+        add('iifname "xfrm-mango" oifname ' .. lan_set .. ' accept')
+    end
     if q.active and q.mode ~= 'gfw' then
-        add('iifname "' .. q.lan .. '" jump fail_closed')
+        add('iifname ' .. lan_set .. ' jump fail_closed')
     end
     add('}')
     add('chain fail_closed {')
@@ -332,10 +384,10 @@ function M.nft(p)
         add('ct direction reply return')
         -- Port 53 is hijacked to local dnsmasq and must not enter the tunnel itself.
         add('meta l4proto { tcp, udp } th dport 53 return')
-        add('iifname "' .. q.lan .. '" jump capture')
+        add('iifname ' .. lan_set .. ' jump capture')
         add('}')
         add('chain dns_capture { type nat hook prerouting priority -105; policy accept;')
-        add('iifname "' .. q.lan .. '" meta nfproto ipv4 meta l4proto { tcp, udp } th dport 53 redirect to :53')
+        add('iifname ' .. lan_set .. ' meta nfproto ipv4 meta l4proto { tcp, udp } th dport 53 redirect to :53')
         add('}')
         add('chain postrouting { type nat hook postrouting priority srcnat; policy accept;')
         add('oifname "xfrm-mango" masquerade')

@@ -14,6 +14,13 @@ for f in package/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-* \
     sh -n "$f"
 done
 node --check package/luci-app-mango-ikev2/htdocs/luci-static/resources/view/mango-ikev2.js
+node --check package/luci-app-mango-ikev2/htdocs/luci-static/resources/view/mango-ikev2/log.js
+test -f package/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-ca-status
+test -f package/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-ca-install
+test -f package/luci-app-mango-ikev2/root/etc/uci-defaults/96-mango-wifi-led
+grep -q "Allow-ZeroTier-Direct" package/luci-app-mango-ikev2/root/etc/uci-defaults/95-mango-ikev2
+grep -q "mangozt" package/luci-app-mango-ikev2/root/etc/uci-defaults/95-mango-ikev2
+grep -q "phy0-ap0" package/luci-app-mango-ikev2/root/etc/uci-defaults/96-mango-wifi-led
 # Profile helper accepts ikev2 without OpenWrt tree when not verifying packages.
 python3 - <<'PY'
 from pathlib import Path

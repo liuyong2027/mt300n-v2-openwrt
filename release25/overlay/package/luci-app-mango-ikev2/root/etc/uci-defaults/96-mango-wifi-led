@@ -1,0 +1,13 @@
+#!/bin/sh
+# GL-MT300N-V2 OpenWrt 25 uses phy0-ap0 for the primary AP interface name.
+[ -e /sys/class/leds/red:wlan ] || exit 0
+uci -q batch <<'EOF'
+set system.led_wifi_led=led
+set system.led_wifi_led.name='wifi'
+set system.led_wifi_led.sysfs='red:wlan'
+set system.led_wifi_led.trigger='netdev'
+set system.led_wifi_led.mode='link tx rx'
+set system.led_wifi_led.dev='phy0-ap0'
+commit system
+EOF
+exit 0

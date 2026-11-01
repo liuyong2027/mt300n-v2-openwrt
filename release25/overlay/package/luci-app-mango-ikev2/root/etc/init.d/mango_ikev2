@@ -105,6 +105,7 @@ mango_ikev2_teardown() {
     mango_ikev2_watch_stop
     swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
     swanctl --terminate --ike mango2 --timeout 3 2>/dev/null || :
+    swanctl --terminate --ike mango3 --timeout 3 2>/dev/null || :
     swanctl --unload-all 2>/dev/null || swanctl --unload-conns 2>/dev/null || :
     ip link del "$XFRM_IF" 2>/dev/null || :
     ip -4 rule del priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || :
@@ -147,6 +148,7 @@ mango_ikev2_apply() {
         mango_ikev2_watch_stop
         swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
         swanctl --terminate --ike mango2 --timeout 3 2>/dev/null || :
+    swanctl --terminate --ike mango3 --timeout 3 2>/dev/null || :
         ip link del "$XFRM_IF" 2>/dev/null || :
         mango_ikev2_dns_off || return 1
         /usr/libexec/mango-ikev2-fw || return 1

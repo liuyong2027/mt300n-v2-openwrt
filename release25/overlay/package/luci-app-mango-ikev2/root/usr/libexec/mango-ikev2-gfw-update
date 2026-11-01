@@ -1,25 +1,46 @@
 #!/bin/sh
-# Refresh the GFW domain list used by gfw mode. HTTPS only; no credentials on argv.
+# Refresh the GFW domain list (used by gfw mode DNS/nftset, and split-mode tunnel DNS overrides).
 set -eu
 umask 077
 mkdir -p /etc/mango-ikev2 /var/etc/mango-ikev2 /var/lock
 exec 8>/var/lock/mango-ikev2-gfw.lock
 flock -n 8 || { echo '另一个 GFW 域名更新正在运行'; exit 75; }
 
-URL='https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt'
 raw=$(mktemp /var/etc/mango-ikev2/gfw.XXXXXX) || exit 1
 decoded=$(mktemp /var/etc/mango-ikev2/gfw-decoded.XXXXXX) || { rm -f "$raw"; exit 1; }
 cfg=$(mktemp /var/etc/mango-ikev2/curl.XXXXXX) || { rm -f "$raw" "$decoded"; exit 1; }
-trap 'rm -f "$raw" "$decoded" "$cfg"' EXIT
+trap 'rm -f "$raw" "$decoded" "$cfg" "$raw.domains"' EXIT
 
-printf 'url = "%s"\nproxy = ""\nnoproxy = "*"\n' "$URL" > "$cfg"
-curl -q -4 --globoff --config "$cfg" --silent --proto '=https' \
-    --connect-timeout 8 --max-time 45 --max-filesize 524288 \
-    --output "$raw" || { echo '下载 GFW 域名列表失败'; exit 1; }
+download_ok=0
+for URL in \
+	'https://cdn.jsdelivr.net/gh/gfwlist/gfwlist@master/gfwlist.txt' \
+	'https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt'
+do
+	printf 'url = "%s"\nproxy = ""\nnoproxy = "*"\n' "$URL" > "$cfg"
+	if curl -q -4 --globoff --config "$cfg" --silent --proto '=https' \
+		--connect-timeout 8 --max-time 45 --max-filesize 524288 \
+		--output "$raw"; then
+		download_ok=1
+		break
+	fi
+done
+[ "$download_ok" = 1 ] || { echo '下载 GFW 域名列表失败'; exit 1; }
+
 base64 -d < "$raw" > "$decoded" || { echo 'GFW 列表不是有效的 Base64'; exit 1; }
 lua /usr/libexec/mango-ikev2-generate gfw-convert < "$decoded" > "$raw.domains" || {
-    echo 'GFW 域名列表无法解析'
-    exit 1
+	echo 'GFW 域名列表无法解析'
+	exit 1
 }
+count=$(grep -c '^+' "$raw.domains" || true)
+[ "$count" -ge 100 ] || { echo "GFW 域名过少（$count）"; exit 1; }
 mv "$raw.domains" /etc/mango-ikev2/gfw-domains.txt
-echo "已写入 GFW 域名：$(grep -c '^+' /etc/mango-ikev2/gfw-domains.txt)"
+echo "已写入 GFW 域名：$count"
+
+enabled=$(uci -q get mango_ikev2.main.enabled || true)
+mode=$(uci -q get mango_ikev2.main.mode || true)
+if [ "$enabled" = 1 ] && [ "$mode" != direct ]; then
+	mkdir -p /etc/mango-ikev2/dnsmasq.d
+	/usr/libexec/mango-ikev2-generate dnsmasq > /etc/mango-ikev2/dnsmasq.d/ikev2.conf || true
+	/etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+	/usr/libexec/mango-ikev2-fw || true
+fi
