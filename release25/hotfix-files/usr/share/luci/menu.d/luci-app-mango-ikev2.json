@@ -1,0 +1,20 @@
+{
+  "admin/services/mango-ikev2": {
+    "title": "IKEv2 分流",
+    "order": 88,
+    "action": { "type": "firstchild" },
+    "depends": { "acl": ["luci-app-mango-ikev2"], "uci": { "mango_ikev2": true } }
+  },
+  "admin/services/mango-ikev2/config": {
+    "title": "设置",
+    "order": 10,
+    "action": { "type": "view", "path": "mango-ikev2" },
+    "depends": { "acl": ["luci-app-mango-ikev2"] }
+  },
+  "admin/services/mango-ikev2/log": {
+    "title": "日志",
+    "order": 20,
+    "action": { "type": "view", "path": "mango-ikev2/log" },
+    "depends": { "acl": ["luci-app-mango-ikev2"] }
+  }
+}

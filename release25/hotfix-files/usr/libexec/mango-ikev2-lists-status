@@ -1,0 +1,19 @@
+#!/bin/sh
+# Brief list status for LuCI.
+set -eu
+cn=/etc/mango-ikev2/cn-cidrs.txt
+gfw=/etc/mango-ikev2/gfw-domains.txt
+if [ -s "$cn" ]; then
+	printf 'cn_lines=%s\n' "$(wc -l < "$cn" | tr -d ' ')"
+	printf 'cn_mtime=%s\n' "$(date -r "$cn" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo -)"
+else
+	printf 'cn_lines=0\n'
+	printf 'cn_mtime=-\n'
+fi
+if [ -s "$gfw" ]; then
+	printf 'gfw_lines=%s\n' "$(grep -c '^+' "$gfw" || echo 0)"
+	printf 'gfw_mtime=%s\n' "$(date -r "$gfw" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo -)"
+else
+	printf 'gfw_lines=0\n'
+	printf 'gfw_mtime=-\n'
+fi

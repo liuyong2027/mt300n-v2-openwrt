@@ -1,0 +1,27 @@
+{
+  "luci-app-mango-ikev2": {
+    "description": "Configure Mango IKEv2 client and China split routing",
+    "read": {
+      "uci": ["mango_ikev2"],
+      "file": {
+        "/usr/libexec/mango-ikev2-status": [ "exec" ],
+        "/usr/libexec/mango-ikev2-probe": [ "exec" ],
+        "/usr/libexec/mango-ikev2-lists-status": [ "exec" ],
+        "/var/log/mango-ikev2-events.log": [ "read" ]
+      },
+      "ubus": {
+        "file": [ "read", "exec", "stat" ]
+      }
+    },
+    "write": {
+      "uci": ["mango_ikev2"],
+      "file": {
+        "/usr/libexec/mango-ikev2-cn-update": [ "exec" ],
+        "/usr/libexec/mango-ikev2-gfw-update": [ "exec" ]
+      },
+      "ubus": {
+        "file": [ "exec" ]
+      }
+    }
+  }
+}
