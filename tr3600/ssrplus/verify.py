@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-1.2.0'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-ikev2-1.3.0'
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw',
         'usr/share/luci/menu.d/luci-app-mango-proxy.json',
         'usr/share/luci/menu.d/luci-app-cudy-ss.json','usr/libexec/rpcd/cudy.ss',
@@ -127,9 +127,19 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/filebrowser').read_bytes()).hexdigest()==manifest['quantum']['sha256']
     config=(repo/'openwrt/.config').read_text()
     for package in ['luci-app-ssr-plus','dnsmasq-full','kmod-nft-socket','kmod-nft-tproxy','kmod-veth','luci-compat','luci-app-cudy-ss','zerotier',
-        'luci-app-cudy-wifi','usteer','wpad-mbedtls']:
+        'luci-app-cudy-wifi','usteer','wpad-mbedtls','luci-app-mango-ikev2','strongswan-swanctl','kmod-xfrm-interface']:
         assert 'CONFIG_PACKAGE_'+package+'=y' in config,package
     assert 'CONFIG_PACKAGE_luci-app-mango-proxy=y' not in config
+    assert (root/'usr/libexec/mango-ikev2-peer-engine').is_file()
+    assert (root/'etc/init.d/mango_ikev2').is_file()
+    ike_defaults=root/'etc/uci-defaults/95-mango-ikev2'
+    assert ike_defaults.is_file()
+    ike_text=ike_defaults.read_text()
+    assert 'firewall.mangozt' not in ike_text
+    assert 'shadowsocksr' not in ike_text
+    assert 'ipsec disable' in ike_text
+    peer=(root/'usr/libexec/mango-ikev2-peer-engine').read_text()
+    assert 'shadowsocksr' in peer
     # Parse every actual installed Lua file and every shell entrypoint using target tools.
     syntax=0
     for base in ['usr/lib/cudy-ss','usr/lib/lua/cudy','usr/share/shadowsocksr','usr/libexec','etc/init.d','etc/uci-defaults']:
@@ -231,13 +241,13 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-1.2.0-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-ikev2-1.3.0-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
-    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.1.1',
+    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.2.0',
         'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
-        'candidate_revision':2,'integrated_field_fixes_verified':field_fixes,
+        'candidate_revision':1,'ikev2_dual_stack':True,'integrated_field_fixes_verified':field_fixes,
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
         'actual_xray_version':xray_version,
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),
@@ -262,7 +272,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'hardware_flash_or_boot_tested':False}
     (out/'BUILD-VERIFICATION.json').write_text(json.dumps(proof,indent=2)+'\n')
     (out/'README.txt').write_text((repo/'tr3600/ssrplus/README.txt').read_text())
-    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.2.0.txt',out/'刷机与验收说明.txt')
+    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.3.0.txt',out/'刷机与验收说明.txt')
     shutil.copyfile(repo/'reports/resolved.config',out/'resolved.config')
     shutil.copyfile(repo/'reports/ssrplus-source.json',out/'SOURCE.json')
     print(json.dumps(proof,indent=2))

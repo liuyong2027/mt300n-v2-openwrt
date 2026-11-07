@@ -1,0 +1,27 @@
+#!/bin/sh
+# Runtime mutual exclusion between IKEv2 egress and SSR Plus+ client.
+# Called by mango_ikev2 apply/teardown. ZeroTier / DDNS / WebFiles untouched.
+
+set -eu
+
+ssr_stop() {
+	if [ -x /etc/init.d/shadowsocksr ]; then
+		/etc/init.d/shadowsocksr stop 2>/dev/null || :
+	fi
+}
+
+case "${1:-}" in
+	claim)
+		# IKEv2 is becoming the WAN egress engine.
+		ssr_stop
+		;;
+	release)
+		# IKEv2 released egress; leave SSR stopped until the owner enables it.
+		:
+		;;
+	*)
+		echo "usage: $0 claim|release" >&2
+		exit 2
+		;;
+esac
+exit 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare an isolated SSR Plus+ build from the pinned TR3600 1.1.1 recipe."""
+"""Prepare TR3600 1.3.0 dual-stack (SSR Plus+ + IKEv2) from the pinned 1.1.1 recipe."""
 import importlib.util
 import json
 from pathlib import Path
@@ -33,8 +33,9 @@ cp -R "$kit/tr3600/luci-app-cudy-ss" package/
 cp -R "$kit/tr3600/cudy-webfiles" package/
 cp -R "$kit/tr3600/luci-app-cudy-webfiles" package/
 cp -R "$kit/tr3600/ssrplus/cudy-ddns-direct" package/
+cp -R "$kit/tr3600/luci-app-mango-ikev2" package/
 python3 "$kit/tr3600/usb-integration.py" "$PWD"
-find package/luci-app-cudy-* package/cudy-webfiles -type f -exec sh -c 'head -c 2 "$1" | grep -q "#!" && chmod +x "$1" || :' sh {} \\;
+find package/luci-app-cudy-* package/cudy-webfiles package/luci-app-mango-ikev2 -type f -exec sh -c 'head -c 2 "$1" | grep -q "#!" && chmod +x "$1" || :' sh {} \\;
 '''+text[end:]
     # Source package dependency resolution uses this exact feed, including its Xray.
     text=text.replace('./scripts/feeds update -a','printf \'%s\\n\' \'src-git helloworld https://github.com/fw876/helloworld.git^'+SSR_COMMIT+'\' >> feeds.conf.default\n./scripts/feeds update -a')
@@ -64,7 +65,7 @@ python3 "$kit/tr3600/ssrplus/unify-ss.py" "$PWD"''')
     p.write_text(text,encoding='utf-8',newline='\n')
     cfg=(ROOT/'tr3600/tr3600.config').read_text(encoding='utf-8')
     cfg=re.sub(r'^CONFIG_PACKAGE_(luci-app-mango-proxy|mango-tcpcheck)=y\n','',cfg,flags=re.M)
-    cfg+='''\n# SSR Plus+ is the sole transparent proxy.
+    cfg+='''\n# SSR Plus+ remains the default transparent proxy; IKEv2 is also packaged.
 CONFIG_PACKAGE_luci-app-ssr-plus=y
 CONFIG_PACKAGE_luci-app-ssr-plus_Nftables_Transparent_Proxy=y
 # CONFIG_PACKAGE_luci-app-ssr-plus_Iptables_Transparent_Proxy is not set
@@ -83,9 +84,26 @@ CONFIG_PACKAGE_kmod-nft-socket=y
 CONFIG_PACKAGE_kmod-veth=y
 CONFIG_PACKAGE_v2ray-geoip=y
 CONFIG_PACKAGE_v2ray-geosite=y
+CONFIG_PACKAGE_luci-app-mango-ikev2=y
+CONFIG_PACKAGE_strongswan=y
+CONFIG_PACKAGE_kmod-ipsec=y
+CONFIG_PACKAGE_kmod-ipsec6=y
+CONFIG_PACKAGE_strongswan-minimal=y
+CONFIG_PACKAGE_strongswan-swanctl=y
+CONFIG_PACKAGE_strongswan-mod-eap-mschapv2=y
+CONFIG_PACKAGE_strongswan-mod-eap-identity=y
+CONFIG_PACKAGE_strongswan-mod-eap-dynamic=y
+CONFIG_PACKAGE_strongswan-mod-openssl=y
+CONFIG_PACKAGE_strongswan-mod-pem=y
+CONFIG_PACKAGE_strongswan-mod-pkcs1=y
+CONFIG_PACKAGE_strongswan-mod-x509=y
+CONFIG_PACKAGE_kmod-xfrm-interface=y
+CONFIG_PACKAGE_kmod-ipsec4=y
+CONFIG_PACKAGE_kmod-crypto-gcm=y
 '''
     # Avoid duplicate "not set" entries overriding the selected data packages.
     cfg=cfg.replace('# CONFIG_PACKAGE_v2ray-geoip is not set\n','').replace('# CONFIG_PACKAGE_v2ray-geosite is not set\n','')
+    cfg=cfg.replace('# CONFIG_PACKAGE_strongswan is not set\n','')
     (PROFILE/'tr3600.config').write_text(cfg,encoding='utf-8',newline='\n')
     ss=ROOT/'tr3600/luci-app-cudy-ss'
     replace(ss/'Makefile','+luci-app-mango-proxy','+xray-core +ip-full +kmod-veth')
@@ -200,7 +218,7 @@ return M
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
-    (files/'etc/cudy-release').write_text('tr3600-ssrplus-1.2.0\n')
+    (files/'etc/cudy-release').write_text('tr3600-ssrplus-ikev2-1.3.0\n')
     shutil.copy2(PROFILE/'migration.sh',files/'etc/uci-defaults/90-cudy-ssrplus-migrate')
     # Keep the same LED state machine, replace its proxy-specific adapter.
     led=ROOT/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua'
@@ -222,10 +240,11 @@ return M
     replace(p,'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"',
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
-        'firmware_version':'1.2.0','release_stage':'candidate; hardware acceptance pending',
-        'candidate_revision':2,
-        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload'],
-        'base':'tr3600-v1.1.1','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
+        'firmware_version':'1.3.0','release_stage':'candidate; hardware acceptance pending',
+        'candidate_revision':1,
+        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','ikev2_dual_stack'],
+        'base':'tr3600-v1.2.0','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
+        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+',
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',
@@ -244,7 +263,7 @@ return M
         'wifi_unification':'retained; automatic band steering defaults off in UCI and LuCI; saved settings retained',
         'private_ss_ipv6':False,
         'hardware_validation':'pending'},indent=2)+'\n')
-    print('Prepared SSR Plus+ build; no router was modified.')
+    print('Prepared SSR Plus+ + IKEv2 dual-stack 1.3.0 build; no router was modified.')
 
 if __name__=='__main__':prepare()
 

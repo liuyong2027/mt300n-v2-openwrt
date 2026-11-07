@@ -1,0 +1,4 @@
+/etc/mango-ikev2/
+/etc/config/mango_ikev2
+/etc/swanctl/x509ca/
+/etc/ipsec.d/cacerts/

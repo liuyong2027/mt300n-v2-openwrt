@@ -1,0 +1,62 @@
+#!/bin/sh
+# Print CA install status for LuCI (key=value lines).
+set -eu
+
+CA_SWAN=/etc/swanctl/x509ca/nordvpn-root-ca.pem
+CA_IPSEC=/etc/ipsec.d/cacerts/nordvpn-root-ca.pem
+
+printf 'path=%s\n' "$CA_SWAN"
+printf 'path_legacy=%s\n' "$CA_IPSEC"
+
+if [ -s "$CA_SWAN" ]; then
+	printf 'present=1\n'
+	printf 'size=%s\n' "$(wc -c < "$CA_SWAN" | tr -d ' \n')"
+	printf 'mtime=%s\n' "$(date -r "$CA_SWAN" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo -)"
+else
+	printf 'present=0\n'
+	printf 'size=0\n'
+	printf 'mtime=-\n'
+fi
+
+if [ -s "$CA_IPSEC" ]; then
+	printf 'legacy_present=1\n'
+else
+	printf 'legacy_present=0\n'
+fi
+
+subject='-'
+not_after='-'
+loaded=0
+certs=$(swanctl --list-certs 2>/dev/null || true)
+if printf '%s\n' "$certs" | grep -q 'NordVPN Root CA'; then
+	loaded=1
+	# Prefer the self-signed root block.
+	subject=$(printf '%s\n' "$certs" | awk '
+		/List of X.509 CA Certificates/ { in_ca=1; next }
+		in_ca && /subject:.*NordVPN Root CA/ {
+			sub(/^[[:space:]]*subject:[[:space:]]*/, "")
+			gsub(/^"|"$/, "")
+			print
+			exit
+		}
+	')
+	not_after=$(printf '%s\n' "$certs" | awk '
+		/List of X.509 CA Certificates/ { in_ca=1; next }
+		in_ca && /subject:.*NordVPN Root CA/ { want=1; next }
+		want && /not after/ {
+			line=$0
+			sub(/^.*not after[[:space:]]+/, "", line)
+			sub(/,.*/, "", line)
+			print line
+			exit
+		}
+	')
+	[ -n "$subject" ] || subject='NordVPN Root CA (loaded)'
+	[ -n "$not_after" ] || not_after='-'
+fi
+
+[ -n "$subject" ] || subject='-'
+[ -n "$not_after" ] || not_after='-'
+printf 'loaded=%s\n' "$loaded"
+printf 'subject=%s\n' "$subject"
+printf 'not_after=%s\n' "$not_after"

@@ -1,0 +1,38 @@
+#!/bin/sh
+# TR3600 dual-stack image: IKEv2 firewall hooks only.
+# ZeroTier mangozt zone stays owned by 94-cudy-zt-zone (SSR Plus+ profile).
+# Do not stop SSR Plus+ here; runtime mutual exclusion is in mango_ikev2 apply.
+
+uci -q batch <<'EOF'
+set firewall.mango_ikev2=include
+set firewall.mango_ikev2.type='script'
+set firewall.mango_ikev2.path='/usr/libexec/mango-ikev2-fw'
+set firewall.mango_ikev2.fw4_compatible='1'
+set firewall.mango_ikev2_mark=rule
+set firewall.mango_ikev2_mark.name='Mango IKEv2 marked input'
+set firewall.mango_ikev2_mark.src='*'
+set firewall.mango_ikev2_mark.proto='tcp udp'
+set firewall.mango_ikev2_mark.mark='0x101/0xffffffff'
+set firewall.mango_ikev2_mark.family='ipv4'
+set firewall.mango_ikev2_mark.target='ACCEPT'
+commit firewall
+EOF
+
+# LuCI 25 tracks service reloads from /usr/share/ucitrack/*.json (shipped
+# with this package). Keep a legacy /etc/config/ucitrack entry when that
+# config exists, so an older LuCI still reloads after Save & Apply.
+if [ -f /etc/config/ucitrack ] && ! uci -q show ucitrack | grep -q "init='mango_ikev2'"; then
+	idx=$(uci add ucitrack mango_ikev2)
+	uci set "ucitrack.$idx.init=mango_ikev2"
+	uci commit ucitrack
+fi
+
+# Prefer swanctl's charon; disable legacy ipsec starter to avoid dual start.
+if [ -x /etc/init.d/ipsec ]; then
+	/etc/init.d/ipsec disable 2>/dev/null || :
+	/etc/init.d/ipsec stop 2>/dev/null || :
+fi
+
+# Service enabled so Save & Apply works; UCI enabled defaults to 0 (no tunnel).
+/etc/init.d/mango_ikev2 enable
+exit 0

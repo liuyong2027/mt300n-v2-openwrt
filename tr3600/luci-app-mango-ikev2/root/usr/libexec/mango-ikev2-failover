@@ -1,0 +1,131 @@
+#!/bin/sh
+# One dial attempt for the active IKEv2 server.
+# After two failed attempts, switch to the next configured server.
+set -eu
+STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
+enabled=$(uci -q get mango_ikev2.main.enabled || true)
+mode=$(uci -q get mango_ikev2.main.mode || true)
+[ "$enabled" = 1 ] || exit 0
+[ -n "$mode" ] && [ "$mode" != direct ] || exit 0
+
+server2=$(uci -q get mango_ikev2.main.server2 || true)
+server3=$(uci -q get mango_ikev2.main.server3 || true)
+mkdir -p "$STATE"
+active=$(cat "$STATE/active" 2>/dev/null || echo mango)
+case "$active" in
+	mango|mango2|mango3) ;;
+	*) active=mango ;;
+esac
+[ "$active" = mango2 ] && [ -z "$server2" ] && active=mango
+[ "$active" = mango3 ] && [ -z "$server3" ] && active=mango
+
+peer_label() {
+	case "$1" in
+		mango2) printf '%s' '备用服务器1' ;;
+		mango3) printf '%s' '备用服务器2' ;;
+		*) printf '%s' '主服务器' ;;
+	esac
+}
+
+PEERS='mango'
+[ -n "$server2" ] && PEERS="$PEERS mango2"
+[ -n "$server3" ] && PEERS="$PEERS mango3"
+
+next_peer() {
+	local cur="$1" first='' seen=0 p
+	for p in $PEERS; do
+		[ -z "$first" ] && first=$p
+		if [ "$seen" = 1 ]; then
+			printf '%s' "$p"
+			return 0
+		fi
+		[ "$p" = "$cur" ] && seen=1
+	done
+	printf '%s' "$first"
+}
+
+log_event() {
+	/usr/libexec/mango-ikev2-log "$@" 2>/dev/null || true
+}
+
+terminate_all() {
+	swanctl --terminate --ike mango --timeout 3 >/dev/null 2>&1 || true
+	swanctl --terminate --ike mango2 --timeout 3 >/dev/null 2>&1 || true
+	swanctl --terminate --ike mango3 --timeout 3 >/dev/null 2>&1 || true
+}
+
+sas=$(swanctl --list-sas 2>/dev/null || true)
+established() {
+	printf '%s\n' "$sas" | grep -A8 "^$1: .*ESTABLISHED" | grep -q INSTALLED
+}
+
+# strongSwan installs the NordVPN address on the WAN interface. Masquerade
+# onto xfrm-mango needs that address on the tunnel device itself.
+pin_vip() {
+	local vip="$1"
+	[ -n "$vip" ] || return 0
+	ip link show xfrm-mango >/dev/null 2>&1 || return 0
+	ip -4 addr show dev xfrm-mango 2>/dev/null | grep -q "$vip" && return 0
+	ip addr replace "$vip/32" dev xfrm-mango || true
+}
+
+if established "$active"; then
+	echo 0 > "$STATE/fail-count"
+	echo "$active" > "$STATE/active"
+	for p in $PEERS; do
+		[ "$p" = "$active" ] && continue
+		if established "$p"; then
+			swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
+		fi
+	done
+	if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
+		vip=$(printf '%s\n' "$sas" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+		log_event ok "$active" "connected vip=${vip:-?}"
+		echo "$active" > "$STATE/logged-up"
+	fi
+	vip=$(printf '%s\n' "$sas" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	pin_vip "$vip"
+	exit 0
+fi
+
+rm -f "$STATE/logged-up"
+
+if swanctl --initiate --ike "$active" --child "$active" --timeout 15 >/dev/null 2>&1; then
+	echo 0 > "$STATE/fail-count"
+	echo "$active" > "$STATE/active"
+	echo "$active" > "$STATE/logged-up"
+	vip=$(swanctl --list-sas 2>/dev/null | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	pin_vip "$vip"
+	log_event ok "$active" "connected vip=${vip:-?}"
+	exit 0
+fi
+
+count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
+case "$count" in
+	''|*[!0-9]*) count=0 ;;
+esac
+count=$((count + 1))
+echo "$count" > "$STATE/fail-count"
+echo "$active" > "$STATE/active"
+log_event fail "$active" "dial failed (#$count)"
+
+peer_count=0
+for p in $PEERS; do peer_count=$((peer_count + 1)); done
+if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
+	from=$active
+	active=$(next_peer "$active")
+	echo "$active" > "$STATE/active"
+	log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+	terminate_all
+	if swanctl --initiate --ike "$active" --child "$active" --timeout 15 >/dev/null 2>&1; then
+		echo 0 > "$STATE/fail-count"
+		echo "$active" > "$STATE/logged-up"
+		vip=$(swanctl --list-sas 2>/dev/null | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+		pin_vip "$vip"
+		log_event ok "$active" "切换后连通 vip=${vip:-?}"
+	else
+		echo 1 > "$STATE/fail-count"
+		log_event fail "$active" "切换后拨号失败"
+	fi
+fi
+exit 0
