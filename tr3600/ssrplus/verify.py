@@ -14,7 +14,7 @@ repo=Path(__file__).resolve().parents[2]
 source=json.loads((repo/'reports/ssrplus-source.json').read_text())
 assert source['xray_version']=='26.10.21',source
 field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload']
-assert source['candidate_revision']==2 and source['integrated_field_fixes']==field_fixes
+assert source['firmware_version']=='1.3.0' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes+['ikev2_dual_stack'],source
 images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
 assert len(images)==1,images
 image=images[0]
@@ -47,7 +47,11 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
         'usr/libexec/cudy-ss-zt-guard','usr/libexec/cudy-ss-zt-watch','lib/upgrade/keep.d/cudy-ss',
         'usr/lib/cudy-ss/config.lua','usr/lib/cudy-ss/ss-zt.lua','usr/lib/cudy-ss/ss-server-migrate.lua']:
         assert not (root/absent).exists(),absent
-    assert not list((root/'usr/libexec').glob('mango-*'))
+    # 1.3.0 installs exactly the IKEv2 helpers. mango-fw and any other
+    # Mango proxy executable still fail this check.
+    expected_mango=sorted(p.name for p in (repo/'tr3600/luci-app-mango-ikev2/root/usr/libexec').glob('mango-ikev2-*'))
+    installed_mango=sorted(p.name for p in (root/'usr/libexec').glob('mango-*'))
+    assert expected_mango and installed_mango==expected_mango,installed_mango
     for required in ['etc/init.d/shadowsocksr','usr/bin/xray','usr/libexec/cudy-ss-netns',
         'usr/lib/cudy-ss/migrate.lua','usr/lib/cudy-ss/server-runtime.lua','usr/libexec/cudy-ss-gate',
         'usr/lib/cudy-ss/remove-private.lua','usr/lib/lua/cudy/ssr-server.lua','usr/libexec/cudy-ssr-serve',
