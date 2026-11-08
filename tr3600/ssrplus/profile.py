@@ -24,6 +24,9 @@ def prepare():
     spec=importlib.util.spec_from_file_location('tr3600_port',ROOT/'tr3600/port.py')
     port=importlib.util.module_from_spec(spec);spec.loader.exec_module(port)
     port.extract();port.adapt()
+    feed_spec=importlib.util.spec_from_file_location('patch_ucitrack_feed', PROFILE/'patch-ucitrack-feed.py')
+    feed_patch=importlib.util.module_from_spec(feed_spec);feed_spec.loader.exec_module(feed_patch)
+    feed_patch.patch(ROOT/'scripts/optimize-ucitrack.py')
     # Keep device support and other Cudy applications; no Mango package is installed.
     p=ROOT/'scripts/prepare.sh'
     text=p.read_text(encoding='utf-8')
