@@ -176,6 +176,12 @@ function M.swanctl(p)
         lines[#lines + 1] = '  ' .. peer.name .. ' {'
         lines[#lines + 1] = '    version = 2'
         lines[#lines + 1] = '    remote_addrs = ' .. escape(peer.server)
+        -- Bind IKE to WAN only. A leftover VIP on xfrm-mango otherwise becomes
+        -- the source address and NordVPN returns INTERNAL_ADDRESS_FAILURE.
+        if nonempty(p.local_addrs) then
+            assert(M.ip4(p.local_addrs), 'Invalid local_addrs')
+            lines[#lines + 1] = '    local_addrs = ' .. p.local_addrs
+        end
         lines[#lines + 1] = '    vips = 0.0.0.0'
         lines[#lines + 1] = '    keyingtries = 1'
         lines[#lines + 1] = '    dpd_delay = 30s'

@@ -1,0 +1,8 @@
+#!/bin/sh
+# TR3600: EIP196 crypto_safexcel panics in ESP IRQ; prefer software crypto.
+mkdir -p /etc/modprobe.d
+printf '%s\n' 'blacklist crypto_safexcel' > /etc/modprobe.d/blacklist-crypto-safexcel.conf
+if [ -f /etc/modules.d/90-crypto-hw-safexcel ]; then
+	mv /etc/modules.d/90-crypto-hw-safexcel /etc/modules.d/90-crypto-hw-safexcel.disabled 2>/dev/null || :
+fi
+exit 0

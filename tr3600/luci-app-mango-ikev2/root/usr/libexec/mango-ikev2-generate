@@ -23,7 +23,21 @@ if action == 'dnsmasq' and (p.mode == 'gfw' or p.mode == 'split') then
     p.gfw_domains = read_lines('/etc/mango-ikev2/gfw-domains.txt')
 end
 
+local function detect_wan_ipv4()
+    local cmd = [[sh -c 'd=$(uci -q get network.wan.device); [ -n "$d" ] || d=$(uci -q get network.wan.ifname); [ -n "$d" ] || d=eth0; ip -4 -o addr show dev "$d" scope global 2>/dev/null | sed -n "s/.* inet \\([0-9.]*\\)\\/.*/\\1/p" | head -n1']]
+    local pipe = io.popen(cmd)
+    if not pipe then return nil end
+    local ip = pipe:read('*l')
+    pipe:close()
+    if type(ip) == 'string' then
+        ip = ip:match('^%s*(.-)%s*$')
+        if ip ~= '' and model.ip4(ip) then return ip end
+    end
+    return nil
+end
+
 if action == 'swanctl' then
+    p.local_addrs = detect_wan_ipv4()
     io.write(model.swanctl(p))
 elseif action == 'nft' then
     io.write(model.nft(p))
