@@ -221,13 +221,25 @@ return view.extend({
 			'本镜像以 strongSwan 做路由器级 IKEv2 客户端。与 SSR Plus+ 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端。' +
 			'启用后局域网 DNS 改由本机 dnsmasq 回答。' +
 			'大陆分流：国内 IP 直连，其余走隧道；DNS 默认国内，GFW 域名走隧道 DNS。' +
-			'GFW 模式：仅列表域名走隧道。全局：全部走隧道。');
+			'GFW 模式：仅列表域名走隧道。全局：全部走隧道。' +
+			'连续拨号失败可自动回退 SSR；手动关闭 IKEv2 不会自动启 SSR。');
 
 		var s = m.section(form.NamedSection, 'main', 'policy', '连接与分流');
 		s.anonymous = true;
 
 		var o = s.option(form.Flag, 'enabled', '启用 IKEv2 客户端');
 		o.rmempty = false;
+
+		o = s.option(form.Flag, 'ssr_fallback', 'IKEv2 失败后回退 SSR',
+			'连续拨号失败达到阈值后自动关闭 IKEv2，并恢复启用前保存的 SSR Plus+ 节点。手动关闭 IKEv2 仍需自行启 SSR。');
+		o.default = '1';
+		o.rmempty = false;
+
+		o = s.option(form.Value, 'ssr_fallback_fails', '回退阈值（次）',
+			'累计连续拨号失败次数（含主/备切换）。默认 6；约每 30 秒检测一次。');
+		o.datatype = 'range(1,60)';
+		o.default = '6';
+		o.depends('ssr_fallback', '1');
 
 		o = s.option(form.ListValue, 'mode', '分流模式');
 		o.value('direct', '全部直连（不经隧道）');

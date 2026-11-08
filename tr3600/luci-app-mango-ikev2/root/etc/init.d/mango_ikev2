@@ -41,49 +41,74 @@ mango_ikev2_dns_section() {
 }
 
 mango_ikev2_dns_on() {
-    local sec
+    local sec conf
     sec=$(mango_ikev2_dns_section)
     [ -n "$sec" ] || return 1
     mkdir -p /etc/mango-ikev2/dnsmasq.d
+    conf=/etc/mango-ikev2/dnsmasq.d/ikev2.conf
     if [ ! -s /etc/mango-ikev2/dns-orig ]; then
         {
             echo "section=$sec"
-            echo "noresolv=$(uci -q get dhcp."$sec".noresolv || true)"
-            echo "filter_aaaa=$(uci -q get dhcp."$sec".filter_aaaa || true)"
-            uci -q get dhcp."$sec".server | tr ' ' '\n' | sed 's/^/server /'
-            uci -q get dhcp."$sec".confdir | tr ' ' '\n' | sed 's/^/confdir /'
+            echo "noresolv=$(uci -q get "dhcp.${sec}.noresolv" || true)"
+            echo "filter_aaaa=$(uci -q get "dhcp.${sec}.filter_aaaa" || true)"
+            uci -q get "dhcp.${sec}.server" | tr ' ' '\n' | sed 's/^/server /'
+            uci -q get "dhcp.${sec}.confdir" | tr ' ' '\n' | sed 's/^/confdir /'
         } > /etc/mango-ikev2/dns-orig
     fi
-    /usr/libexec/mango-ikev2-generate dnsmasq > /etc/mango-ikev2/dnsmasq.d/ikev2.conf || return 1
-    uci set dhcp."$sec".noresolv='1'
-    uci set dhcp."$sec".filter_aaaa='1'
-    uci -q delete dhcp."$sec".server
-    if ! uci -q get dhcp."$sec".confdir | tr ' ' '\n' | grep -qx /etc/mango-ikev2/dnsmasq.d; then
-        uci add_list dhcp."$sec".confdir='/etc/mango-ikev2/dnsmasq.d'
+    # Write to a temp file first so a failed/empty generate cannot leave
+    # noresolv=1 pointing at a blank snippet (local DNS REFUSED).
+    if ! /usr/libexec/mango-ikev2-generate dnsmasq > "$conf.tmp" || [ ! -s "$conf.tmp" ]; then
+        rm -f "$conf.tmp"
+        return 1
+    fi
+    mv "$conf.tmp" "$conf"
+    uci set "dhcp.${sec}.noresolv=1"
+    uci set "dhcp.${sec}.filter_aaaa=1"
+    uci -q delete "dhcp.${sec}.server"
+    if ! uci -q get "dhcp.${sec}.confdir" | tr ' ' '\n' | grep -qx /etc/mango-ikev2/dnsmasq.d; then
+        uci add_list "dhcp.${sec}.confdir=/etc/mango-ikev2/dnsmasq.d"
     fi
     uci commit dhcp
     /etc/init.d/dnsmasq restart
 }
 
 mango_ikev2_dns_off() {
-    local sec line val
+    local sec line val has_server=0
+    # Always drop the IKEv2 conf snippet first. An empty leftover with
+    # noresolv=1 makes local dnsmasq REFUSE every name (Baidu included).
     rm -f /etc/mango-ikev2/dnsmasq.d/ikev2.conf
-    [ -s /etc/mango-ikev2/dns-orig ] || return 0
-    sec=$(sed -n 's/^section=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+    sec=
+    [ -s /etc/mango-ikev2/dns-orig ] && sec=$(sed -n 's/^section=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+    [ -n "$sec" ] || sec=$(mango_ikev2_dns_section)
     [ -n "$sec" ] || return 0
-    uci -q delete dhcp."$sec".server
-    uci -q delete dhcp."$sec".confdir
-    while IFS= read -r line; do
-        case "$line" in
-            section=*|noresolv=*|filter_aaaa=*) ;;
-            'server '*) uci add_list dhcp."$sec".server="${line#server }" ;;
-            'confdir '*) uci add_list dhcp."$sec".confdir="${line#confdir }" ;;
-        esac
-    done < /etc/mango-ikev2/dns-orig
-    val=$(sed -n 's/^noresolv=//p' /etc/mango-ikev2/dns-orig | head -n 1)
-    if [ -n "$val" ]; then uci set dhcp."$sec".noresolv="$val"; else uci -q delete dhcp."$sec".noresolv; fi
-    val=$(sed -n 's/^filter_aaaa=//p' /etc/mango-ikev2/dns-orig | head -n 1)
-    if [ -n "$val" ]; then uci set dhcp."$sec".filter_aaaa="$val"; else uci -q delete dhcp."$sec".filter_aaaa; fi
+    uci -q delete "dhcp.${sec}.server"
+    uci -q delete "dhcp.${sec}.confdir"
+    uci -q delete "dhcp.${sec}.noresolv"
+    uci -q delete "dhcp.${sec}.filter_aaaa"
+    if [ -s /etc/mango-ikev2/dns-orig ]; then
+        while IFS= read -r line; do
+            case "$line" in
+                section=*|noresolv=*|filter_aaaa=*) ;;
+                'server '*)
+                    uci add_list "dhcp.${sec}.server=${line#server }"
+                    has_server=1
+                    ;;
+                'confdir '*)
+                    # Never put the IKEv2 snippet dir back while tearing down.
+                    [ "${line#confdir }" = "/etc/mango-ikev2/dnsmasq.d" ] && continue
+                    uci add_list "dhcp.${sec}.confdir=${line#confdir }"
+                    ;;
+            esac
+        done < /etc/mango-ikev2/dns-orig
+        val=$(sed -n 's/^noresolv=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+        [ -n "$val" ] && uci set "dhcp.${sec}.noresolv=$val"
+        val=$(sed -n 's/^filter_aaaa=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+        [ -n "$val" ] && uci set "dhcp.${sec}.filter_aaaa=$val"
+    fi
+    # If restore had nothing to put back, keep dnsmasq able to use WAN DNS.
+    if [ "$has_server" = 0 ] && ! uci -q get "dhcp.${sec}.server" >/dev/null; then
+        uci -q delete "dhcp.${sec}.noresolv"
+    fi
     uci commit dhcp
     rm -f /etc/mango-ikev2/dns-orig
     /etc/init.d/dnsmasq restart
@@ -238,6 +263,7 @@ mango_ikev2_apply() {
     mango_ikev2_dns_on || return 1
     echo mango > "$CONF_DIR/active"
     echo 0 > "$CONF_DIR/fail-count"
+    echo 0 > "$CONF_DIR/fallback-fail"
     # Never dial while a previous VIP still sits on xfrm-mango.
     ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || :
     /usr/libexec/mango-ikev2-failover || true

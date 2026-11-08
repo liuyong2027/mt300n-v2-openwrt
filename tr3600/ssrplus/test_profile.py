@@ -49,10 +49,11 @@ class ProfileTests(unittest.TestCase):
         release=(self.tree/'files/etc/cudy-release').read_text().strip()
         self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.0')
         source=json.loads((self.tree/'reports/ssrplus-source.json').read_text())
-        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload']
+        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar']
         self.assertEqual(source['firmware_version'],'1.3.0')
         self.assertEqual(source['candidate_revision'],1)
         self.assertEqual(source['integrated_field_fixes'],field_fixes+['ikev2_dual_stack'])
+        self.assertIn('patch-probe-mobile.py',prepare)
         self.assertIn('luci-app-mango-ikev2',source['ikev2'])
         ikev2_helpers=sorted(p.name for p in (self.tree/'tr3600/luci-app-mango-ikev2/root/usr/libexec').glob('mango-ikev2-*'))
         self.assertTrue(ikev2_helpers)

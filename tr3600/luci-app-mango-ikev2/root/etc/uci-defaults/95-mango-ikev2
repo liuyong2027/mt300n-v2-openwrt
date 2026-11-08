@@ -33,6 +33,15 @@ if [ -x /etc/init.d/ipsec ]; then
 	/etc/init.d/ipsec stop 2>/dev/null || :
 fi
 
+# Preserve-config upgrades: seed SSR auto-fallback knobs when absent.
+uci -q get mango_ikev2.main >/dev/null 2>&1 && {
+	uci -q get mango_ikev2.main.ssr_fallback >/dev/null 2>&1 || \
+		uci set mango_ikev2.main.ssr_fallback='1'
+	uci -q get mango_ikev2.main.ssr_fallback_fails >/dev/null 2>&1 || \
+		uci set mango_ikev2.main.ssr_fallback_fails='6'
+	uci commit mango_ikev2
+}
+
 # Service enabled so Save & Apply works; UCI enabled defaults to 0 (no tunnel).
 /etc/init.d/mango_ikev2 enable
 exit 0

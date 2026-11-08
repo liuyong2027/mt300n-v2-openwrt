@@ -1,6 +1,8 @@
 config policy 'main'
 	option enabled '0'
 	option mode 'split'
+	option ssr_fallback '1'
+	option ssr_fallback_fails '6'
 	option lan_device 'br-lan'
 	option server ''
 	option remote_id ''

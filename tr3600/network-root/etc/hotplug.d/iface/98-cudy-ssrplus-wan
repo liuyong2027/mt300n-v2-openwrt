@@ -1,0 +1,41 @@
+#!/bin/sh
+# SSR Plus+ can start at S95 before WAN DNS works, so ssr-rules gets an empty
+# server IP and never finishes installing redirect chains. Re-run after WAN is up.
+[ "$ACTION" = "ifup" ] || [ "$ACTION" = "ifupdate" ] || exit 0
+[ "$INTERFACE" = "wan" ] || exit 0
+
+GLOBAL_SERVER="$(uci -q get shadowsocksr.@global[0].global_server 2>/dev/null)"
+[ -n "$GLOBAL_SERVER" ] || exit 0
+[ "$GLOBAL_SERVER" != "nil" ] || exit 0
+
+# IKEv2 owns WAN egress while enabled; do not fight it.
+[ "$(uci -q get mango_ikev2.main.enabled 2>/dev/null)" = "1" ] && exit 0
+
+LOCK_DIR="/var/run/cudy-ssrplus-wan.lock"
+(
+	if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+		exit 0
+	fi
+	trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT INT TERM
+
+	# Let DHCP/DNS settle, then wait for the node hostname to resolve.
+	sleep 8
+	host="$(uci -q get shadowsocksr."$GLOBAL_SERVER".server 2>/dev/null)"
+	if [ -n "$host" ]; then
+		i=0
+		while [ "$i" -lt 20 ]; do
+			if echo "$host" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+				break
+			fi
+			if resolveip -4 -t 2 "$host" >/dev/null 2>&1; then
+				break
+			fi
+			sleep 2
+			i=$((i + 1))
+		done
+	fi
+
+	/etc/init.d/shadowsocksr restart >/dev/null 2>&1
+) >/dev/null 2>&1 &
+
+exit 0

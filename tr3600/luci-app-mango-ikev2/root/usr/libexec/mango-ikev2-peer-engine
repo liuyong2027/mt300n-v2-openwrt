@@ -1,8 +1,15 @@
 #!/bin/sh
 # Runtime mutual exclusion between IKEv2 egress and SSR Plus+ client.
-# Called by mango_ikev2 apply/teardown. ZeroTier / DDNS / WebFiles untouched.
+# Called by mango_ikev2 apply/teardown and the SSR auto-fallback path.
+# ZeroTier / DDNS / WebFiles untouched.
 
 set -eu
+
+SSR_PREV=/etc/mango-ikev2/ssr-prev
+
+ssr_global_sec() {
+	uci show shadowsocksr 2>/dev/null | sed -n 's/^\(shadowsocksr\.[^=]*\)=global$/\1/p' | head -n 1
+}
 
 ssr_stop() {
 	if [ -x /etc/init.d/shadowsocksr ]; then
@@ -10,17 +17,64 @@ ssr_stop() {
 	fi
 }
 
+save_ssr_prev() {
+	local sec gs old
+	mkdir -p /etc/mango-ikev2
+	sec=$(ssr_global_sec)
+	[ -n "$sec" ] || return 0
+	gs=$(uci -q get "${sec}.global_server" || true)
+	if [ -n "$gs" ] && [ "$gs" != nil ]; then
+		printf '%s\n' "$gs" > "$SSR_PREV"
+		return 0
+	fi
+	# Keep an earlier capture across IKEv2 reload when SSR is already nil.
+	[ -s "$SSR_PREV" ] && return 0
+	old=$(uci -q get "${sec}.old_global_server" || true)
+	if [ -n "$old" ] && [ "$old" != nil ]; then
+		printf '%s\n' "$old" > "$SSR_PREV"
+	fi
+}
+
+restore_ssr() {
+	local sec gs
+	sec=$(ssr_global_sec)
+	[ -n "$sec" ] || return 1
+	gs=
+	[ -s "$SSR_PREV" ] && gs=$(head -n 1 "$SSR_PREV")
+	if [ -z "$gs" ] || [ "$gs" = nil ]; then
+		gs=$(uci -q get "${sec}.global_server" || true)
+	fi
+	if [ -z "$gs" ] || [ "$gs" = nil ]; then
+		gs=$(uci -q get "${sec}.old_global_server" || true)
+	fi
+	[ -n "$gs" ] && [ "$gs" != nil ] || return 1
+	uci -q get "shadowsocksr.${gs}" >/dev/null 2>&1 || return 1
+	uci set "${sec}.global_server=$gs"
+	uci commit shadowsocksr
+	if [ -x /etc/init.d/shadowsocksr ]; then
+		/etc/init.d/shadowsocksr restart 2>/dev/null || return 1
+	else
+		return 1
+	fi
+	return 0
+}
+
 case "${1:-}" in
 	claim)
 		# IKEv2 is becoming the WAN egress engine.
+		save_ssr_prev
 		ssr_stop
 		;;
 	release)
-		# IKEv2 released egress; leave SSR stopped until the owner enables it.
+		# Manual IKEv2 disable: leave SSR stopped until the owner enables it.
 		:
 		;;
+	restore)
+		# Auto-fallback path: bring SSR Plus+ back with the saved node.
+		restore_ssr
+		;;
 	*)
-		echo "usage: $0 claim|release" >&2
+		echo "usage: $0 claim|release|restore" >&2
 		exit 2
 		;;
 esac

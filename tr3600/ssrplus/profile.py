@@ -53,7 +53,8 @@ cp -R "$kit/work-go-feed/lang/golang" feeds/packages/lang/
 python3 "$kit/tr3600/ssrplus/patch-ssr.py" "$PWD"
 python3 "$kit/tr3600/ssrplus/patch-ss-server.py" "$PWD"
 python3 "$kit/tr3600/ssrplus/patch-subscription.py" "$PWD"
-python3 "$kit/tr3600/ssrplus/patch-bulk-delete.py" "$PWD"''')
+python3 "$kit/tr3600/ssrplus/patch-bulk-delete.py" "$PWD"
+python3 "$kit/tr3600/ssrplus/patch-probe-mobile.py" "$PWD"''')
     text=text.replace('chmod +x files/etc/board.d/99-mango-network', 'chmod +x files/etc/board.d/99-mango-network files/etc/uci-defaults/90-cudy-ssrplus-migrate')
     text=text.replace('cp -R "$kit/files" .', '''cp -R "$kit/files" .
 python3 "$kit/tr3600/ssrplus/patch-ddns.py" --framework feeds/packages/net/ddns-scripts/files/usr/lib/ddns/dynamic_dns_functions.sh --resolver files/usr/libexec/cudy-dynu-resolve
@@ -242,7 +243,7 @@ return M
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
         'firmware_version':'1.3.0','release_stage':'candidate; hardware acceptance pending',
         'candidate_revision':1,
-        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','ikev2_dual_stack'],
+        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack'],
         'base':'tr3600-v1.2.0','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
         'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+',
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',

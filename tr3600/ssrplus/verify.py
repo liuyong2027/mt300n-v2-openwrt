@@ -13,7 +13,7 @@ import tempfile
 repo=Path(__file__).resolve().parents[2]
 source=json.loads((repo/'reports/ssrplus-source.json').read_text())
 assert source['xray_version']=='26.10.21',source
-field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload']
+field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar']
 assert source['firmware_version']=='1.3.0' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes+['ikev2_dual_stack'],source
 images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
 assert len(images)==1,images

@@ -8,10 +8,14 @@ Cudy TR3600 V1.0 / R126 — 1.3.0 候选 · SSR Plus+ + IKEv2 双栈
 新增
 - LuCI「IKEv2 客户端」：split / gfw / global / direct
 - 根证书安装、主/备用节点、大陆 IP 与 GFW 列表更新
-- 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端；关闭 IKEv2 后不会自动重启 SSR，需在 SSR 页面自行启用
+- 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端；手动关闭 IKEv2 后不会自动重启 SSR，需在 SSR 页面自行启用
+- IKEv2 连续拨号失败达阈值（默认 6 次）可自动关闭 IKEv2 并恢复上次 SSR 节点（可关）
+- 关闭/拆除 IKEv2 时强制恢复 dnsmasq（清 noresolv/空 ikev2.conf），避免本机 DNS REFUSED 导致百度等全挂
 - ZeroTier mangozt 区仍由 1.2.0 的 94-cudy-zt-zone 负责；IKEv2 默认脚本不再重复写入 mangozt
 - 仅 swanctl 启动 charon（禁用 ipsec starter）
 - TR3600：默认禁用 crypto_safexcel（EIP196 ESP Oops）；拨号前清 xfrm VIP；swanctl 绑定 WAN；数据面探测失败自动重拨
+- WAN ifup 后延迟重启 SSR Plus+（等节点域名可解析），避免开机竞态导致 ssr-rules 空服务器 IP、透明代理链未装好
+- 手机端 SSR 节点页「开始探测」移到列表上方全宽工具栏（≤768px），修复表头按钮不可达（issue #7）
 
 刷机
 - 仅适用于本项目 TR3600 定制 OpenWrt sysupgrade
@@ -21,6 +25,9 @@ Cudy TR3600 V1.0 / R126 — 1.3.0 候选 · SSR Plus+ + IKEv2 双栈
 验收建议
 1. 保留配置升级后：SSR / ZT / DDNS / WebFiles / USB / 双频 / LED 与 1.2.0 一致
 2. 启用 IKEv2 split：隧道建立；百度直连、Google 进隧道；SSR 进程已停
-3. 关闭 IKEv2 后手动启用 SSR，代理恢复
+3. 手动关闭 IKEv2 后自行启用 SSR，代理恢复
 4. 整机重启后：当前引擎与证书/节点配置保留；只起一个 charon
 5. IKEv2：swanctl.conf 含 local_addrs=WAN；拨号前后 xfrm VIP 不污染 IKE 源；模拟 ESP 僵死后 watch/failover 能自动重拨且无 INT_ADDR_FAIL
+6. 冷启动后不手动 restart：SSR 在 WAN/DNS 就绪后自动重装规则；Google DNS/HTTPS 可通；ssr-rules 的 `-s` 非空
+7. 人为让 IKEv2 连续拨号失败：达阈值后 IKEv2 自动关闭、SSR 恢复；事件日志含「已回退到 SSR」
+8. 手机窄屏打开 SSR 节点页：「开始探测」在列表上方可见可点；桌面布局不变
