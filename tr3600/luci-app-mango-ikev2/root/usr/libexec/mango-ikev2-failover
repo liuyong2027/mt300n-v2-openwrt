@@ -119,8 +119,32 @@ pin_vip() {
 	ip addr replace "$vip/32" dev "$XFRM_IF" || true
 }
 
-current_vip() {
-	printf '%s\n' "$sas" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1
+# Split egress uses mark→table 101→xfrm; dnsmasq uses main table so GFW DNS
+# needs /32s on xfrm. Teardown/redial/link flaps drop these — reinstall while up.
+ensure_dns_routes() {
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	ip -4 route replace default dev "$XFRM_IF" table 101 2>/dev/null || \
+		ip -4 route replace default via 0.0.0.0 dev "$XFRM_IF" table 101 2>/dev/null || true
+	ip -4 rule show | grep -q '10001:.*fwmark 0x101.*lookup 101' || \
+		ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || true
+	ip -4 route replace 1.1.1.1/32 dev "$XFRM_IF" 2>/dev/null || true
+	ip -4 route replace 8.8.8.8/32 dev "$XFRM_IF" 2>/dev/null || true
+}
+
+# VIP for one peer only: prefer INSTALLED child local x/32, else IKE [vip].
+# Never take the first VIP from a multi-peer swanctl dump.
+peer_vip() {
+	local peer="$1" block vip
+	block=$(printf '%s\n' "$sas" | awk -v p="$peer" '
+		index($0, p ": ") == 1 { show = 1 }
+		show {
+			if (NR > 1 && $0 ~ /^[a-zA-Z][a-zA-Z0-9_]*: / && index($0, p ": ") != 1) exit
+			print
+		}
+	')
+	vip=$(printf '%s\n' "$block" | sed -n 's/^    local  \([0-9][0-9.]*\)\/32$/\1/p' | head -n 1)
+	[ -n "$vip" ] || vip=$(printf '%s\n' "$block" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	printf '%s' "$vip"
 }
 
 # IKE/DPD can stay up while ESP is dead; require a real tunnel probe.
@@ -135,16 +159,28 @@ datapath_ok() {
 	return 1
 }
 
+# Only record "connected" after CHILD_SA + correct VIP pin + datapath probe.
 mark_up() {
 	local peer="$1" note="$2" vip
+	sas=$(read_sas)
+	if ! established "$peer"; then
+		log_event fail "$peer" "${note}: no CHILD_SA"
+		return 1
+	fi
+	vip=$(peer_vip "$peer")
+	clear_vip
+	pin_vip "$vip"
+	ensure_dns_routes
+	if ! datapath_ok; then
+		log_event fail "$peer" "${note}: datapath dead vip=${vip:-?}"
+		return 1
+	fi
 	echo 0 > "$STATE/fail-count"
 	clear_fallback_fail
 	echo "$peer" > "$STATE/active"
 	echo "$peer" > "$STATE/logged-up"
-	sas=$(read_sas)
-	vip=$(current_vip)
-	pin_vip "$vip"
 	log_event ok "$peer" "${note} vip=${vip:-?}"
+	return 0
 }
 
 dial_peer() {
@@ -160,17 +196,20 @@ if established "$active"; then
 			swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
 		fi
 	done
+	sas=$(read_sas)
 	if datapath_ok; then
+		vip=$(peer_vip "$active")
+		# Refresh pin/routes without claiming a new "connected" event every 30s.
+		clear_vip
+		pin_vip "$vip"
+		ensure_dns_routes
 		echo 0 > "$STATE/fail-count"
 		clear_fallback_fail
 		echo "$active" > "$STATE/active"
 		if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
-			vip=$(current_vip)
 			log_event ok "$active" "connected vip=${vip:-?}"
 			echo "$active" > "$STATE/logged-up"
 		fi
-		vip=$(current_vip)
-		pin_vip "$vip"
 		exit 0
 	fi
 	# SA looks fine but tunnel probe failed: force a clean redial.
@@ -184,8 +223,9 @@ fi
 rm -f "$STATE/logged-up"
 
 if dial_peer "$active"; then
-	mark_up "$active" "connected"
-	exit 0
+	if mark_up "$active" "connected"; then
+		exit 0
+	fi
 fi
 
 count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
@@ -207,7 +247,10 @@ if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
 	log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
 	terminate_all
 	if dial_peer "$active"; then
-		mark_up "$active" "切换后连通"
+		if ! mark_up "$active" "切换后连通"; then
+			echo 1 > "$STATE/fail-count"
+			bump_fallback_fail
+		fi
 	else
 		echo 1 > "$STATE/fail-count"
 		log_event fail "$active" "切换后拨号失败"

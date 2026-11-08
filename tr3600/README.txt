@@ -7,7 +7,7 @@ Build proof, source commit and image SHA256 are in tr3600-verification.json.
 A successful build does not mean this new image has already been installed.
 
 Locked sources: application 1f6169759396a31d2e3beec35d300c1fe4f2eaec;
-OpenWrt 25.12.5 f0a60eee2fe051741c643ea6118718aae1ef17fb and locked feeds.
+OpenWrt 25.12.6 64900e756efa667774214f9c6b17c113222e01f7 and locked feeds.
 Mango UI, R3 Xray patch, subscriptions, failover and ZeroTier are retained.
 The upstream application keeps its 20-test-failover1 marker for provenance;
 /etc/cudy-release identifies this device firmware as tr3600-1.1.1.

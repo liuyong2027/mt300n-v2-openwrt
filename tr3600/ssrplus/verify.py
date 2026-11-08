@@ -13,8 +13,9 @@ import tempfile
 repo=Path(__file__).resolve().parents[2]
 source=json.loads((repo/'reports/ssrplus-source.json').read_text())
 assert source['xray_version']=='26.10.21',source
-field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar']
-assert source['firmware_version']=='1.3.0' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes+['ikev2_dual_stack'],source
+field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok']
+assert source['firmware_version']=='1.3.0' and source['candidate_revision']==2 and source['integrated_field_fixes']==field_fixes,source
+assert source.get('openwrt_release')=='25.12.6',source
 images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
 assert len(images)==1,images
 image=images[0]
@@ -251,7 +252,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
     proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.2.0',
         'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
-        'candidate_revision':1,'ikev2_dual_stack':True,'integrated_field_fixes_verified':field_fixes,
+        'candidate_revision':2,'ikev2_dual_stack':True,'openwrt_release':'25.12.6','integrated_field_fixes_verified':field_fixes,
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
         'actual_xray_version':xray_version,
         'actual_arm64_enhanced_outbound_configs_tested':list(enhanced_outbounds),

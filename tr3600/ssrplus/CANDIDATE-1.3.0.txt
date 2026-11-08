@@ -1,6 +1,7 @@
 Cudy TR3600 V1.0 / R126 — 1.3.0 候选 · SSR Plus+ + IKEv2 双栈
 
 在 1.2.0（SSR Plus+）基础上同装 strongSwan IKEv2 客户端（移植自 MT300N Release 26 热修复）。
+OpenWrt 基线：25.12.6（`64900e756efa667774214f9c6b17c113222e01f7`）。
 
 保留服务
 - SSR Plus+（默认出口）、ZeroTier、DDNS、双频 Wi-Fi、USB/Samba、WebFiles、LED
@@ -11,6 +12,9 @@ Cudy TR3600 V1.0 / R126 — 1.3.0 候选 · SSR Plus+ + IKEv2 双栈
 - 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端；手动关闭 IKEv2 后不会自动重启 SSR，需在 SSR 页面自行启用
 - IKEv2 连续拨号失败达阈值（默认 6 次）可自动关闭 IKEv2 并恢复上次 SSR 节点（可关）
 - 关闭/拆除 IKEv2 时强制恢复 dnsmasq（清 noresolv/空 ikev2.conf），避免本机 DNS REFUSED 导致百度等全挂
+- failover 重拨/探活成功后重装 table 101 与 1.1.1.1/8.8.8.8 → xfrm 路由，避免分流/隧道 DNS 掉回 WAN
+- claim IKEv2 时清空 SSR 主节点（保留 ssr-prev）；LED 识别 IKEv2，避免红灯误报
+- 「已连接」仅在当前节点 CHILD_SA + 正确 VIP 钉扎 + 数据面探测通过后记录；切换节点时 VIP 取自该节点会话，先清旧地址
 - ZeroTier mangozt 区仍由 1.2.0 的 94-cudy-zt-zone 负责；IKEv2 默认脚本不再重复写入 mangozt
 - 仅 swanctl 启动 charon（禁用 ipsec starter）
 - TR3600：默认禁用 crypto_safexcel（EIP196 ESP Oops）；拨号前清 xfrm VIP；swanctl 绑定 WAN；数据面探测失败自动重拨

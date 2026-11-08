@@ -17,6 +17,9 @@ def replace(path,old,new,count=1):
         raise ValueError(f'Unexpected source: {path}: {old[:100]!r}')
     path.write_text(text.replace(old,new),encoding='utf-8',newline='\n')
 
+OPENWRT_COMMIT_25_12_5='f0a60eee2fe051741c643ea6118718aae1ef17fb'
+OPENWRT_COMMIT_25_12_6='64900e756efa667774214f9c6b17c113222e01f7'
+
 def prepare():
     spec=importlib.util.spec_from_file_location('tr3600_port',ROOT/'tr3600/port.py')
     port=importlib.util.module_from_spec(spec);spec.loader.exec_module(port)
@@ -24,6 +27,9 @@ def prepare():
     # Keep device support and other Cudy applications; no Mango package is installed.
     p=ROOT/'scripts/prepare.sh'
     text=p.read_text(encoding='utf-8')
+    if text.count(OPENWRT_COMMIT_25_12_5)!=2:
+        raise ValueError('Pinned OpenWrt 25.12.5 commit markers missing from prepare.sh')
+    text=text.replace(OPENWRT_COMMIT_25_12_5,OPENWRT_COMMIT_25_12_6)
     start=text.index('cp -R "$kit/package/luci-app-mango-proxy" package/')
     end=text.index('cp -R "$kit/files" .',start)
     text=text[:start]+'''cp -R "$kit/tr3600/luci-app-cudy-wifi" package/
@@ -242,10 +248,12 @@ return M
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
         'firmware_version':'1.3.0','release_stage':'candidate; hardware acceptance pending',
-        'candidate_revision':1,
-        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack'],
+        'candidate_revision':2,
+        'openwrt_commit':OPENWRT_COMMIT_25_12_6,
+        'openwrt_release':'25.12.6',
+        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok'],
         'base':'tr3600-v1.2.0','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
-        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+',
+        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+; VIP from active peer CHILD_SA after datapath probe',
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',

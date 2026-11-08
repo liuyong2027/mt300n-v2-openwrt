@@ -79,7 +79,7 @@ exit 0
     (ROOT/'files/etc/fw_env.config').write_text('/dev/ubi0_0 0 0x80000 0x80000 1\n')
     provenance = {'application_commit': '1f6169759396a31d2e3beec35d300c1fe4f2eaec',
                   'original_bundle_sha256': BUNDLE_HASH,
-                  'openwrt_commit': 'f0a60eee2fe051741c643ea6118718aae1ef17fb',
+                  'openwrt_commit': '64900e756efa667774214f9c6b17c113222e01f7',
                   'device_patch_commit': '046aec0dccd90f5a156cb8e9725c121c81955dd3',
                   'device': 'cudy,tr3600-v1', 'kernel_profile': 'OpenWrt Filogic defaults',
                   'requested_features': ['USB file sharing (Samba4) with LuCI per-partition consent, remembered UUID, metadata repair and safe unmount', 'Wi-Fi client/AP repeater', 'IPv4 relayd pseudo bridge', 'Optional unified dual-band Wi-Fi with local usteer and private restore backup', 'White/red network and proxy status LEDs with GFW support and exit-only identity', 'Private ZeroTier SS server with LuCI, authenticated AES/ChaCha20, atomic guarded apply and private rollback'],

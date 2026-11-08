@@ -59,10 +59,21 @@ restore_ssr() {
 	return 0
 }
 
+clear_ssr_active() {
+	# Keep ssr-prev for fallback, but clear the live selection so Cudy LED
+	# does not treat a stopped SSR Plus+ client as a failed proxy core.
+	local sec
+	sec=$(ssr_global_sec)
+	[ -n "$sec" ] || return 0
+	uci set "${sec}.global_server=nil"
+	uci commit shadowsocksr
+}
+
 case "${1:-}" in
 	claim)
 		# IKEv2 is becoming the WAN egress engine.
 		save_ssr_prev
+		clear_ssr_active
 		ssr_stop
 		;;
 	release)
