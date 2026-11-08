@@ -169,12 +169,23 @@ def compile_native(temporary):
 
 
 def framework_transfer(text, temporary, launcher, cert, service, *, current=False,
-                       suffix='', bind=True):
+                       suffix='', bind=True, device='ddnswan'):
     # Only the install prefix is adapted to the isolated native fixture.
     body = function(text, 'do_transfer').replace('/usr/libexec/cudy-ddns-curl', str(launcher))
+    # v25.12.6 resolves the WAN address and, when not binding, leaves the new
+    # bind options unset. The shipped shell does not use set -u. Declare those
+    # options in the fixture so set -u still covers the marked-curl patch; an
+    # empty value does not change the command.
+    optional = '\tlocal __FALLBACK_RUNPROG __FALLBACK_DESC\n'
+    found = body.count(optional)
+    assert found in (0, 1), found
+    if found == 1:
+        body = body.replace(optional, optional + '\tlocal __BIND_OPT=\n\tlocal __FALLBACK_BIND_OPT=\n', 1)
     source = '''set -u
 write_log() { [ "$1" -lt 10 ] || exit 90; }
-network_get_device() { [ "$2" = wan ] && eval "$1=ddnswan"; }
+network_get_device() { [ "$2" = wan ] && eval "$1="''' + shlex.quote(device) + '''; }
+network_get_ipaddr() { [ "$2" = wan ] && eval "$1="''' + shlex.quote(DIRECT_IP) + '''; }
+network_get_ipaddr6() { return 1; }
 '''
     values = dict(CURL='/usr/bin/curl --resolve fixture.invalid:443:1.2.3.2 --connect-timeout 1 --max-time 3' + suffix,
                   USE_CURL='1', CURL_SSL='https', CURL_PROXY='yes', WGET_SSL='',
@@ -354,10 +365,19 @@ def inside(args):
             assert response.stdout.strip() == DIRECT_IP
             assert counters()['marked-direct'] > native_before
             cases.append('native launcher and shim preserve WAN/TLS, force full mark255, defeat environment proxy')
-            assert framework_transfer(text, temporary, launcher, cert, 'cudy-dynu-https', current=True).stdout.strip() == DIRECT_IP
-            assert framework_transfer(text, temporary, launcher, cert, 'cudy-dynu-https', suffix=' --resolve fixture.invalid:443:1.2.3.2').stdout.strip() == DIRECT_IP
-            assert framework_transfer(text, temporary, launcher, cert, 'other-provider', bind=False).stdout.strip() == PROXY_IP
+            direct = framework_transfer(text, temporary, launcher, cert, 'cudy-dynu-https', current=True)
+            assert direct.returncode == 0 and direct.stdout.strip() == DIRECT_IP, (direct.returncode, direct.stdout, direct.stderr)
+            resolved = framework_transfer(text, temporary, launcher, cert, 'cudy-dynu-https', suffix=' --resolve fixture.invalid:443:1.2.3.2')
+            assert resolved.returncode == 0 and resolved.stdout.strip() == DIRECT_IP, (resolved.returncode, resolved.stdout, resolved.stderr)
+            other = framework_transfer(text, temporary, launcher, cert, 'other-provider', bind=False)
+            assert other.returncode == 0 and other.stdout.strip() == PROXY_IP, (other.returncode, other.stdout, other.stderr)
             cases.append('actual get_current_ip and provider-shaped do_transfer are marked; other provider unchanged')
+            if '__FALLBACK_BIND_OPT' in text:
+                before_fallback = counters()['marked-direct']
+                fallback = framework_transfer(text, temporary, launcher, cert, 'cudy-dynu-https', current=True, device='missing0')
+                assert fallback.returncode == 0 and fallback.stdout.strip() == DIRECT_IP, (fallback.returncode, fallback.stdout, fallback.stderr)
+                assert counters()['marked-direct'] > before_fallback, 'WAN-address retry left the marked path'
+                cases.append('failed device bind retries through the same marked curl using the WAN address')
             missing_ca = [v for v in marked_options]
             at = missing_ca.index('--cacert')
             del missing_ca[at:at + 2]
