@@ -1,0 +1,268 @@
+#!/bin/sh
+# One dial attempt for the active IKEv2 server.
+# After two failed attempts, switch to the next configured server.
+# Also recovers "IKE up / ESP dead" by clearing VIP leftovers and redialing.
+# After enough consecutive dial failures, optionally fall back to SSR Plus+.
+set -eu
+STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
+XFRM_IF=xfrm-mango
+enabled=$(uci -q get mango_ikev2.main.enabled || true)
+mode=$(uci -q get mango_ikev2.main.mode || true)
+[ "$enabled" = 1 ] || exit 0
+[ -n "$mode" ] && [ "$mode" != direct ] || exit 0
+
+server2=$(uci -q get mango_ikev2.main.server2 || true)
+server3=$(uci -q get mango_ikev2.main.server3 || true)
+mkdir -p "$STATE"
+active=$(cat "$STATE/active" 2>/dev/null || echo mango)
+case "$active" in
+	mango|mango2|mango3) ;;
+	*) active=mango ;;
+esac
+[ "$active" = mango2 ] && [ -z "$server2" ] && active=mango
+[ "$active" = mango3 ] && [ -z "$server3" ] && active=mango
+
+peer_label() {
+	case "$1" in
+		mango2) printf '%s' '备用服务器1' ;;
+		mango3) printf '%s' '备用服务器2' ;;
+		*) printf '%s' '主服务器' ;;
+	esac
+}
+
+PEERS='mango'
+[ -n "$server2" ] && PEERS="$PEERS mango2"
+[ -n "$server3" ] && PEERS="$PEERS mango3"
+
+next_peer() {
+	local cur="$1" first='' seen=0 p
+	for p in $PEERS; do
+		[ -z "$first" ] && first=$p
+		if [ "$seen" = 1 ]; then
+			printf '%s' "$p"
+			return 0
+		fi
+		[ "$p" = "$cur" ] && seen=1
+	done
+	printf '%s' "$first"
+}
+
+log_event() {
+	/usr/libexec/mango-ikev2-log "$@" 2>/dev/null || true
+}
+
+clear_fallback_fail() {
+	echo 0 > "$STATE/fallback-fail"
+}
+
+bump_fallback_fail() {
+	local t thr
+	t=$(cat "$STATE/fallback-fail" 2>/dev/null || echo 0)
+	case "$t" in
+		''|*[!0-9]*) t=0 ;;
+	esac
+	t=$((t + 1))
+	echo "$t" > "$STATE/fallback-fail"
+	[ "$(uci -q get mango_ikev2.main.ssr_fallback || echo 1)" = 1 ] || return 0
+	thr=$(uci -q get mango_ikev2.main.ssr_fallback_fails || echo 6)
+	case "$thr" in
+		''|*[!0-9]*) thr=6 ;;
+	esac
+	[ "$thr" -lt 1 ] && thr=1
+	if [ "$t" -ge "$thr" ]; then
+		/usr/libexec/mango-ikev2-fallback-ssr || true
+		exit 0
+	fi
+}
+
+terminate_all() {
+	swanctl --terminate --ike mango --timeout 3 >/dev/null 2>&1 || true
+	swanctl --terminate --ike mango2 --timeout 3 >/dev/null 2>&1 || true
+	swanctl --terminate --ike mango3 --timeout 3 >/dev/null 2>&1 || true
+}
+
+# Drop tunnel VIP before IKE dial so charon cannot source from 10.x.
+clear_vip() {
+	if ip link show "$XFRM_IF" >/dev/null 2>&1; then
+		ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || true
+	fi
+}
+
+refresh_wan_bind() {
+	mkdir -p "$STATE" /etc/swanctl/conf.d
+	/usr/libexec/mango-ikev2-generate swanctl > "$STATE/swanctl.conf" || return 1
+	ln -sf "$STATE/swanctl.conf" /etc/swanctl/conf.d/mango.conf
+	swanctl --load-conns --noprompt >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1 || return 1
+}
+
+prepare_dial() {
+	clear_vip
+	refresh_wan_bind || true
+}
+
+read_sas() {
+	swanctl --list-sas 2>/dev/null || true
+}
+
+sas=$(read_sas)
+established() {
+	printf '%s\n' "$sas" | grep -A8 "^$1: .*ESTABLISHED" | grep -q INSTALLED
+}
+
+# strongSwan installs the NordVPN address on the WAN interface. Masquerade
+# onto xfrm-mango needs that address on the tunnel device itself.
+# Never flush when the VIP is already correct: ip addr flush drops conntrack
+# for SNAT/masquerade sourced from that address and breaks long-lived flows.
+pin_vip() {
+	local vip="$1" cidr addr have_vip=0
+	[ -n "$vip" ] || return 0
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	for cidr in $(ip -4 -o addr show dev "$XFRM_IF" 2>/dev/null | awk '{print $4}'); do
+		addr=${cidr%%/*}
+		if [ "$addr" = "$vip" ]; then
+			have_vip=1
+		else
+			ip -4 addr del "$cidr" dev "$XFRM_IF" 2>/dev/null || true
+		fi
+	done
+	[ "$have_vip" = 1 ] || ip addr replace "$vip/32" dev "$XFRM_IF" || true
+}
+
+# Split egress uses mark→table 101→xfrm; dnsmasq uses main table so GFW DNS
+# needs /32s on xfrm. Teardown/redial/link flaps drop these — reinstall while up.
+ensure_dns_routes() {
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	ip -4 route replace default dev "$XFRM_IF" table 101 2>/dev/null || \
+		ip -4 route replace default via 0.0.0.0 dev "$XFRM_IF" table 101 2>/dev/null || true
+	ip -4 rule show | grep -q '10001:.*fwmark 0x101.*lookup 101' || \
+		ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || true
+	ip -4 route replace 1.1.1.1/32 dev "$XFRM_IF" 2>/dev/null || true
+	ip -4 route replace 8.8.8.8/32 dev "$XFRM_IF" 2>/dev/null || true
+}
+
+# VIP for one peer only: prefer INSTALLED child local x/32, else IKE [vip].
+# Never take the first VIP from a multi-peer swanctl dump.
+peer_vip() {
+	local peer="$1" block vip
+	block=$(printf '%s\n' "$sas" | awk -v p="$peer" '
+		index($0, p ": ") == 1 { show = 1 }
+		show {
+			if (NR > 1 && $0 ~ /^[a-zA-Z][a-zA-Z0-9_]*: / && index($0, p ": ") != 1) exit
+			print
+		}
+	')
+	vip=$(printf '%s\n' "$block" | sed -n 's/^    local  \([0-9][0-9.]*\)\/32$/\1/p' | head -n 1)
+	[ -n "$vip" ] || vip=$(printf '%s\n' "$block" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	printf '%s' "$vip"
+}
+
+# IKE/DPD can stay up while ESP is dead; require a real tunnel probe.
+datapath_ok() {
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
+	if ping -c 1 -W 2 -I "$XFRM_IF" 1.1.1.1 >/dev/null 2>&1; then
+		return 0
+	fi
+	if ping -c 1 -W 2 -I "$XFRM_IF" 8.8.8.8 >/dev/null 2>&1; then
+		return 0
+	fi
+	return 1
+}
+
+# Only record "connected" after CHILD_SA + correct VIP pin + datapath probe.
+mark_up() {
+	local peer="$1" note="$2" vip
+	sas=$(read_sas)
+	if ! established "$peer"; then
+		log_event fail "$peer" "${note}: no CHILD_SA"
+		return 1
+	fi
+	vip=$(peer_vip "$peer")
+	pin_vip "$vip"
+	ensure_dns_routes
+	if ! datapath_ok; then
+		log_event fail "$peer" "${note}: datapath dead vip=${vip:-?}"
+		return 1
+	fi
+	echo 0 > "$STATE/fail-count"
+	clear_fallback_fail
+	echo "$peer" > "$STATE/active"
+	echo "$peer" > "$STATE/logged-up"
+	log_event ok "$peer" "${note} vip=${vip:-?}"
+	return 0
+}
+
+dial_peer() {
+	local peer="$1"
+	prepare_dial
+	swanctl --initiate --ike "$peer" --child "$peer" --timeout 15 >/dev/null 2>&1
+}
+
+if established "$active"; then
+	for p in $PEERS; do
+		[ "$p" = "$active" ] && continue
+		if established "$p"; then
+			swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
+		fi
+	done
+	sas=$(read_sas)
+	if datapath_ok; then
+		vip=$(peer_vip "$active")
+		# Keep VIP stable while healthy: only pin/routes, never flush+readd.
+		# A 30s flush would wipe NAT conntrack for tunnel-masqueraded flows.
+		pin_vip "$vip"
+		ensure_dns_routes
+		echo 0 > "$STATE/fail-count"
+		clear_fallback_fail
+		echo "$active" > "$STATE/active"
+		if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
+			log_event ok "$active" "connected vip=${vip:-?}"
+			echo "$active" > "$STATE/logged-up"
+		fi
+		exit 0
+	fi
+	# SA looks fine but tunnel probe failed: force a clean redial.
+	rm -f "$STATE/logged-up"
+	log_event fail "$active" "datapath dead; redial"
+	terminate_all
+	clear_vip
+	sas=
+fi
+
+rm -f "$STATE/logged-up"
+
+if dial_peer "$active"; then
+	if mark_up "$active" "connected"; then
+		exit 0
+	fi
+fi
+
+count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
+case "$count" in
+	''|*[!0-9]*) count=0 ;;
+esac
+count=$((count + 1))
+echo "$count" > "$STATE/fail-count"
+echo "$active" > "$STATE/active"
+log_event fail "$active" "dial failed (#$count)"
+bump_fallback_fail
+
+peer_count=0
+for p in $PEERS; do peer_count=$((peer_count + 1)); done
+if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
+	from=$active
+	active=$(next_peer "$active")
+	echo "$active" > "$STATE/active"
+	log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+	terminate_all
+	if dial_peer "$active"; then
+		if ! mark_up "$active" "切换后连通"; then
+			echo 1 > "$STATE/fail-count"
+			bump_fallback_fail
+		fi
+	else
+		echo 1 > "$STATE/fail-count"
+		log_event fail "$active" "切换后拨号失败"
+		bump_fallback_fail
+	fi
+fi
+exit 0
