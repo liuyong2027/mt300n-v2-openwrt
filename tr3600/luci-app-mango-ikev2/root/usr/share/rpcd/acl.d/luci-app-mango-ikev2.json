@@ -9,6 +9,7 @@
         "/usr/libexec/mango-ikev2-lists-status": [ "exec" ],
         "/usr/libexec/mango-ikev2-ca-status": [ "exec" ],
         "/var/log/mango-ikev2-events.log": [ "read" ],
+        "/tmp/log/mango-ikev2-events.log": [ "read" ],
         "/etc/swanctl/x509ca/nordvpn-root-ca.pem": [ "read" ]
       },
       "ubus": {
