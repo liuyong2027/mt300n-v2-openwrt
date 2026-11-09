@@ -200,7 +200,6 @@ if established "$active"; then
 	if datapath_ok; then
 		vip=$(peer_vip "$active")
 		# Refresh pin/routes without claiming a new "connected" event every 30s.
-		clear_vip
 		pin_vip "$vip"
 		ensure_dns_routes
 		echo 0 > "$STATE/fail-count"
