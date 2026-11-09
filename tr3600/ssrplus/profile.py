@@ -110,6 +110,11 @@ CONFIG_PACKAGE_strongswan-mod-x509=y
 CONFIG_PACKAGE_kmod-xfrm-interface=y
 CONFIG_PACKAGE_kmod-ipsec4=y
 CONFIG_PACKAGE_kmod-crypto-gcm=y
+# BBR is a module on this 6.12 tree (kmod-tcp-bbr). sch_fq is its pacing
+# qdisc and lives in kmod-sched, which autoloads it before sysctl runs.
+CONFIG_PACKAGE_kmod-tcp-bbr=y
+CONFIG_PACKAGE_kmod-sched-core=y
+CONFIG_PACKAGE_kmod-sched=y
 '''
     # Avoid duplicate "not set" entries overriding the selected data packages.
     cfg=cfg.replace('# CONFIG_PACKAGE_v2ray-geoip is not set\n','').replace('# CONFIG_PACKAGE_v2ray-geosite is not set\n','')

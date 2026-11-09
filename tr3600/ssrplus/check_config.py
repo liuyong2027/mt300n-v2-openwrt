@@ -32,7 +32,8 @@ def main():
     root=Path(__file__).resolve().parents[2]
     config=(root/'openwrt/.config').read_text()
     required=['luci-app-ssr-plus','xray-core','dnsmasq-full','luci-compat','kmod-nft-socket',
-        'kmod-nft-tproxy','kmod-nft-nat','kmod-veth','luci-app-cudy-ss','luci-app-cudy-led',
+        'kmod-nft-tproxy','kmod-nft-nat','kmod-veth','kmod-tcp-bbr','kmod-sched',
+        'luci-app-cudy-ss','luci-app-cudy-led',
         'cudy-webfiles','luci-app-cudy-usb','samba4-server','zerotier','luci-app-ddns','cudy-ddns-direct']
     for name in required:assert 'CONFIG_PACKAGE_'+name+'=y' in config,name
     for name in ['luci-app-mango-proxy','dnsmasq','mango-tcpcheck']:

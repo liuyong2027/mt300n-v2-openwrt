@@ -131,9 +131,30 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/cudy-webfiles').read_bytes()).hexdigest()==manifest['helperSHA256']
     assert hashlib.sha256((root/'usr/lib/cudy-webfiles/bin/filebrowser').read_bytes()).hexdigest()==manifest['quantum']['sha256']
     config=(repo/'openwrt/.config').read_text()
-    for package in ['luci-app-ssr-plus','dnsmasq-full','kmod-nft-socket','kmod-nft-tproxy','kmod-veth','luci-compat','luci-app-cudy-ss','zerotier',
+    for package in ['luci-app-ssr-plus','dnsmasq-full','kmod-nft-socket','kmod-nft-tproxy','kmod-veth','kmod-tcp-bbr','kmod-sched','luci-compat','luci-app-cudy-ss','zerotier',
         'luci-app-cudy-wifi','usteer','wpad-mbedtls','luci-app-mango-ikev2','strongswan-swanctl','kmod-xfrm-interface']:
         assert 'CONFIG_PACKAGE_'+package+'=y' in config,package
+    kconfig=(kernels[0]/'.config').read_text()
+    assert re.search(r'^CONFIG_TCP_CONG_BBR=m$',kconfig,re.M),'BBR was not built as a loadable module'
+    assert re.search(r'^CONFIG_NET_SCH_FQ=m$',kconfig,re.M),'fq qdisc was not built as a loadable module'
+    bbr_ko=list(root.glob('lib/modules/*/tcp_bbr.ko*'))
+    fq_ko=list(root.glob('lib/modules/*/sch_fq.ko*'))
+    assert len(bbr_ko)==1,bbr_ko
+    assert len(fq_ko)==1,fq_ko
+    assert (root/'etc/modules.d/tcp-bbr').read_text().split()==['tcp_bbr']
+    assert 'sch_fq' in (root/'etc/modules.d/73-sched').read_text().split()
+    tcp_bdp=(root/'etc/sysctl.d/99-tcp-bdp.conf').read_text()
+    assert tcp_bdp=='''net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 87380 16777216
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_congestion_control = bbr
+''',tcp_bdp
+    assert (root/'etc/sysctl.d/98-tcp-bbr-fq.conf').read_text()=='net.core.default_qdisc = fq\n'
+    assert 'net.ipv4.tcp_congestion_control=bbr' in (root/'etc/sysctl.d/12-tcp-bbr.conf').read_text()
     assert 'CONFIG_PACKAGE_luci-app-mango-proxy=y' not in config
     assert (root/'usr/libexec/mango-ikev2-peer-engine').is_file()
     assert (root/'etc/init.d/mango_ikev2').is_file()

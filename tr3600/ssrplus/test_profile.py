@@ -40,8 +40,24 @@ class ProfileTests(unittest.TestCase):
         self.assertIn('CONFIG_PACKAGE_strongswan-swanctl=y',config)
         self.assertIn('CONFIG_PACKAGE_kmod-nft-socket=y',config)
         self.assertIn('CONFIG_PACKAGE_kmod-veth=y',config)
+        self.assertIn('CONFIG_PACKAGE_kmod-tcp-bbr=y',config)
+        self.assertIn('CONFIG_PACKAGE_kmod-sched=y',config)
+        self.assertIn('CONFIG_PACKAGE_kmod-sched-core=y',config)
+        bdp=(self.tree/'files/etc/sysctl.d/99-tcp-bdp.conf').read_text()
+        self.assertEqual(bdp,(PROFILE/'../network-root/etc/sysctl.d/99-tcp-bdp.conf').read_text())
+        self.assertEqual(bdp,'''net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 87380 16777216
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_congestion_control = bbr
+''')
+        self.assertEqual((self.tree/'files/etc/sysctl.d/98-tcp-bbr-fq.conf').read_text(),'net.core.default_qdisc = fq\n')
         self.assertNotIn('+luci-app-mango-proxy',(self.ss/'Makefile').read_text())
         prepare=(self.tree/'scripts/prepare.sh').read_text()
+        self.assertIn('cp -R "$kit/files" .',prepare)
         self.assertNotIn('cp -R "$kit/package/luci-app-mango-proxy"',prepare)
         self.assertIn('cp -R "$kit/tr3600/luci-app-mango-ikev2" package/',prepare)
         self.assertNotIn('ss-integration.py',prepare)
