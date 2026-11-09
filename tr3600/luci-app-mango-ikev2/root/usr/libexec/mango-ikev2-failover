@@ -148,6 +148,17 @@ peer_vip() {
 }
 
 # IKE/DPD can stay up while ESP is dead; require a real tunnel probe.
+# ICMP alone is lossy on some VPN paths, so HTTP 2xx also counts as healthy.
+http_probe() {
+	local url="$1" code
+	command -v curl >/dev/null 2>&1 || return 1
+	code=$(curl -4 -sS -o /dev/null -w "%{http_code}" --connect-timeout 4 --max-time 8 --interface "$XFRM_IF" "$url" 2>/dev/null) || return 1
+	case "$code" in
+		2[0-9][0-9]) return 0 ;;
+	esac
+	return 1
+}
+
 datapath_ok() {
 	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
 	if ping -c 1 -W 2 -I "$XFRM_IF" 1.1.1.1 >/dev/null 2>&1; then
@@ -156,7 +167,28 @@ datapath_ok() {
 	if ping -c 1 -W 2 -I "$XFRM_IF" 8.8.8.8 >/dev/null 2>&1; then
 		return 0
 	fi
+	if http_probe https://www.gstatic.com/generate_204; then
+		return 0
+	fi
+	if http_probe https://www.google.com/generate_204; then
+		return 0
+	fi
 	return 1
+}
+
+reset_datapath_fail() {
+	echo 0 > "$STATE/datapath-fail"
+}
+
+bump_datapath_fail() {
+	local n
+	n=$(cat "$STATE/datapath-fail" 2>/dev/null || echo 0)
+	case "$n" in
+		''|*[!0-9]*) n=0 ;;
+	esac
+	n=$((n + 1))
+	echo "$n" > "$STATE/datapath-fail"
+	printf "%s" "$n"
 }
 
 # Only record "connected" after CHILD_SA + correct VIP pin + datapath probe.
@@ -176,6 +208,7 @@ mark_up() {
 		return 1
 	fi
 	echo 0 > "$STATE/fail-count"
+	reset_datapath_fail
 	clear_fallback_fail
 	echo "$peer" > "$STATE/active"
 	echo "$peer" > "$STATE/logged-up"
@@ -203,6 +236,7 @@ if established "$active"; then
 		pin_vip "$vip"
 		ensure_dns_routes
 		echo 0 > "$STATE/fail-count"
+		reset_datapath_fail
 		clear_fallback_fail
 		echo "$active" > "$STATE/active"
 		if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
@@ -211,8 +245,16 @@ if established "$active"; then
 		fi
 		exit 0
 	fi
-	# SA looks fine but tunnel probe failed: force a clean redial.
+	# SA looks fine but tunnel probe failed. Require 3 consecutive misses
+	# before tearing down; a single ICMP loss was forcing a redial and then
+	# NordVPN INTERNAL_ADDRESS_FAILURE until the old VIP was released.
+	n=$(bump_datapath_fail)
+	if [ "$n" -lt 3 ]; then
+		log_event fail "$active" "datapath probe failed (#$n/3); keep SA"
+		exit 0
+	fi
 	rm -f "$STATE/logged-up"
+	reset_datapath_fail
 	log_event fail "$active" "datapath dead; redial"
 	terminate_all
 	clear_vip
