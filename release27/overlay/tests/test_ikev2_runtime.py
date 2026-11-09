@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -282,6 +283,32 @@ mango_ikev2_apply
         self.d.update(load_rc=0, dial_ok=True)
         self.run_cycle()
         self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_wan_reload_does_not_inherit_hotplug_lock(self):
+        (self.bin / 'sleep').symlink_to(self.mock)
+        stub = self.r / 'reload'
+        stub.write_text('''#!/bin/sh
+if [ -e /proc/self/fd/7 ]; then
+    echo leaked > "$FAKE_ROOT/wan-result"
+else
+    echo closed > "$FAKE_ROOT/wan-result"
+fi
+''')
+        stub.chmod(0o755)
+        source = (PACKAGE / 'etc/hotplug.d/iface/97-mango-ikev2-wan').read_text()
+        source = source.replace('/var/lock', str(self.r / 'lock'))
+        source = source.replace('/etc/init.d/mango_ikev2', str(stub))
+        hotplug = self.r / 'hotplug'
+        hotplug.write_text(source)
+        (self.r / 'fixture.json').write_text(json.dumps(self.d))
+        env = dict(self.env, INTERFACE='wan', ACTION='ifup')
+        subprocess.run(['sh', str(hotplug)], env=env, check=True)
+        result = self.r / 'wan-result'
+        deadline = time.monotonic() + 3
+        while not result.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertTrue(result.exists(), 'WAN reload did not run')
+        self.assertEqual(result.read_text().strip(), 'closed')
 
 
 if __name__ == '__main__':

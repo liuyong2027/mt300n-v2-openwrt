@@ -14,5 +14,6 @@ esac
     flock -w 60 7 || exit 0
     sleep 2
     [ "$(uci -q get mango_ikev2.main.enabled)" = 1 ] || exit 0
-    /etc/init.d/mango_ikev2 reload
+    # Keep the event serialized, but don't pass its lock into the watcher.
+    /etc/init.d/mango_ikev2 reload 7>&-
 ) >/dev/null 2>&1 &
