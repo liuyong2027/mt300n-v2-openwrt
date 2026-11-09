@@ -6,6 +6,13 @@ function M.identity()
     local generation=hash('pidof xray v2ray ss-redir ssr-redir hysteria mihomo charon 2>/dev/null')
     if config and uplink then return (ike or 'ike')..':'..config..':'..uplink..':'..(generation or 'stopped') end
 end
+local function lock_held(path)
+    -- IKEv2 and SSR leave flock files behind; only a live holder is "busy".
+    if not fs.access(path) then return false end
+    local r = os.execute("flock -n '" .. path .. "' true >/dev/null 2>&1")
+    if r == true or r == 0 then return false end
+    return true
+end
 function M.snapshot()
     local u=uci.cursor()
     local ike_on=u:get('mango_ikev2','main','enabled')=='1'
@@ -28,7 +35,7 @@ function M.snapshot()
     local routes=M.capture('ip -4 route show table main default')
     local uplink=routes=='' and 1 or 0
     return {board=M.board(),now=M.now(),id=M.identity(),mode=mode,
-        failover=false,busy=fs.access('/var/lock/ssrplus.lock') or fs.access('/var/lock/mango-ikev2-resource.lock'),uplink=uplink,
+        failover=false,busy=lock_held('/var/lock/ssrplus.lock') or lock_held('/var/lock/mango-ikev2-resource.lock'),uplink=uplink,
         ready=ready,
         suspended=M.blocked(),clock_ok=fs.access(M.dir..'/clock-synced') and os.time()>1704067200,
         minute=tonumber(os.date('%H'))*60+tonumber(os.date('%M'))}

@@ -257,6 +257,42 @@ state.shadowsocksr.global.global_server='';assert(M.snapshot().mode=='direct')
 state.shadowsocksr={};assert(M.snapshot().mode=='direct')
 ''')
 
+    def test_led_busy_follows_lock_holder_not_stale_file(self):
+        lua=self.migration_lua()
+        lua.execute('''
+uci=package.loaded['uci'];fs=f;M={dir='/var/run/cudy-led'}
+function M.board() return 'cudy,tr3600-v1' end
+function M.now() return 123 end
+function M.capture() return 'default via 192.0.2.1' end
+function M.blocked() return false end
+flock_result=0
+os.execute=function(cmd)
+  if cmd:find('flock %-n',1) then return flock_result end
+  return 0
+end
+''')
+        lua.execute((PROFILE/'led-adapter.lua').read_text())
+        lua.execute('''
+M.identity=function() return 'synthetic-identity' end
+files['/var/lock/ssrplus.lock']=true
+files['/var/lock/mango-ikev2-resource.lock']=true
+flock_result=0
+assert(M.snapshot().busy==false)
+flock_result=true
+assert(M.snapshot().busy==false)
+flock_result=256
+assert(M.snapshot().busy==true)
+files['/var/lock/ssrplus.lock']=nil
+assert(M.snapshot().busy==true)
+files['/var/lock/mango-ikev2-resource.lock']=nil
+assert(M.snapshot().busy==false)
+''')
+        spliced=(self.tree/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua').read_text()
+        self.assertIn("flock -n", spliced)
+        self.assertNotIn("fs.access('/var/lock/ssrplus.lock')", spliced)
+        self.assertIn("lock_held('/var/lock/ssrplus.lock')", spliced)
+        self.assertIn("lock_held('/var/lock/mango-ikev2-resource.lock')", spliced)
+
     def test_namespace_ownership_and_collision_checks(self):
         helper=(PROFILE/'root/usr/libexec/cudy-ss-netns').read_text()
         self.assertIn('owned ||',helper)
