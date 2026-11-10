@@ -1,7 +1,9 @@
 #!/bin/sh
 # One dial attempt for the active IKEv2 server.
 # After two failed attempts, switch to the next configured server.
-# Also recovers "IKE up / ESP dead" by clearing VIP leftovers and redialing.
+# Rekey windows (REKEYED/REKEYING without INSTALLED) skip the tick.
+# When IKE is up but the child/datapath is missing, initiate only the child
+# — do not flush VIP or tear down the IKE SA.
 # Optional SSR Plus+ fallback is UCI opt-in and only stops the cycle when the
 # helper exists and succeeds; missing helper must not freeze peer rotation.
 set -eu
@@ -128,11 +130,35 @@ peer_block() {
     '
 }
 
+# healthy: an INSTALLED child is up (even if another child is still REKEYED).
+# skip: IKE is up and a child is mid-rekey/delete with no INSTALLED child yet.
+# child: IKE is ESTABLISHED but no child is installed or in transition.
+# down: no usable IKE SA.
+sa_health() {
+	local peer="$1" block
+	block=$(peer_block "$peer")
+	if ! printf '%s\n' "$block" | grep -E -q "^${peer}: .*ESTABLISHED"; then
+		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*(CONNECTING|REKEYING),"; then
+			printf '%s\n' skip
+			return 0
+		fi
+		printf '%s\n' down
+		return 0
+	fi
+	if printf '%s\n' "$block" | grep -E -q '(^|[[:space:],])INSTALLED(,|[[:space:]]|$)'; then
+		printf '%s\n' healthy
+		return 0
+	fi
+	if printf '%s\n' "$block" | grep -E -q '(^|[[:space:],])(REKEYING|REKEYED|DELETING|INSTALLING|UPDATING|DESTROYING)(,|[[:space:]]|$)'; then
+		printf '%s\n' skip
+		return 0
+	fi
+	printf '%s\n' child
+	return 0
+}
+
 established() {
-    local block
-    block=$(peer_block "$1")
-    printf '%s\n' "$block" | grep -q "^$1: .*ESTABLISHED" &&
-        printf '%s\n' "$block" | grep -q '^  .*INSTALLED'
+	[ "$(sa_health "$1")" = healthy ]
 }
 
 # strongSwan installs the NordVPN address on the WAN interface. Masquerade
@@ -187,12 +213,17 @@ datapath_ok() {
 
 # Only record "connected" after CHILD_SA + correct VIP pin + datapath probe.
 mark_up() {
-	local peer="$1" note="$2" vip
+	local peer="$1" note="$2" vip health
 	sas=$(read_sas)
-	if ! established "$peer"; then
-		log_event fail "$peer" "${note}: no CHILD_SA"
-		return 1
-	fi
+	health=$(sa_health "$peer")
+	case "$health" in
+		healthy) ;;
+		skip) return 0 ;;
+		*)
+			log_event fail "$peer" "${note}: no CHILD_SA"
+			return 1
+			;;
+	esac
 	vip=$(peer_vip "$peer")
 	if ! pin_vip "$vip" || ! ensure_dns_routes || ! datapath_ok; then
 		log_event fail "$peer" "${note}: datapath dead vip=${vip:-?}"
@@ -207,10 +238,28 @@ mark_up() {
 	return 0
 }
 
+# Initiate only the child; keep IKE and do not flush VIP.
+initiate_child() {
+	local peer="$1"
+	swanctl --initiate --child "$peer" --timeout 15 >/dev/null 2>&1
+}
+
 dial_peer() {
 	local peer="$1"
 	prepare_dial || return 1
 	swanctl --initiate --ike "$peer" --child "$peer" --timeout 15 >/dev/null 2>&1
+}
+
+mark_healthy_idle() {
+	local vip="$1"
+	echo 0 > "$STATE/fail-count"
+	clear_fallback_fail
+	echo "$active" > "$STATE/active"
+	record_health "$active"
+	if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
+		log_event ok "$active" "connected vip=${vip:-?}"
+		echo "$active" > "$STATE/logged-up"
+	fi
 }
 
 # Use uptime so NTP clock changes cannot bypass or prolong the backoff.
@@ -219,36 +268,110 @@ retry=$(cat "$STATE/retry-after" 2>/dev/null || echo 0)
 case "$retry" in ''|*[!0-9]*) retry=0 ;; esac
 if [ "$now" -lt "$retry" ]; then exit 0; fi
 
-if established "$active"; then
+health=$(sa_health "$active")
+case "$health" in
+healthy)
 	for p in $PEERS; do
 		[ "$p" = "$active" ] && continue
-		if established "$p"; then
-			swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
-		fi
+		case "$(sa_health "$p")" in
+			healthy|skip|child)
+				swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
+				;;
+		esac
 	done
 	sas=$(read_sas)
 	vip=$(peer_vip "$active")
 	if pin_vip "$vip" && ensure_dns_routes && datapath_ok; then
 		# Keep VIP stable while healthy: only pin/routes, never flush+readd.
-		# A 30s flush would wipe NAT conntrack for tunnel-masqueraded flows.
-		echo 0 > "$STATE/fail-count"
-		clear_fallback_fail
-		echo "$active" > "$STATE/active"
-		record_health "$active"
-		if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
-			log_event ok "$active" "connected vip=${vip:-?}"
-			echo "$active" > "$STATE/logged-up"
-		fi
+		mark_healthy_idle "$vip"
 		exit 0
 	fi
-	# SA looks fine but tunnel probe failed: force a clean redial.
+	# IKE + CHILD look installed but probe failed: re-initiate the child only.
+	# Do not terminate IKE or clear_vip — that races rekeys and drops NAT.
 	rm -f "$STATE/logged-up" "$STATE/health-up"
-	log_event fail "$active" "datapath dead; redial"
-	terminate_all
-	clear_vip
-	sas=
-fi
+	log_event fail "$active" "datapath dead; reinitiate child"
+	if initiate_child "$active" && mark_up "$active" "connected"; then
+		exit 0
+	fi
+	# Child repair failed this tick; count toward rotation without tearing IKE down.
+	count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
+	case "$count" in
+		''|*[!0-9]*) count=0 ;;
+	esac
+	count=$((count + 1))
+	echo "$count" > "$STATE/fail-count"
+	echo "$active" > "$STATE/active"
+	log_event fail "$active" "child repair failed (#$count)"
+	bump_fallback_fail
+	streak=$(cat "$STATE/fallback-fail")
+	delay=30
+	while [ "$streak" -gt 2 ] && [ "$delay" -lt 300 ]; do
+		delay=$((delay * 2))
+		streak=$((streak - 2))
+	done
+	[ "$delay" -le 300 ] || delay=300
+	now=$(cut -d. -f1 /proc/uptime)
+	echo $((now + delay)) > "$STATE/retry-after"
+	log_event backoff "$active" "retry in ${delay}s"
+	peer_count=0
+	for p in $PEERS; do peer_count=$((peer_count + 1)); done
+	if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
+		from=$active
+		active=$(next_peer "$active")
+		echo "$active" > "$STATE/active"
+		log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+		terminate_all
+		echo 0 > "$STATE/fail-count"
+	fi
+	exit 0
+	;;
+skip)
+	# Rekey / delete still in flight. Flushing or dialing races the new CHILD_SA.
+	exit 0
+	;;
+child)
+	# IKE is up; only the child is missing. Do not clear_vip / full redial.
+	vip=$(peer_vip "$active")
+	[ -n "$vip" ] && pin_vip "$vip" || true
+	ensure_dns_routes || true
+	if initiate_child "$active" && mark_up "$active" "connected"; then
+		exit 0
+	fi
+	rm -f "$STATE/logged-up" "$STATE/health-up"
+	count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
+	case "$count" in
+		''|*[!0-9]*) count=0 ;;
+	esac
+	count=$((count + 1))
+	echo "$count" > "$STATE/fail-count"
+	echo "$active" > "$STATE/active"
+	log_event fail "$active" "child dial failed (#$count)"
+	bump_fallback_fail
+	streak=$(cat "$STATE/fallback-fail")
+	delay=30
+	while [ "$streak" -gt 2 ] && [ "$delay" -lt 300 ]; do
+		delay=$((delay * 2))
+		streak=$((streak - 2))
+	done
+	[ "$delay" -le 300 ] || delay=300
+	now=$(cut -d. -f1 /proc/uptime)
+	echo $((now + delay)) > "$STATE/retry-after"
+	log_event backoff "$active" "retry in ${delay}s"
+	peer_count=0
+	for p in $PEERS; do peer_count=$((peer_count + 1)); done
+	if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
+		from=$active
+		active=$(next_peer "$active")
+		echo "$active" > "$STATE/active"
+		log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+		terminate_all
+		echo 0 > "$STATE/fail-count"
+	fi
+	exit 0
+	;;
+esac
 
+# down: no usable IKE SA — full dial with VIP clear.
 rm -f "$STATE/logged-up" "$STATE/health-up"
 
 if dial_peer "$active"; then

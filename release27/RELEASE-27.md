@@ -8,6 +8,9 @@
 - 纳入 `a1aebc2` / `67f556a`：健康路径不 flush 正确 VIP；SSR 回退仅显式启用、阈值有效且 helper 可执行并成功时才结束轮换。
 - Issue #9：从 netifd 的 WAN 运行状态取得真实 IPv4，生成 `local_addrs`，关闭 MOBIKE；拨号前清理隧道 VIP 并重新加载 WAN 绑定。WAN 暂未就绪时不使用 VIP 或任意网卡地址拨号。
 - 只从当前节点的 SA 块提取 CHILD_SA/VIP；恢复 table 101、mark 规则和隧道 DNS 路由后再探测 ESP 通路。正确 VIP 原地保留，不打断 NAT 长连接。
+- **Rekey 窗口**：CHILD 仅 `REKEYED`/`REKEYING`/`DELETING` 等、尚无 `INSTALLED` 时本轮跳过，禁止误判断线后 `clear_vip` + 全量重拨。
+- **IKE 仍在、仅数据通道异常**：只 `swanctl --initiate --child`，不清 VIP、不拆 IKE；无 IKE 时才走全量拨号。
+- `mango-ikev2-log`：无参或非法 result 直接退出，禁止写入空事件行。
 - 修复 LuCI 日志读取权限：补充 `/tmp/log/mango-ikev2-events.log` 的精确只读授权，兼容 rpcd realpath 检查。
 - 状态页必须有最近 90 秒内的隧道探测成功记录，SA 存在但 ESP 不通时不再报已连接。
 - 拨号失败采用 30/30/60/60/120/120/240/240/300/300… 秒封顶退避，每两次失败轮换一个节点；不在同一轮连续拨多个节点。探活恢复后清零退避。flock 防止重叠拨号。
