@@ -4,6 +4,7 @@
 
 ## 修复范围
 
+- `mango-ikev2-link`：与 `/lib/functions/network.sh` 共用时使用 `set -e`（不用 `-u`）。`network_flush_cache` 会 unset `__NETWORK_CACHE`，在 `set -u` 下会导致 xfrm-mango 创建失败、IKEv2 起不来（2026-11-10 GL2 保留配置刷机实机确认）。
 - 纳入 `a1aebc2` / `67f556a`：健康路径不 flush 正确 VIP；SSR 回退仅显式启用、阈值有效且 helper 可执行并成功时才结束轮换。
 - Issue #9：从 netifd 的 WAN 运行状态取得真实 IPv4，生成 `local_addrs`，关闭 MOBIKE；拨号前清理隧道 VIP 并重新加载 WAN 绑定。WAN 暂未就绪时不使用 VIP 或任意网卡地址拨号。
 - 只从当前节点的 SA 块提取 CHILD_SA/VIP；恢复 table 101、mark 规则和隧道 DNS 路由后再探测 ESP 通路。正确 VIP 原地保留，不打断 NAT 长连接。

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Use the netifd runtime device: handles DHCP, PPPoE and renamed WAN devices.
-set -eu
+set -e
 . /lib/functions/network.sh
 network_flush_cache
 network_get_device device wan || exit 1

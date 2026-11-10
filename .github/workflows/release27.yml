@@ -3,7 +3,8 @@
   "on": {
     "push": {
       "branches": [
-        "codex/mt300n-v2-release27"
+        "codex/mt300n-v2-release27",
+        "cursor/r27-link-nounset-build-4405"
       ],
       "paths": [
         "release27/**",
