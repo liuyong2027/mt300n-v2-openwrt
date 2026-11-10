@@ -14,10 +14,11 @@ OpenWrt 基线：25.12.6（`64900e756efa667774214f9c6b17c113222e01f7`）。
 - 关闭/拆除 IKEv2 时强制恢复 dnsmasq（清 noresolv/空 ikev2.conf），避免本机 DNS REFUSED 导致百度等全挂
 - failover 重拨/探活成功后重装 table 101 与 1.1.1.1/8.8.8.8 → xfrm 路由，避免分流/隧道 DNS 掉回 WAN
 - claim IKEv2 时清空 SSR 主节点（保留 ssr-prev）；LED 识别 IKEv2，避免红灯误报
-- 「已连接」仅在当前节点 CHILD_SA + 正确 VIP 钉扎 + 数据面探测通过后记录；切换节点时 VIP 取自该节点会话，先清旧地址
+- 「已连接」仅在当前节点 CHILD_SA + 正确 VIP 钉扎 + 数据面探测通过后记录；IKE 会话还在时不 flush，只删与新 VIP 不同的地址
 - ZeroTier mangozt 区仍由 1.2.0 的 94-cudy-zt-zone 负责；IKEv2 默认脚本不再重复写入 mangozt
 - 仅 swanctl 启动 charon（禁用 ipsec starter）
-- TR3600：默认禁用 crypto_safexcel（EIP196 ESP Oops）；拨号前清 xfrm VIP；swanctl 绑定 WAN；数据面探测失败自动重拨
+- TR3600：默认禁用 crypto_safexcel（EIP196 ESP Oops）；没有 IKE SA 时才清 xfrm VIP；swanctl 绑定 WAN；数据面探测失败自动重拨
+- 看门狗：CHILD_SA 重协商重叠（旧 REKEYED + 新 INSTALLED）视为健康；INTERNAL_ADDRESS_FAILURE 不切节点、不计入 SSR 回退，退避后重试同一服务器
 - WAN ifup 后延迟重启 SSR Plus+（等节点域名可解析），避免开机竞态导致 ssr-rules 空服务器 IP、透明代理链未装好
 - 手机端 SSR 节点页「开始探测」移到列表上方全宽工具栏（≤768px），修复表头按钮不可达（issue #7）
 

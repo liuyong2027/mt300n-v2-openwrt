@@ -1,5 +1,5 @@
 #!/bin/sh
-# Append one IKEv2 connection event. Keeps the last 20 lines.
+# Append one IKEv2 connection event. Keeps the last 200 lines.
 set -eu
 result=${1:-}
 peer=${2:-mango}
@@ -26,8 +26,8 @@ esac
 [ -n "$remote_id" ] || remote_id=$server
 detail=$(printf '%s' "$detail" | sed 's/mango3/备用服务器2/g; s/mango2/备用服务器1/g; s/mango/主服务器/g')
 
-LOG=/var/log/mango-ikev2-events.log
+LOG=${MANGO_IKEV2_EVENT_LOG:-/var/log/mango-ikev2-events.log}
 mkdir -p "$(dirname "$LOG")"
 ts=$(date '+%Y-%m-%d %H:%M:%S')
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ts" "$result" "$peer_label" "${server:-?}" "${remote_id:-?}" "${detail:-}" >> "$LOG"
-tail -n 20 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG" || true
+tail -n 200 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG" || true

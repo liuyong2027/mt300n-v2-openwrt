@@ -256,12 +256,12 @@ return M
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
         'firmware_version':'1.3.0','release_stage':'candidate; hardware acceptance pending',
-        'candidate_revision':2,
+        'candidate_revision':3,
         'openwrt_commit':OPENWRT_COMMIT_25_12_6,
         'openwrt_release':'25.12.6',
-        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok'],
+        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog'],
         'base':'tr3600-v1.2.0','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
-        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+; VIP from active peer CHILD_SA after datapath probe',
+        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+; IKE VIP re-pinned before the datapath probe; rekey overlap does not flush',
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',
