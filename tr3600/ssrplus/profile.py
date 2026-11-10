@@ -11,6 +11,32 @@ ROOT=Path(__file__).resolve().parents[2]
 PROFILE=Path(__file__).resolve().parent
 SSR_COMMIT='80d7bfff625b33db8afe80934638d96d214ceadc'
 
+def ssrplus_connectivity_probe(text):
+    """Router status probes for the dual-stack image.
+
+    Direct stays on the WAN. Split/global/gfw through IKEv2 must leave on
+    xfrm-mango, because that firewall does not mark OUTPUT. SSR stays unmarked
+    so its OUTPUT redirect still applies. A missing tunnel fails the probe.
+    """
+    old = "    set -- \"$@\" --proxy socks5h://127.0.0.1:10809 --connect-timeout 4 --max-time 8 --max-filesize 65536\n"
+    new = """    set -- "$@" --connect-timeout 4 --max-time 8 --max-filesize 65536
+    ike_on=$(uci -q get mango_ikev2.main.enabled || true)
+    ike_mode=$(uci -q get mango_ikev2.main.mode || true)
+    if [ "$ike_on" = 1 ] && [ -n "$ike_mode" ] && [ "$ike_mode" != direct ]; then
+        if ip link show xfrm-mango >/dev/null 2>&1; then
+            set -- "$@" --interface xfrm-mango
+        else
+            printf '%s\\n' 'xfrm-mango missing {rc=1 http=000 error=no tunnel}'
+            exit 1
+        fi
+    fi
+"""
+    if text.count(old) != 1:
+        raise ValueError('connectivity probe proxy line changed')
+    text = text.replace(old, new, 1)
+    text = text.replace('/tmp/mango-connectivity-error.', '/tmp/cudy-connectivity-error.')
+    return text
+
 def replace(path,old,new,count=1):
     text=path.read_text(encoding='utf-8')
     if text.count(old)!=count:
@@ -247,9 +273,7 @@ return M
     local ok=report:match('\\nCUDY_PROBE_OK$')~=nil
 """+s[b:]
     led.write_text(s,encoding='utf-8',newline='\n')
-    probe=(ROOT/'tr3600/led-probe/mango-connectivity-probe').read_text(encoding='utf-8')
-    probe=probe.replace(' --proxy socks5h://127.0.0.1:10809','')
-    probe=probe.replace('/tmp/mango-connectivity-error.','/tmp/cudy-connectivity-error.')
+    probe=ssrplus_connectivity_probe((ROOT/'tr3600/led-probe/mango-connectivity-probe').read_text(encoding='utf-8'))
     (ROOT/'tr3600/luci-app-cudy-led/root/usr/libexec/cudy-connectivity-probe').write_text(probe,encoding='utf-8',newline='\n')
     # Retain upgrade LED suspend/resume separately from the retired Mango probe.
     replace(p,'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"',
