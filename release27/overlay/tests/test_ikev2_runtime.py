@@ -251,10 +251,12 @@ class Runtime(unittest.TestCase):
         self.run_cycle()
         self.assertEqual(self.status()['state'], 'down')
 
-    def test_boot_vici_not_ready_keeps_watch_and_installs_dns(self):
+    def prepare_init(self):
         for name in ['mango-ikev2-fw', 'mango-ikev2-watch-start', 'mango-ikev2-dns-on',
-                     'swanctl-service', 'sleep']:
+                     'swanctl-service', 'sleep', 'nft']:
             (self.bin / name).symlink_to(self.mock)
+        self.script.chmod(0o755)
+        (self.bin / 'mango-ikev2-failover').symlink_to(self.script)
         config = self.r / 'config'
         config.mkdir()
         (config / 'cn-cidrs.txt').write_text('1.0.0.0/24\n')
@@ -266,16 +268,29 @@ class Runtime(unittest.TestCase):
         text = text.replace('/etc/init.d/swanctl', str(self.bin / 'swanctl-service'))
         init = self.r / 'init'
         init.write_text(text)
-        self.d['load_rc'] = 1
-        (self.r / 'fixture.json').write_text(json.dumps(self.d))
         script = '''extra_command() { :; }
 . "$1"
 mango_ikev2_watch_start() { mango-ikev2-watch-start; }
+mango_ikev2_watch_stop() { :; }
 mango_ikev2_claim_charon() { :; }
 mango_ikev2_dns_on() { mango-ikev2-dns-on; }
-mango_ikev2_apply
+mango_ikev2_dns_off() { :; }
+"$2"
 '''
-        result = subprocess.run(['sh', '-c', script, 'sh', str(init)], env=self.env)
+        return init, script
+
+    def run_init(self, prepared, action='start'):
+        init, script = prepared
+        (self.r / 'fixture.json').write_text(json.dumps(self.d))
+        result = subprocess.run(['sh', '-c', script, 'sh', str(init), action],
+                                env=self.env, timeout=10)
+        self.d = json.loads((self.r / 'fixture.json').read_text())
+        return result
+
+    def test_boot_vici_not_ready_keeps_watch_and_installs_dns(self):
+        prepared = self.prepare_init()
+        self.d['load_rc'] = 1
+        result = self.run_init(prepared)
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue(self.trace('mango-ikev2-watch-start'))
         self.assertTrue(self.trace('mango-ikev2-dns-on'))
@@ -283,6 +298,34 @@ mango_ikev2_apply
         self.d.update(load_rc=0, dial_ok=True)
         self.run_cycle()
         self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_start_reload_restart_reset_previous_300_second_backoff(self):
+        prepared = self.prepare_init()
+        for action in ['start', 'reload', 'restart']:
+            with self.subTest(action=action):
+                for name, value in [('active', 'mango3'), ('fail-count', '1'),
+                                    ('fallback-fail', '12'), ('retry-after', '99999')]:
+                    (self.state / name).write_text(value)
+                self.assertEqual(self.run_init(prepared, action).returncode, 0)
+                self.assertEqual(self.value('active'), 'mango')
+                self.assertEqual(self.value('fail-count'), '1')
+                self.assertEqual(self.value('fallback-fail'), '1')
+                self.assertEqual(int(self.value('retry-after')) - self.d['now'], 30)
+
+    def test_unready_wan_reload_resets_counts_before_delayed_watch_retry(self):
+        prepared = self.prepare_init()
+        (self.state / 'fallback-fail').write_text('12')
+        (self.state / 'fail-count').write_text('1')
+        (self.state / 'retry-after').write_text('99999')
+        self.d['wan_up'] = False
+        self.assertNotEqual(self.run_init(prepared, 'reload').returncode, 0)
+        self.assertEqual(self.value('fallback-fail'), '0')
+        self.assertEqual(self.value('fail-count'), '0')
+        self.assertFalse((self.state / 'retry-after').exists())
+        self.d['wan_up'] = True
+        self.run_cycle(advance=False)
+        self.assertEqual(self.value('fallback-fail'), '1')
+        self.assertEqual(int(self.value('retry-after')) - self.d['now'], 30)
 
     def test_wan_reload_does_not_inherit_hotplug_lock(self):
         (self.bin / 'sleep').symlink_to(self.mock)

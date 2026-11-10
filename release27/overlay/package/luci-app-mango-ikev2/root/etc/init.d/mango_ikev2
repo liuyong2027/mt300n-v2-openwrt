@@ -173,8 +173,12 @@ mango_ikev2_apply() {
         }
     fi
     # Leave recovery running even when WAN is not ready at boot.
-    mango_ikev2_watch_start
     rm -f "$CONF_DIR/retry-after" "$CONF_DIR/logged-up" "$CONF_DIR/health-up"
+    # A new service session must not inherit the previous 300s backoff tier.
+    # Reset before WAN/vici setup too: the watcher may recover setup later.
+    echo 0 > "$CONF_DIR/fail-count"
+    echo 0 > "$CONF_DIR/fallback-fail"
+    mango_ikev2_watch_start
     swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
     swanctl --terminate --ike mango2 --timeout 3 2>/dev/null || :
     swanctl --terminate --ike mango3 --timeout 3 2>/dev/null || :
@@ -195,7 +199,6 @@ mango_ikev2_apply() {
         sleep 1
     done
     echo mango > "$CONF_DIR/active"
-    echo 0 > "$CONF_DIR/fail-count"
     flock -u 9
     exec 9>&-
     /usr/libexec/mango-ikev2-failover || true
