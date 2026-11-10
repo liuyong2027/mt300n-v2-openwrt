@@ -227,7 +227,8 @@ class Runtime(unittest.TestCase):
         self.assertFalse(any('--initiate' in r for r in self.trace('swanctl')))
         self.assertEqual(self.d['addrs'], ['10.0.0.8/32'])
 
-    def test_ike_up_missing_child_initiates_child_only(self):
+    def test_ike_up_missing_child_with_vip_initiates_child_only(self):
+        # IKE line still carries [vip] even when CHILD is gone.
         self.sas(sa(installed=False))
         self.d.update(dial_ok=True, esp_ok=True, addrs=[])
         self.run_cycle()
@@ -235,6 +236,30 @@ class Runtime(unittest.TestCase):
         self.assertTrue(inits)
         self.assertTrue(all('--child' in r and '--ike' not in r for r in inits))
         self.assertFalse(any('flush' in r for r in self.trace('ip')))
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_orphan_ike_without_vip_full_redials(self):
+        # INTERNAL_ADDRESS_FAILURE leaves ESTABLISHED IKE with only [4500], no VIP.
+        self.sas('mango: #1, ESTABLISHED, IKEv2\n'
+                 "  local  '192.0.2.2' @ 192.0.2.2[4500]\n")
+        self.d.update(dial_ok=True, esp_ok=True, addrs=['10.0.0.8/32'])
+        self.run_cycle()
+        terms = [r for r in self.trace('swanctl') if '--terminate' in r and 'mango' in r]
+        self.assertTrue(terms)
+        inits = [r for r in self.trace('swanctl') if '--initiate' in r]
+        self.assertTrue(any('--ike' in r for r in inits))
+        self.assertTrue(any('flush' in r for r in self.trace('ip')))
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_peer_vip_ignores_udp_port_brackets(self):
+        self.sas('mango: #1, ESTABLISHED, IKEv2\n'
+                 "  local  '192.0.2.2' @ 192.0.2.2[4500]\n"
+                 '  mango: #1, reqid 1, INSTALLED, TUNNEL\n'
+                 '    local  10.0.0.8/32\n')
+        self.d.update(esp_ok=True, addrs=['10.0.0.8/32'])
+        self.run_cycle()
+        self.assertFalse(any('4500/32' in r for r in self.trace('ip')))
+        self.assertEqual(self.d['addrs'], ['10.0.0.8/32'])
         self.assertEqual(self.value('logged-up'), 'mango')
 
     def test_other_peer_child_cannot_make_primary_healthy(self):

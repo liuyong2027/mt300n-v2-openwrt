@@ -191,11 +191,18 @@ ensure_dns_routes() {
 
 # VIP for one peer only: prefer INSTALLED child local x/32, else IKE [vip].
 # Never take the first VIP from a multi-peer swanctl dump.
+# Bracketed UDP ports like [4500] are not VIPs — require a dotted IPv4.
 peer_vip() {
 	local peer="$1" block vip
 	block=$(peer_block "$peer")
 	vip=$(printf '%s\n' "$block" | sed -n 's/^    local  \([0-9][0-9.]*\)\/32$/\1/p' | head -n 1)
-	[ -n "$vip" ] || vip=$(printf '%s\n' "$block" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	case "$vip" in
+		*.*.*.*) ;;
+		*) vip= ;;
+	esac
+	if [ -z "$vip" ]; then
+		vip=$(printf '%s\n' "$block" | sed -n 's/^  local .*\[\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)\]$/\1/p' | head -n 1)
+	fi
 	printf '%s' "$vip"
 }
 
@@ -330,48 +337,57 @@ skip)
 	exit 0
 	;;
 child)
-	# IKE is up; only the child is missing. Do not clear_vip / full redial.
+	# IKE is up without an INSTALLED child.
 	vip=$(peer_vip "$active")
-	[ -n "$vip" ] && pin_vip "$vip" || true
-	ensure_dns_routes || true
-	if initiate_child "$active" && mark_up "$active" "connected"; then
+	if [ -n "$vip" ]; then
+		# Have a tunnel address: repair with child-only initiate (no flush).
+		pin_vip "$vip" || true
+		ensure_dns_routes || true
+		if initiate_child "$active" && mark_up "$active" "connected"; then
+			exit 0
+		fi
+		rm -f "$STATE/logged-up" "$STATE/health-up"
+		count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
+		case "$count" in
+			''|*[!0-9]*) count=0 ;;
+		esac
+		count=$((count + 1))
+		echo "$count" > "$STATE/fail-count"
+		echo "$active" > "$STATE/active"
+		log_event fail "$active" "child dial failed (#$count)"
+		bump_fallback_fail
+		streak=$(cat "$STATE/fallback-fail")
+		delay=30
+		while [ "$streak" -gt 2 ] && [ "$delay" -lt 300 ]; do
+			delay=$((delay * 2))
+			streak=$((streak - 2))
+		done
+		[ "$delay" -le 300 ] || delay=300
+		now=$(cut -d. -f1 /proc/uptime)
+		echo $((now + delay)) > "$STATE/retry-after"
+		log_event backoff "$active" "retry in ${delay}s"
+		peer_count=0
+		for p in $PEERS; do peer_count=$((peer_count + 1)); done
+		if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
+			from=$active
+			active=$(next_peer "$active")
+			echo "$active" > "$STATE/active"
+			log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+			terminate_all
+			echo 0 > "$STATE/fail-count"
+		fi
 		exit 0
 	fi
+	# No VIP (typical after INTERNAL_ADDRESS_FAILURE): orphan IKE cannot be
+	# fixed by CREATE_CHILD_SA alone. Tear it down and fall through to full dial.
+	log_event fail "$active" "IKE up without VIP; full redial"
+	swanctl --terminate --ike "$active" --timeout 5 >/dev/null 2>&1 || true
 	rm -f "$STATE/logged-up" "$STATE/health-up"
-	count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
-	case "$count" in
-		''|*[!0-9]*) count=0 ;;
-	esac
-	count=$((count + 1))
-	echo "$count" > "$STATE/fail-count"
-	echo "$active" > "$STATE/active"
-	log_event fail "$active" "child dial failed (#$count)"
-	bump_fallback_fail
-	streak=$(cat "$STATE/fallback-fail")
-	delay=30
-	while [ "$streak" -gt 2 ] && [ "$delay" -lt 300 ]; do
-		delay=$((delay * 2))
-		streak=$((streak - 2))
-	done
-	[ "$delay" -le 300 ] || delay=300
-	now=$(cut -d. -f1 /proc/uptime)
-	echo $((now + delay)) > "$STATE/retry-after"
-	log_event backoff "$active" "retry in ${delay}s"
-	peer_count=0
-	for p in $PEERS; do peer_count=$((peer_count + 1)); done
-	if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
-		from=$active
-		active=$(next_peer "$active")
-		echo "$active" > "$STATE/active"
-		log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
-		terminate_all
-		echo 0 > "$STATE/fail-count"
-	fi
-	exit 0
+	sas=$(read_sas)
 	;;
 esac
 
-# down: no usable IKE SA — full dial with VIP clear.
+# down / orphan-IKE cleanup: full dial with VIP clear.
 rm -f "$STATE/logged-up" "$STATE/health-up"
 
 if dial_peer "$active"; then
