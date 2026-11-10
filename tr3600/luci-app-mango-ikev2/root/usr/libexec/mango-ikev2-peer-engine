@@ -1,25 +1,30 @@
 #!/bin/sh
 # Runtime mutual exclusion between IKEv2 egress and SSR Plus+ client.
-# Called by mango_ikev2 apply/teardown and the SSR auto-fallback path.
+# claim: IKEv2 is starting, so stop SSR and remember its node.
+# release: manual IKEv2 disable; do not start SSR.
+# restore: auto-fallback brings the saved SSR node back. IKEv2 is already off.
+# yield: SSR is starting with a real node, so turn IKEv2 off first.
 # ZeroTier / DDNS / WebFiles untouched.
 
 set -eu
 
-SSR_PREV=/etc/mango-ikev2/ssr-prev
+SSR_PREV=${MANGO_IKEV2_SSR_PREV:-/etc/mango-ikev2/ssr-prev}
+MANGO_IKEV2_INIT=${MANGO_IKEV2_INIT:-/etc/init.d/mango_ikev2}
+SSR_INIT=${SSR_INIT:-/etc/init.d/shadowsocksr}
 
 ssr_global_sec() {
 	uci show shadowsocksr 2>/dev/null | sed -n 's/^\(shadowsocksr\.[^=]*\)=global$/\1/p' | head -n 1
 }
 
 ssr_stop() {
-	if [ -x /etc/init.d/shadowsocksr ]; then
-		/etc/init.d/shadowsocksr stop 2>/dev/null || :
+	if [ -x "$SSR_INIT" ]; then
+		"$SSR_INIT" stop 2>/dev/null || :
 	fi
 }
 
 save_ssr_prev() {
 	local sec gs old
-	mkdir -p /etc/mango-ikev2
+	mkdir -p "$(dirname "$SSR_PREV")"
 	sec=$(ssr_global_sec)
 	[ -n "$sec" ] || return 0
 	gs=$(uci -q get "${sec}.global_server" || true)
@@ -51,10 +56,32 @@ restore_ssr() {
 	uci -q get "shadowsocksr.${gs}" >/dev/null 2>&1 || return 1
 	uci set "${sec}.global_server=$gs"
 	uci commit shadowsocksr
-	if [ -x /etc/init.d/shadowsocksr ]; then
-		/etc/init.d/shadowsocksr restart 2>/dev/null || return 1
+	if [ -x "$SSR_INIT" ]; then
+		"$SSR_INIT" restart 2>/dev/null || return 1
 	else
 		return 1
+	fi
+	return 0
+}
+
+ssr_taking_egress() {
+	local sec gs
+	sec=$(ssr_global_sec)
+	[ -n "$sec" ] || return 1
+	gs=$(uci -q get "${sec}.global_server" || true)
+	[ -n "$gs" ] && [ "$gs" != nil ]
+}
+
+# SSR Plus+ is about to own WAN egress. Disable IKEv2 before that start
+# continues. enabled=0 is committed first so a nested yield cannot stop
+# SSR or start IKEv2 again. A nil/empty node is not an egress change.
+yield_to_ssr() {
+	ssr_taking_egress || return 0
+	[ "$(uci -q get mango_ikev2.main.enabled || true)" = 1 ] || return 0
+	uci set mango_ikev2.main.enabled=0
+	uci commit mango_ikev2
+	if [ -x "$MANGO_IKEV2_INIT" ]; then
+		"$MANGO_IKEV2_INIT" stop >/dev/null 2>&1 || true
 	fi
 	return 0
 }
@@ -84,8 +111,11 @@ case "${1:-}" in
 		# Auto-fallback path: bring SSR Plus+ back with the saved node.
 		restore_ssr
 		;;
+	yield)
+		yield_to_ssr
+		;;
 	*)
-		echo "usage: $0 claim|release|restore" >&2
+		echo "usage: $0 claim|release|restore|yield" >&2
 		exit 2
 		;;
 esac

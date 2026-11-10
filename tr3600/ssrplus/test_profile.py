@@ -461,7 +461,11 @@ class OverlayPatchTests(unittest.TestCase):
         self.assertIn('$(GO_BIN_PATH) python3',self.makefile.read_text())
         self.assertIn('--go go --out',self.makefile.read_text())
         self.assertNotIn('$(STAGING_DIR_HOSTPKG)/bin/go',self.makefile.read_text())
-        self.assertIn('/usr/libexec/cudy-ss-gate started',self.init.read_text())
+        patched=self.init.read_text()
+        self.assertIn('/usr/libexec/cudy-ss-gate started',patched)
+        start=patched.index('\nstart() {')
+        body=patched[start:]
+        self.assertLess(body.index('mango-ikev2-peer-engine yield'), body.index('start_without_cudy_gate'))
 
     def test_changed_or_duplicate_overlay_command_is_rejected(self):
         for command in ('',self.command+self.command):

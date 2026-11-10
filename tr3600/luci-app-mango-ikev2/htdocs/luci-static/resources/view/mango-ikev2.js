@@ -218,7 +218,7 @@ return view.extend({
 		var listStatus = kv(data[1]);
 		var caStatus = kv(data[2]);
 		var m = new form.Map('mango_ikev2', 'IKEv2 客户端',
-			'本镜像以 strongSwan 做路由器级 IKEv2 客户端。与 SSR Plus+ 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端。' +
+			'本镜像以 strongSwan 做路由器级 IKEv2 客户端。与 SSR Plus+ 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端；在 SSR Plus+ 里启用真实节点会先关闭 IKEv2。' +
 			'启用后局域网 DNS 改由本机 dnsmasq 回答。' +
 			'大陆分流：国内 IP 直连，其余走隧道；DNS 默认国内，GFW 域名走隧道 DNS。' +
 			'GFW 模式：仅列表域名走隧道。全局：全部走隧道。' +

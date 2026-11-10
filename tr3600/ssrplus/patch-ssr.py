@@ -26,6 +26,9 @@ stop() {
     return "$cudy_stop_result"
 }
 start() {
+    if [ -x /usr/libexec/mango-ikev2-peer-engine ]; then
+        /usr/libexec/mango-ikev2-peer-engine yield || return 1
+    fi
     /usr/libexec/cudy-ss-gate close || return 1
     start_without_cudy_gate "$@"
     cudy_result=$?

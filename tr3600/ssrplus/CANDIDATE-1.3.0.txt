@@ -9,7 +9,7 @@ OpenWrt 基线：25.12.6（`64900e756efa667774214f9c6b17c113222e01f7`）。
 新增
 - LuCI「IKEv2 客户端」：split / gfw / global / direct
 - 根证书安装、主/备用节点、大陆 IP 与 GFW 列表更新
-- 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端；手动关闭 IKEv2 后不会自动重启 SSR，需在 SSR 页面自行启用
+- 运行时互斥：启用 IKEv2 会停止 SSR Plus+ 客户端；在 SSR Plus+ 里启用真实节点会先关闭 IKEv2。手动关闭 IKEv2 后不会自动重启 SSR，需在 SSR 页面自行启用
 - IKEv2 连续拨号失败达阈值（默认 6 次）可自动关闭 IKEv2 并恢复上次 SSR 节点（可关）
 - 关闭/拆除 IKEv2 时强制恢复 dnsmasq（清 noresolv/空 ikev2.conf），避免本机 DNS REFUSED 导致百度等全挂
 - failover 重拨/探活成功后重装 table 101 与 1.1.1.1/8.8.8.8 → xfrm 路由，避免分流/隧道 DNS 掉回 WAN

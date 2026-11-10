@@ -1,6 +1,8 @@
 #!/bin/sh /etc/rc.common
 # IKEv2 client with optional China IP split.
-# On TR3600 dual-stack images, enabling IKEv2 stops SSR Plus+ (runtime exclusive).
+# On TR3600 dual-stack images the two egress engines are exclusive.
+# Enabling IKEv2 stops SSR Plus+. Starting SSR Plus+ with a real node turns IKEv2 off.
+# A manual IKEv2 disable does not start SSR.
 START=95
 STOP=10
 
