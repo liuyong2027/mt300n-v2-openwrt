@@ -73,6 +73,9 @@ case "$cmd" in
 		exit 0
 		;;
 	--terminate)
+		if [ "${SWANCTL_KEEP_SA:-}" = 1 ]; then
+			exit 0
+		fi
 		touch "${SWANCTL_DOWN:?}"
 		exit 0
 		;;
@@ -271,6 +274,36 @@ if grep -q -- '-4 addr flush' "$IP_LOG" && ! grep -q -- '--terminate' "$SWANCTL_
 	printf '%s\n' 'flush ran without a terminate' >&2
 	exit 1
 fi
+
+# Terminate left the IKE SA up. The 3-miss count must stay put so the next
+# tick redials again instead of starting over at probe #1/3.
+rm -f "$SWANCTL_DOWN"
+printf '%s\n' 2 > "$tmp/state/datapath-fail"
+printf '%s\n' mango > "$tmp/state/active"
+printf '%s\n' mango > "$tmp/state/logged-up"
+SWANCTL_KEEP_SA=1
+export SWANCTL_KEEP_SA
+reset_logs
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state \
+	sh "$script" >/dev/null 2>"$tmp/skip-redial.err"
+grep -q -- '--terminate --ike mango' "$SWANCTL_LOG"
+if grep -q -- '-4 addr flush' "$IP_LOG" || grep -q -- '--initiate' "$SWANCTL_LOG"; then
+	printf '%s\n' 'stuck SA after terminate still flushed or redialed' >&2
+	cat "$IP_LOG" "$SWANCTL_LOG" >&2
+	exit 1
+fi
+test "$(cat "$tmp/state/datapath-fail")" = 3
+reset_logs
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state \
+	sh "$script" >/dev/null 2>"$tmp/skip-redial2.err"
+grep -q -- '--terminate --ike mango' "$SWANCTL_LOG"
+if grep -q -- '-4 addr flush' "$IP_LOG" || grep -q -- '--initiate' "$SWANCTL_LOG"; then
+	printf '%s\n' 'second tick after a stuck SA waited for more probe misses' >&2
+	cat "$IP_LOG" "$SWANCTL_LOG" >&2
+	exit 1
+fi
+test "$(cat "$tmp/state/datapath-fail")" = 4
+unset SWANCTL_KEEP_SA
 
 # Rekey overlap: old child is REKEYED and the new one is INSTALLED past the
 # old 8-line window. The tick is healthy, prefers the IKE VIP, and does not flush.
@@ -616,7 +649,11 @@ log = Path(sys.argv[2]).read_text()
 assert text.count("clear_vip") == 3, text.count("clear_vip")
 assert "prepare_dial() {\n\tclear_vip\n" in text
 assert "if any_ike_sa; then\n\t\treturn 0\n\tfi\n\tif ip link show" in text
-assert 'log_event fail "$active" "datapath dead; redial"\n\tsave_charon_snip\n\tterminate_all\n\twait_sas_gone\n' in text
+dead = text.index('log_event fail "$active" "datapath dead; redial"')
+skip = text.index('SA still present after terminate; skip redial', dead)
+assert "reset_datapath_fail" not in text[dead:skip]
+cleared = text.index("\treset_datapath_fail\n\tclear_vip\n", skip)
+assert cleared > skip
 start = text.index("\tvip=$(peer_vip \"$active\")\n\tsync_vip \"$vip\"\n\tensure_dns_routes\n\tif datapath_ok; then\n")
 end = text.index("\tfi\n\t# SA looks fine but tunnel probe failed", start)
 healthy = text[start:end]

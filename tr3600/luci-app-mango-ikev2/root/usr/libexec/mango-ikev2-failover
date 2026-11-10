@@ -605,16 +605,18 @@ healthy)
 		exit 0
 	fi
 	rm -f "$STATE/logged-up"
-	reset_datapath_fail
 	log_event fail "$active" "datapath dead; redial"
 	save_charon_snip
 	terminate_all
 	wait_sas_gone
 	if any_ike_sa; then
+		# Leave datapath-fail at 3. The next tick must terminate again, not
+		# collect three more probe misses against the same stuck SA.
 		log_event fail "$active" "SA still present after terminate; skip redial"
 		save_charon_snip
 		exit 0
 	fi
+	reset_datapath_fail
 	clear_vip
 	if dial_full_and_mark "$active" "connected"; then
 		exit 0
