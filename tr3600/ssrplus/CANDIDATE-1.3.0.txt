@@ -18,7 +18,7 @@ OpenWrt 基线：25.12.6（`64900e756efa667774214f9c6b17c113222e01f7`）。
 - ZeroTier mangozt 区仍由 1.2.0 的 94-cudy-zt-zone 负责；IKEv2 默认脚本不再重复写入 mangozt
 - 仅 swanctl 启动 charon（禁用 ipsec starter）
 - TR3600：默认禁用 crypto_safexcel（EIP196 ESP Oops）；没有 IKE SA 时才清 xfrm VIP；swanctl 绑定 WAN；数据面探测失败自动重拨
-- 看门狗：CHILD_SA 重协商重叠（旧 REKEYED + 新 INSTALLED）视为健康；INTERNAL_ADDRESS_FAILURE 不切节点、不计入 SSR 回退，退避后重试同一服务器
+- 看门狗：CHILD_SA 重协商重叠（旧 REKEYED + 新 INSTALLED）视为健康；INTERNAL_ADDRESS_FAILURE 立即切到下一个服务器且不计入 SSR 回退，全部服务器都返回该错误后退避再从主服务器重试
 - WAN ifup 后延迟重启 SSR Plus+（等节点域名可解析），避免开机竞态导致 ssr-rules 空服务器 IP、透明代理链未装好
 - 手机端 SSR 节点页「开始探测」移到列表上方全宽工具栏（≤768px），修复表头按钮不可达（issue #7）
 

@@ -4,8 +4,9 @@
 # A CHILD_SA rekey keeps the previous child for a few seconds. Any INSTALLED
 # child is healthy; REKEYING/REKEYED/DELETING skips the tick. The tunnel VIP
 # is flushed only when no IKE SA exists.
-# INTERNAL_ADDRESS_FAILURE retries the same server after a backoff and does
-# not count toward a server switch or the SSR fallback threshold.
+# INTERNAL_ADDRESS_FAILURE switches to the next server immediately and does
+# not count toward the SSR fallback threshold. After every configured server
+# has returned that notify in the current round, back off and retry the primary.
 # After a terminate, wait until the SA list is empty, then a bit longer, so
 # NordVPN can release the old address lease before the next dial.
 set -eu
@@ -362,15 +363,73 @@ backoff_active() {
 	[ "$now" -lt "$until" ]
 }
 
-# Same server, no switch, and no SSR-fallback increment.
-keep_server_int_addr() {
-	local peer="$1" backoff now
-	backoff=$(state_num "${MANGO_IKEV2_INT_ADDR_BACKOFF:-45}" 45)
-	now=$(date +%s)
-	echo $((now + backoff)) > "$STATE/int-addr-until"
-	log_event fail "$peer" "INTERNAL_ADDRESS_FAILURE; backoff ${backoff}s; keep server"
+clear_int_addr_round() {
+	rm -f "$STATE/int-addr-round" "$STATE/int-addr-until"
+}
+
+iaf_mark() {
+	local peer="$1" cur
+	cur=$(cat "$STATE/int-addr-round" 2>/dev/null || true)
+	case " $cur " in
+		*" $peer "*) ;;
+		*) printf '%s\n' "$cur $peer" | awk '{$1=$1; print}' > "$STATE/int-addr-round" ;;
+	esac
+}
+
+iaf_seen() {
+	local peer="$1" cur
+	cur=$(cat "$STATE/int-addr-round" 2>/dev/null || true)
+	case " $cur " in
+		*" $peer "*) return 0 ;;
+	esac
+	return 1
+}
+
+iaf_round_complete() {
+	local p
+	for p in $PEERS; do
+		iaf_seen "$p" || return 1
+	done
+	return 0
+}
+
+# Switch immediately. Do not bump the SSR fallback counter. When every
+# configured peer has failed this way in the current round, back off and
+# retry the primary on a later tick. A live IKE SA is terminated and drained
+# before the next dial.
+handle_int_addr() {
+	local peer="$1" next from backoff now
+	iaf_mark "$peer"
+	log_event fail "$peer" "INTERNAL_ADDRESS_FAILURE"
 	save_charon_snip
-	exit 0
+	if iaf_round_complete; then
+		backoff=$(state_num "${MANGO_IKEV2_INT_ADDR_BACKOFF:-45}" 45)
+		now=$(date +%s)
+		echo $((now + backoff)) > "$STATE/int-addr-until"
+		rm -f "$STATE/int-addr-round"
+		active=${PEERS%% *}
+		echo "$active" > "$STATE/active"
+		log_event fail "$active" "INTERNAL_ADDRESS_FAILURE; all peers; backoff ${backoff}s"
+		exit 0
+	fi
+	from=$peer
+	next=$(next_peer "$peer")
+	active=$next
+	echo "$active" > "$STATE/active"
+	log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+	if any_ike_sa; then
+		terminate_all
+		wait_sas_gone
+		if any_ike_sa; then
+			log_event fail "$active" "SA still present after terminate; skip redial"
+			save_charon_snip
+			exit 0
+		fi
+	fi
+	if dial_full_and_mark "$active" "切换后连通"; then
+		exit 0
+	fi
+	finish_redial_failure "$active"
 }
 
 # 0 connected, 1 failed, 2 INTERNAL_ADDRESS_FAILURE (caller must not count it).
@@ -418,7 +477,7 @@ mark_up() {
 	echo 0 > "$STATE/fail-count"
 	reset_datapath_fail
 	clear_fallback_fail
-	rm -f "$STATE/int-addr-until"
+	clear_int_addr_round
 	echo "$peer" > "$STATE/active"
 	echo "$peer" > "$STATE/logged-up"
 	log_event ok "$peer" "${note} vip=${vip:-?}"
@@ -436,7 +495,7 @@ dial_child_and_mark() {
 			fi
 			return 1
 			;;
-		2) keep_server_int_addr "$peer" ;;
+		2) handle_int_addr "$peer" ;;
 		*) return 1 ;;
 	esac
 }
@@ -453,13 +512,15 @@ dial_full_and_mark() {
 			fi
 			return 1
 			;;
-		2) keep_server_int_addr "$peer" ;;
+		2) handle_int_addr "$peer" ;;
 		*) return 1 ;;
 	esac
 }
 
 finish_redial_failure() {
 	local peer="$1" from next rc
+	# A non-IAF failure ends the address-failure round.
+	rm -f "$STATE/int-addr-round"
 	count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
 	case "$count" in
 		''|*[!0-9]*) count=0 ;;
@@ -496,7 +557,7 @@ finish_redial_failure() {
 					bump_fallback_fail
 				fi
 				;;
-			2) keep_server_int_addr "$active" ;;
+			2) handle_int_addr "$active" ;;
 			*)
 				echo 1 > "$STATE/fail-count"
 				log_event fail "$active" "切换后拨号失败"
@@ -519,7 +580,6 @@ healthy)
 				;;
 		esac
 	done
-	rm -f "$STATE/int-addr-until"
 	vip=$(peer_vip "$active")
 	sync_vip "$vip"
 	ensure_dns_routes
@@ -527,6 +587,7 @@ healthy)
 		echo 0 > "$STATE/fail-count"
 		reset_datapath_fail
 		clear_fallback_fail
+		clear_int_addr_round
 		echo "$active" > "$STATE/active"
 		if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
 			log_event ok "$active" "connected vip=${vip:-?}"

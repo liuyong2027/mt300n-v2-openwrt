@@ -4,7 +4,7 @@
 # stays up until three consecutive probe misses.
 # A child rekey lists the old REKEYED SA and the new INSTALLED SA together.
 # That overlap stays healthy and must not flush. INTERNAL_ADDRESS_FAILURE
-# stays on the same server and does not count toward SSR fallback.
+# switches to the next server and does not count toward SSR fallback.
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 script=$root/tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-failover
@@ -35,6 +35,13 @@ case "$key" in
 	mango_ikev2.main.server2)
 		if [ -n "${UCI_SERVER2:-}" ]; then
 			printf '%s\n' "$UCI_SERVER2"
+			exit 0
+		fi
+		exit 1
+		;;
+	mango_ikev2.main.server3)
+		if [ -n "${UCI_SERVER3:-}" ]; then
+			printf '%s\n' "$UCI_SERVER3"
 			exit 0
 		fi
 		exit 1
@@ -70,15 +77,37 @@ case "$cmd" in
 		exit 0
 		;;
 	--initiate)
-		if [ -n "${INITIATE_CHARON_APPEND_FILE:-}" ] && [ -f "$INITIATE_CHARON_APPEND_FILE" ]; then
-			cat "$INITIATE_CHARON_APPEND_FILE" >> "${MANGO_IKEV2_CHARON_LOG:?}"
+		peer=
+		prev=
+		for a in "$@"; do
+			if [ "$prev" = --ike ] || [ "$prev" = --child ]; then
+				peer=$a
+				break
+			fi
+			prev=$a
+		done
+		iaf=0
+		if [ -n "${IAF_PEERS:-}" ]; then
+			case " $IAF_PEERS " in
+				*" $peer "*) iaf=1 ;;
+			esac
 		fi
-		if [ -n "${SAS_AFTER_INITIATE:-}" ] && [ -f "$SAS_AFTER_INITIATE" ]; then
-			cp "$SAS_AFTER_INITIATE" "$SAS_FILE"
+		if [ "$iaf" = 1 ]; then
+			if [ -n "${INITIATE_CHARON_APPEND_FILE:-}" ] && [ -f "$INITIATE_CHARON_APPEND_FILE" ]; then
+				cat "$INITIATE_CHARON_APPEND_FILE" >> "${MANGO_IKEV2_CHARON_LOG:?}"
+			else
+				printf '%s\n' '[IKE] received INTERNAL_ADDRESS_FAILURE notify, no CHILD_SA built' >> "${MANGO_IKEV2_CHARON_LOG:?}"
+			fi
+			printf '%s\n' 'initiate failed: INTERNAL_ADDRESS_FAILURE' >&2
+			exit 1
 		fi
 		if [ -n "${INITIATE_STDERR_FILE:-}" ] && [ -f "$INITIATE_STDERR_FILE" ]; then
 			cat "$INITIATE_STDERR_FILE" >&2
 			exit 1
+		fi
+		rm -f "${SWANCTL_DOWN:-}"
+		if [ -n "${SAS_AFTER_INITIATE:-}" ] && [ -f "$SAS_AFTER_INITIATE" ]; then
+			cp "$SAS_AFTER_INITIATE" "$SAS_FILE"
 		fi
 		exit 0
 		;;
@@ -373,9 +402,17 @@ test "$(cat "$tmp/state/active")" = mango
 test "$(cat "$tmp/state/fail-count")" = 0
 test ! -f "$tmp/state/int-addr-until"
 
-# INTERNAL_ADDRESS_FAILURE: same server, no switch, no SSR fallback count.
-# Charon carries the notify; swanctl's own line does not. The saved snippet
-# keeps the notify and drops the EAP identity, secret, and ESP key.
+# A successful recheck clears a previous address-failure round.
+printf '%s\n' 'mango mango2' > "$tmp/state/int-addr-round"
+echo $(( $(date +%s) + 60 )) > "$tmp/state/int-addr-until"
+reset_logs
+run_failover
+test ! -f "$tmp/state/int-addr-round"
+test ! -f "$tmp/state/int-addr-until"
+test "$(cat "$tmp/state/active")" = mango
+
+# INTERNAL_ADDRESS_FAILURE on the primary switches to mango2 immediately.
+# The saved snippet keeps the notify and drops the EAP identity, secret, and ESP key.
 cat > "$tmp/initiate-generic.txt" << 'EOF'
 initiate failed: establishing CHILD_SA 'mango' failed
 EOF
@@ -388,56 +425,134 @@ encryption key => aabbccddeeff00112233445566778899
 [IKE] received INTERNAL_ADDRESS_FAILURE notify, no CHILD_SA built
 [IKE] establishing connection 'mango' failed
 EOF
-: > "$SAS_FILE"
-rm -f "$SWANCTL_DOWN" "$SAS_AFTER_INITIATE"
-unset SAS_AFTER_INITIATE IP_ADDR_SHOW || true
+cat > "$tmp/child-missing.sas" << 'EOF'
+mango: #4, ESTABLISHED, IKEv2, aaaa_i* bbbb_r
+  local  'vpn-user' @ 192.0.2.10[4500] [10.7.0.8]
+  remote 'nordvpn' @ 203.0.113.5[4500]
+  AES_CBC-256/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/ECP_256
+  established 20s ago, rekeying in 3000s
+EOF
+cat > "$tmp/mango2-up.sas" << 'EOF'
+mango2: #8, ESTABLISHED, IKEv2, cccc_i* dddd_r
+  local  'vpn-user' @ 192.0.2.10[4500] [10.8.0.4]
+  remote 'backup.example' @ 203.0.113.9[4500]
+  AES_CBC-256/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/ECP_256
+  established 1s ago, rekeying in 3000s
+  mango2: #3, reqid 1, INSTALLED, TUNNEL, ESP:AES_GCM_16-256
+    installed 1s ago, rekeying in 1000s, expires in 2000s
+    in  a1b2c3d4, 0 bytes, 0 packets
+    out e5f6a7b8, 0 bytes, 0 packets
+    local  10.8.0.4/32
+    remote 0.0.0.0/0
+EOF
+cp "$tmp/child-missing.sas" "$SAS_FILE"
+rm -f "$SWANCTL_DOWN"
+unset IP_ADDR_SHOW UCI_SERVER3 || true
+SAS_AFTER_INITIATE=$tmp/mango2-up.sas
+IAF_PEERS=mango
+UCI_SERVER2=backup.example
+INITIATE_CHARON_APPEND_FILE=$tmp/charon-append.txt
+export SAS_AFTER_INITIATE IAF_PEERS UCI_SERVER2 INITIATE_CHARON_APPEND_FILE
+unset INITIATE_STDERR_FILE || true
 : > "$MANGO_IKEV2_CHARON_LOG"
 : > "$MANGO_IKEV2_SNIP"
-INITIATE_STDERR_FILE=$tmp/initiate-generic.txt
-INITIATE_CHARON_APPEND_FILE=$tmp/charon-append.txt
-UCI_SERVER2=backup.example
-export INITIATE_STDERR_FILE INITIATE_CHARON_APPEND_FILE UCI_SERVER2
 printf '%s\n' mango > "$tmp/state/active"
 printf '%s\n' 1 > "$tmp/state/fail-count"
 printf '%s\n' 0 > "$tmp/state/fallback-fail"
+printf '%s\n' mango > "$tmp/state/int-addr-round"
 reset_logs
 run_failover
-test "$(cat "$tmp/state/active")" = mango
-test "$(cat "$tmp/state/fail-count")" = 1
+test "$(cat "$tmp/state/active")" = mango2
+test "$(cat "$tmp/state/fail-count")" = 0
 test "$(cat "$tmp/state/fallback-fail")" = 0
-if grep -q -- 'mango2' "$SWANCTL_LOG"; then
-	printf '%s\n' 'INTERNAL_ADDRESS_FAILURE switched servers' >&2
+test ! -f "$tmp/state/int-addr-until"
+test ! -f "$tmp/state/int-addr-round"
+test "$(grep -c -- '--child mango --timeout' "$SWANCTL_LOG")" = 1
+test "$(grep -c -- '--child mango2 --timeout' "$SWANCTL_LOG")" = 1
+awk '
+	index($0, "--initiate --child mango ") { child = NR }
+	index($0, "--terminate") && !term { term = NR }
+	index($0, "--initiate --ike mango2 ") { nextp = NR }
+	END {
+		if (!(child && term && nextp && child < term && term < nextp)) exit 1
+	}
+' "$SWANCTL_LOG" || {
+	printf '%s\n' 'IAF did not terminate the live SA before dialing mango2' >&2
 	cat "$SWANCTL_LOG" >&2
 	exit 1
-fi
-grep -q -- '--initiate --ike mango' "$SWANCTL_LOG"
-until=$(cat "$tmp/state/int-addr-until")
-now=$(date +%s)
-test "$((until - now))" -ge 30
-test "$((until - now))" -le 60
+}
 grep -q INTERNAL_ADDRESS_FAILURE "$MANGO_IKEV2_SNIP"
-grep -q "establishing connection 'mango' failed" "$MANGO_IKEV2_SNIP"
 if grep -q 'alice@example.com' "$MANGO_IKEV2_SNIP" || grep -q 's3cr3t-value' "$MANGO_IKEV2_SNIP" || grep -q 'aabbccddeeff00112233445566778899' "$MANGO_IKEV2_SNIP" || grep -q '00 11 22' "$MANGO_IKEV2_SNIP"; then
 	printf '%s\n' 'charon snippet kept credentials or key material' >&2
 	cat "$MANGO_IKEV2_SNIP" >&2
 	exit 1
 fi
 
-# Still inside the backoff: do not dial again.
+# Every configured peer returns IAF: one backoff, then the next dial is the primary.
+cat > "$tmp/primary-up.sas" << 'EOF'
+mango: #1, ESTABLISHED, IKEv2
+  local 192.0.2.1[10.5.0.2]
+  remote vpn.example[203.0.113.5]
+  mango: #1, INSTALLED, TUNNEL
+    local  10.5.0.2/32
+    remote 0.0.0.0/0
+EOF
+: > "$SAS_FILE"
+rm -f "$SWANCTL_DOWN" "$tmp/state/int-addr-until" "$tmp/state/int-addr-round"
+unset SAS_AFTER_INITIATE INITIATE_CHARON_APPEND_FILE INITIATE_STDERR_FILE || true
+IAF_PEERS='mango mango2 mango3'
+UCI_SERVER2=backup.example
+UCI_SERVER3=backup3.example
+export IAF_PEERS UCI_SERVER2 UCI_SERVER3
+: > "$MANGO_IKEV2_CHARON_LOG"
+printf '%s\n' mango > "$tmp/state/active"
+printf '%s\n' 0 > "$tmp/state/fail-count"
+printf '%s\n' 0 > "$tmp/state/fallback-fail"
+reset_logs
+run_failover
+test "$(cat "$tmp/state/active")" = mango
+test "$(cat "$tmp/state/fail-count")" = 0
+test "$(cat "$tmp/state/fallback-fail")" = 0
+test ! -f "$tmp/state/int-addr-round"
+test "$(grep -c -- '--child mango --timeout' "$SWANCTL_LOG")" = 1
+test "$(grep -c -- '--child mango2 --timeout' "$SWANCTL_LOG")" = 1
+test "$(grep -c -- '--child mango3 --timeout' "$SWANCTL_LOG")" = 1
+until=$(cat "$tmp/state/int-addr-until")
+now=$(date +%s)
+test "$((until - now))" -ge 30
+test "$((until - now))" -le 60
 reset_logs
 run_failover
 if grep -q -- '--initiate' "$SWANCTL_LOG"; then
 	printf '%s\n' 'backoff tick dialed again' >&2
+	cat "$SWANCTL_LOG" >&2
+	exit 1
+fi
+rm -f "$tmp/state/int-addr-until"
+unset IAF_PEERS || true
+SAS_AFTER_INITIATE=$tmp/primary-up.sas
+export SAS_AFTER_INITIATE
+reset_logs
+run_failover
+test "$(grep -c -- '--child mango --timeout' "$SWANCTL_LOG")" = 1
+if grep -q -- '--child mango2 --timeout' "$SWANCTL_LOG" || grep -q -- '--child mango3 --timeout' "$SWANCTL_LOG"; then
+	printf '%s\n' 'post-backoff retry did not start at the primary' >&2
+	cat "$SWANCTL_LOG" >&2
 	exit 1
 fi
 test "$(cat "$tmp/state/active")" = mango
-test "$(cat "$tmp/state/fail-count")" = 1
-test "$(cat "$tmp/state/fallback-fail")" = 0
+test ! -f "$tmp/state/int-addr-round"
 
-# A normal dial failure still switches after the second miss.
-rm -f "$tmp/state/int-addr-until"
+# A normal dial failure still switches after the second miss and clears IAF tracking.
+unset SAS_AFTER_INITIATE UCI_SERVER3 IAF_PEERS || true
+INITIATE_STDERR_FILE=$tmp/initiate-generic.txt
+export INITIATE_STDERR_FILE
+UCI_SERVER2=backup.example
+export UCI_SERVER2
+: > "$SAS_FILE"
+rm -f "$SWANCTL_DOWN" "$tmp/state/int-addr-until"
 : > "$MANGO_IKEV2_CHARON_LOG"
-unset INITIATE_CHARON_APPEND_FILE || true
+printf '%s\n' mango > "$tmp/state/int-addr-round"
 printf '%s\n' 1 > "$tmp/state/fail-count"
 printf '%s\n' 0 > "$tmp/state/fallback-fail"
 printf '%s\n' mango > "$tmp/state/active"
@@ -446,9 +561,10 @@ run_failover
 grep -q -- '--ike mango2' "$SWANCTL_LOG"
 test "$(cat "$tmp/state/active")" = mango2
 test "$(cat "$tmp/state/fallback-fail")" = 2
+test ! -f "$tmp/state/int-addr-round"
 
 # A second failover overlaps a dial that can take 15s. The lock must skip it.
-unset UCI_SERVER2 INITIATE_STDERR_FILE || true
+unset UCI_SERVER2 UCI_SERVER3 INITIATE_STDERR_FILE IAF_PEERS || true
 # Empty listing would flush and initiate if the lock did not hold.
 : > "$SAS_FILE"
 printf '%s\n' mango > "$tmp/state/active"
@@ -515,8 +631,9 @@ assert "REKEYING|REKEYED|DELETING" in text
 assert "MANGO_IKEV2_POST_TERM_WAIT:-15" in text
 assert "MANGO_IKEV2_INT_ADDR_BACKOFF:-45" in text
 assert "flock -w" in text
-assert "INTERNAL_ADDRESS_FAILURE; backoff" in text
+assert "INTERNAL_ADDRESS_FAILURE; all peers; backoff" in text
+assert "iaf_round_complete" in text
 assert "swanctl --initiate --child" in text
 assert "tail -n 200" in log
-print("healthy recheck keeps the VIP; rekey overlap does not flush; INT_ADDR stays put")
+print("healthy recheck keeps the VIP; rekey overlap does not flush; IAF rotates peers")
 PY
