@@ -30,8 +30,14 @@ elif n == 'swanctl':
     elif a[0] == '--load-all': sys.exit(d.get('load_rc', 0))
     elif a[0] == '--initiate':
         if not d.get('dial_ok', False): sys.exit(1)
-        p = a[a.index('--ike') + 1]
-        (r / 'sas').write_text(f'{p}: #1, ESTABLISHED, IKEv2\n  local id @ 192.0.2.2[4500] [10.0.0.8]\n  {p}: #1, reqid 1, INSTALLED, TUNNEL\n    local  10.0.0.8/32\n')
+        if '--ike' in a:
+            p = a[a.index('--ike') + 1]
+        elif '--child' in a:
+            p = a[a.index('--child') + 1]
+        else:
+            sys.exit(1)
+        vip = d.get('dial_vip', '10.0.0.8')
+        (r / 'sas').write_text(f'{p}: #1, ESTABLISHED, IKEv2\n  local id @ 192.0.2.2[4500] [{vip}]\n  {p}: #1, reqid 1, INSTALLED, TUNNEL\n    local  {vip}/32\n')
     elif a[0] == '--terminate':
         p = a[a.index('--ike') + 1]
         lines, show = [], True
@@ -63,10 +69,21 @@ elif n == 'mango-ikev2-fallback-ssr': sys.exit(d.get('helper_rc', 1))
 '''
 
 
-def sa(peer='mango', installed=True, vip='10.0.0.8'):
+def sa(peer='mango', installed=True, vip='10.0.0.8', child_state='INSTALLED'):
+    text = (f'{peer}: #1, ESTABLISHED, IKEv2\n'
+            f'  local id @ 192.0.2.2[4500] [{vip}]\n')
+    if installed:
+        text += (f'  {peer}: #1, reqid 1, {child_state}, TUNNEL\n'
+                 f'    local  {vip}/32\n')
+    return text
+
+
+def sa_rekeyed_only(peer='mango', vip='10.0.0.8'):
+    """IKE up with only a REKEYED child — the rekey window before INSTALLED."""
     return (f'{peer}: #1, ESTABLISHED, IKEv2\n'
-            f'  local id @ 192.0.2.2[4500] [{vip}]\n' +
-            (f'  {peer}: #1, reqid 1, INSTALLED, TUNNEL\n    local  {vip}/32\n' if installed else ''))
+            f'  local id @ 192.0.2.2[4500] [{vip}]\n'
+            f'  {peer}: #1, reqid 1, REKEYED, TUNNEL\n'
+            f'    local  {vip}/32\n')
 
 
 class Runtime(unittest.TestCase):
@@ -185,20 +202,65 @@ class Runtime(unittest.TestCase):
         self.assertFalse(any('--initiate' in r for r in self.trace()))
         self.assertEqual(self.value('fail-count'), '1')
 
-    def test_dead_esp_cleans_before_redial_and_resets_after_recovery(self):
+    def test_dead_esp_reinitiates_child_without_flush(self):
         self.sas(sa())
         self.d.update(esp_ok=False, dial_ok=False)
         self.run_cycle()
-        self.assertTrue(any('flush' in r for r in self.trace('ip')))
+        self.assertFalse(any('flush' in r for r in self.trace('ip')))
+        self.assertTrue(any('--initiate' in r and '--child' in r and '--ike' not in r
+                            for r in self.trace('swanctl')))
         self.assertFalse((self.state / 'logged-up').exists())
         self.d.update(esp_ok=True, dial_ok=True)
+        (self.r / 'trace').write_text('')
         self.run_cycle()
-        rows = self.trace()
-        dial = next(i for i, r in enumerate(rows) if '--initiate' in r)
-        self.assertTrue(any('flush' in r for r in rows[:dial]))
+        # After backoff, child repair should succeed without VIP flush.
+        self.assertFalse(any('flush' in r for r in self.trace('ip')))
         self.assertEqual(self.value('logged-up'), 'mango')
         self.assertEqual(self.value('fallback-fail'), '0')
         self.assertFalse((self.state / 'retry-after').exists())
+
+    def test_rekey_window_skips_without_flush_or_dial(self):
+        self.sas(sa_rekeyed_only())
+        self.d['addrs'] = ['10.0.0.8/32']
+        self.run_cycle()
+        self.assertFalse(any('flush' in r for r in self.trace('ip')))
+        self.assertFalse(any('--initiate' in r for r in self.trace('swanctl')))
+        self.assertEqual(self.d['addrs'], ['10.0.0.8/32'])
+
+    def test_ike_up_missing_child_with_vip_initiates_child_only(self):
+        # IKE line still carries [vip] even when CHILD is gone.
+        self.sas(sa(installed=False))
+        self.d.update(dial_ok=True, esp_ok=True, addrs=[])
+        self.run_cycle()
+        inits = [r for r in self.trace('swanctl') if '--initiate' in r]
+        self.assertTrue(inits)
+        self.assertTrue(all('--child' in r and '--ike' not in r for r in inits))
+        self.assertFalse(any('flush' in r for r in self.trace('ip')))
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_orphan_ike_without_vip_full_redials(self):
+        # INTERNAL_ADDRESS_FAILURE leaves ESTABLISHED IKE with only [4500], no VIP.
+        self.sas('mango: #1, ESTABLISHED, IKEv2\n'
+                 "  local  '192.0.2.2' @ 192.0.2.2[4500]\n")
+        self.d.update(dial_ok=True, esp_ok=True, addrs=['10.0.0.8/32'])
+        self.run_cycle()
+        terms = [r for r in self.trace('swanctl') if '--terminate' in r and 'mango' in r]
+        self.assertTrue(terms)
+        inits = [r for r in self.trace('swanctl') if '--initiate' in r]
+        self.assertTrue(any('--ike' in r for r in inits))
+        self.assertTrue(any('flush' in r for r in self.trace('ip')))
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_peer_vip_ignores_udp_port_brackets(self):
+        self.sas('mango: #1, ESTABLISHED, IKEv2\n'
+                 "  local  '192.0.2.2' @ 192.0.2.2[4500]\n"
+                 '  mango: #1, reqid 1, INSTALLED, TUNNEL\n'
+                 '    local  10.0.0.8/32\n')
+        self.d.update(esp_ok=True, addrs=['10.0.0.8/32'])
+        self.run_cycle()
+        self.assertFalse(any('4500/32' in r for r in self.trace('ip')))
+        self.assertEqual(self.d['addrs'], ['10.0.0.8/32'])
+        self.assertEqual(self.value('logged-up'), 'mango')
 
     def test_other_peer_child_cannot_make_primary_healthy(self):
         self.sas(sa(installed=False) + sa('mango2', vip='10.9.9.9'))
