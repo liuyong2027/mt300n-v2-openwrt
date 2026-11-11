@@ -641,6 +641,57 @@ test "$(wc -l < "$event_log" | tr -d ' ')" = 200
 head -n 1 "$event_log" | grep -q 'n=11'
 tail -n 1 "$event_log" | grep -q 'n=210'
 
+# A keep-SA miss is followed by one recovery ok, then silence until the next miss.
+cat > "$tmp/bin/event-log" << 'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "${RECOVERY_LOG:?}"
+EOF
+chmod 755 "$tmp/bin/event-log"
+cat > "$tmp/sas" << 'EOF'
+mango: #1, ESTABLISHED, IKEv2
+  local 192.0.2.1[10.5.0.2]
+  remote vpn.example[203.0.113.5]
+  mango: #1, INSTALLED, TUNNEL
+    local  10.5.0.2/32
+    remote 0.0.0.0/0
+EOF
+rm -f "$SWANCTL_DOWN" "$tmp/state/int-addr-until" "$tmp/state/int-addr-round"
+unset SWANCTL_KEEP_SA IP_ADDR_SHOW UCI_SERVER2 UCI_SERVER3 IAF_PEERS INITIATE_STDERR_FILE SAS_AFTER_INITIATE || true
+PING_RC=0
+export PING_RC
+RECOVERY_LOG=$tmp/recovery.log
+export RECOVERY_LOG MANGO_IKEV2_LOG=$tmp/bin/event-log
+printf '%s\n' mango > "$tmp/state/active"
+printf '%s\n' mango > "$tmp/state/logged-up"
+printf '%s\n' 0 > "$tmp/state/datapath-fail"
+: > "$RECOVERY_LOG"
+reset_logs
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script"
+test ! -s "$RECOVERY_LOG"
+printf '%s\n' 1 > "$tmp/state/datapath-fail"
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script"
+test "$(cat "$RECOVERY_LOG")" = 'ok mango datapath recovered vip=10.5.0.2'
+test "$(cat "$tmp/state/datapath-fail")" = 0
+test "$(cat "$tmp/state/logged-up")" = mango
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script"
+test "$(wc -l < "$RECOVERY_LOG" | tr -d ' ')" = 1
+PING_RC=1
+CURL_GSTATIC=500
+CURL_GOOGLE=000
+CURL_GOOGLE_RC=1
+export PING_RC CURL_GSTATIC CURL_GOOGLE CURL_GOOGLE_RC
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script"
+grep -q 'fail mango datapath probe failed (#1/3); keep SA' "$RECOVERY_LOG"
+test "$(cat "$tmp/state/datapath-fail")" = 1
+test "$(cat "$tmp/state/logged-up")" = mango
+PING_RC=0
+export PING_RC
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script"
+test "$(grep -c 'datapath recovered vip=10.5.0.2' "$RECOVERY_LOG")" = 2
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script"
+test "$(grep -c 'datapath recovered vip=10.5.0.2' "$RECOVERY_LOG")" = 2
+unset MANGO_IKEV2_LOG RECOVERY_LOG
+
 python3 - "$script" "$log_script" << 'PY'
 import sys
 from pathlib import Path
@@ -660,6 +711,8 @@ healthy = text[start:end]
 assert "clear_vip" not in healthy
 assert "sync_vip" in healthy
 assert "ensure_dns_routes" in healthy
+assert "datapath recovered vip=" in healthy
+assert healthy.index('connected vip=') < healthy.index('datapath recovered vip=')
 assert "http_probe https://www.gstatic.com/generate_204" in text
 assert "http_probe https://www.google.com/generate_204" in text
 assert 'datapath probe failed (#$n/3); keep SA' in text

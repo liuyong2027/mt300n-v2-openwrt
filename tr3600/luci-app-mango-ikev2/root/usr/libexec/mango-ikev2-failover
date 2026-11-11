@@ -66,7 +66,8 @@ next_peer() {
 }
 
 log_event() {
-	/usr/libexec/mango-ikev2-log "$@" 2>/dev/null || true
+	local logger=${MANGO_IKEV2_LOG:-/usr/libexec/mango-ikev2-log}
+	"$logger" "$@" 2>/dev/null || true
 }
 
 clear_fallback_fail() {
@@ -584,6 +585,13 @@ healthy)
 	sync_vip "$vip"
 	ensure_dns_routes
 	if datapath_ok; then
+		# A keep-SA miss logs fail but leaves logged-up in place. Remember
+		# that count before clearing it, and emit one recovery instead of
+		# an ok line on every healthy tick.
+		prev=$(cat "$STATE/datapath-fail" 2>/dev/null || echo 0)
+		case "$prev" in
+			''|*[!0-9]*) prev=0 ;;
+		esac
 		echo 0 > "$STATE/fail-count"
 		reset_datapath_fail
 		clear_fallback_fail
@@ -592,6 +600,8 @@ healthy)
 		if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
 			log_event ok "$active" "connected vip=${vip:-?}"
 			echo "$active" > "$STATE/logged-up"
+		elif [ "$prev" -ge 1 ]; then
+			log_event ok "$active" "datapath recovered vip=${vip:-?}"
 		fi
 		exit 0
 	fi
