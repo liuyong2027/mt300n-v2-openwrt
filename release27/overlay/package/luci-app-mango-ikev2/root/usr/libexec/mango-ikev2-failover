@@ -1,15 +1,19 @@
 #!/bin/sh
 # One dial attempt for the active IKEv2 server.
 # After two failed attempts, switch to the next configured server.
-# Rekey windows (REKEYED/REKEYING without INSTALLED) skip the tick.
-# When IKE is up but the child/datapath is missing, initiate only the child
-# — do not flush VIP or tear down the IKE SA.
+# Short negotiation/rekey windows get a bounded grace period.
+# Probe failures are debounced; CHILD repair precedes controlled IKE recovery.
 # Optional SSR Plus+ fallback is UCI opt-in and only stops the cycle when the
 # helper exists and succeeds; missing helper must not freeze peer rotation.
 set -eu
 umask 077
 STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
 XFRM_IF=xfrm-mango
+PROBE_FAIL_LIMIT=3
+CHILD_FAIL_LIMIT=3
+CONNECTING_GRACE=60
+TRANSITION_GRACE=120
+FULL_REBUILD_COOLDOWN=300
 enabled=$(uci -q get mango_ikev2.main.enabled || true)
 mode=$(uci -q get mango_ikev2.main.mode || true)
 [ "$enabled" = 1 ] || exit 0
@@ -92,12 +96,6 @@ bump_fallback_fail() {
 	fi
 }
 
-terminate_all() {
-	swanctl --terminate --ike mango --timeout 3 >/dev/null 2>&1 || true
-	swanctl --terminate --ike mango2 --timeout 3 >/dev/null 2>&1 || true
-	swanctl --terminate --ike mango3 --timeout 3 >/dev/null 2>&1 || true
-}
-
 # Drop tunnel VIP before IKE dial so charon cannot source from 10.x.
 clear_vip() {
 	if ip link show "$XFRM_IF" >/dev/null 2>&1; then
@@ -114,15 +112,19 @@ refresh_wan_bind() {
 
 prepare_dial() {
 	/usr/libexec/mango-ikev2-link || return 1
+	/usr/libexec/mango-ikev2-cleanup || return 1
 	clear_vip
 	refresh_wan_bind
 }
 
+# Preserve the old snapshot on a query error; never mistake an unavailable
+# VICI socket for an empty set of SAs.
 read_sas() {
-	swanctl --list-sas 2>/dev/null || true
+    local output
+    output=$(swanctl --list-sas 2>/dev/null) || return 1
+    sas=$output
 }
 
-sas=$(read_sas)
 peer_block() {
     printf '%s\n' "$sas" | awk -v p="$1" '
         /^[^[:space:]]/ { show = (index($0, p ": ") == 1) }
@@ -131,17 +133,21 @@ peer_block() {
 }
 
 # healthy: an INSTALLED child is up (even if another child is still REKEYED).
-# skip: IKE is up and a child is mid-rekey/delete with no INSTALLED child yet.
+# connecting/transition: initial negotiation or rekey/delete needs a grace period.
 # child: IKE is ESTABLISHED but no child is installed or in transition.
 # down: no usable IKE SA.
 sa_health() {
 	local peer="$1" block
 	block=$(peer_block "$peer")
 	if ! printf '%s\n' "$block" | grep -E -q "^${peer}: .*ESTABLISHED"; then
-		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*(CONNECTING|REKEYING),"; then
-			printf '%s\n' skip
-			return 0
-		fi
+		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*CONNECTING,"; then
+            printf '%s\n' connecting
+            return 0
+        fi
+        if printf '%s\n' "$block" | grep -E -q "^${peer}: .*(REKEYING|DELETING),"; then
+            printf '%s\n' transition
+            return 0
+        fi
 		printf '%s\n' down
 		return 0
 	fi
@@ -150,7 +156,7 @@ sa_health() {
 		return 0
 	fi
 	if printf '%s\n' "$block" | grep -E -q '(^|[[:space:],])(REKEYING|REKEYED|DELETING|INSTALLING|UPDATING|DESTROYING)(,|[[:space:]]|$)'; then
-		printf '%s\n' skip
+		printf '%s\n' transition
 		return 0
 	fi
 	printf '%s\n' child
@@ -206,226 +212,301 @@ peer_vip() {
 	printf '%s' "$vip"
 }
 
-# IKE/DPD can stay up while ESP is dead; require a real tunnel probe.
+read_uint() {
+    local value
+    value=$(cat "$1" 2>/dev/null || true)
+    case "$value" in ''|*[!0-9]*) value=0 ;; esac
+    [ "${#value}" -le 9 ] || value=0
+    while [ "${value#0}" != "$value" ]; do value=${value#0}; done
+    printf '%s' "${value:-0}"
+}
+
+increment() {
+    local value
+    value=$(read_uint "$1")
+    value=$((value + 1))
+    echo "$value" > "$1"
+    printf '%s' "$value"
+}
+
+clear_peer_tracking() {
+    rm -f "$STATE/probe-fail-$1" "$STATE/child-fail-$1" \
+        "$STATE/transition-$1" "$STATE/full-pending-$1"
+    # Keep full-after across brief healthy periods to prevent recovery storms.
+}
+
+https_ok() {
+    local code
+    # Fixed tunnel-routed IPs avoid bootstrap DNS. Keep SNI and CA validation;
+    # never follow redirects or an inherited proxy onto a different route.
+    code=$(curl --ipv4 --silent --show-error --output /dev/null \
+        --write-out '%{http_code}' --interface "$XFRM_IF" --noproxy '*' \
+        --proto '=https' --connect-timeout 3 --max-time 5 \
+        --resolve "$1:443:$2" "https://$1/" 2>/dev/null) || return 1
+    case "$code" in 2[0-9][0-9]|3[0-9][0-9]) return 0 ;; esac
+    return 1
+}
+
 datapath_ok() {
-	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
-	if ping -c 1 -W 2 -I "$XFRM_IF" 1.1.1.1 >/dev/null 2>&1; then
-		return 0
-	fi
-	if ping -c 1 -W 2 -I "$XFRM_IF" 8.8.8.8 >/dev/null 2>&1; then
-		return 0
-	fi
-	return 1
+    ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
+    ping -c 1 -W 2 -I "$XFRM_IF" 1.1.1.1 >/dev/null 2>&1 && return 0
+    ping -c 1 -W 2 -I "$XFRM_IF" 8.8.8.8 >/dev/null 2>&1 && return 0
+    https_ok cloudflare-dns.com 1.1.1.1 && return 0
+    https_ok dns.google 8.8.8.8
 }
 
-# Only record "connected" after CHILD_SA + correct VIP pin + datapath probe.
+probe_failed() {
+    local count
+    count=$(increment "$STATE/probe-fail-$active")
+    log_event fail "$active" "tunnel probes failed ($count/$PROBE_FAIL_LIMIT)"
+    [ "$count" -ge "$PROBE_FAIL_LIMIT" ]
+}
+
+transition_grace() {
+    local peer="$1" phase="$2" since= kind= now limit
+    now=$(cut -d. -f1 /proc/uptime)
+    if [ -r "$STATE/transition-$peer" ]; then
+        read -r since kind < "$STATE/transition-$peer" || true
+    fi
+    case "$since" in ''|*[!0-9]*) since=$now; kind= ;; esac
+    [ "${#since}" -le 9 ] || { since=$now; kind=; }
+    [ "$since" -le "$now" ] || { since=$now; kind=; }
+    case "$kind" in connecting|transition) ;; *)
+        since=$now
+        kind=$phase
+        printf '%s %s\n' "$since" "$kind" > "$STATE/transition-$peer"
+        log_event backoff "$peer" "negotiation grace started ($kind)"
+        ;;
+    esac
+    limit=$TRANSITION_GRACE
+    [ "$kind" != connecting ] || limit=$CONNECTING_GRACE
+    [ $((now - since)) -lt "$limit" ]
+}
+
+begin_connecting() {
+    printf '%s connecting\n' "$(cut -d. -f1 /proc/uptime)" > "$STATE/transition-$1"
+}
+
+mark_connected() {
+    local peer="$1" note="$2"
+    echo 0 > "$STATE/fail-count"
+    clear_fallback_fail
+    clear_peer_tracking "$peer"
+    echo "$peer" > "$STATE/active"
+    record_health "$peer"
+    if [ "$(cat "$STATE/logged-up" 2>/dev/null || true)" != "$peer" ]; then
+        log_event ok "$peer" "$note"
+    fi
+    echo "$peer" > "$STATE/logged-up"
+}
+
+# 0 = verified datapath, 2 = bounded negotiation in progress, 3 = unknown SA
+# state, 1 = an observed failure. A grace period is never reported as success.
 mark_up() {
-	local peer="$1" note="$2" vip health
-	sas=$(read_sas)
-	health=$(sa_health "$peer")
-	case "$health" in
-		healthy) ;;
-		skip) return 0 ;;
-		*)
-			log_event fail "$peer" "${note}: no CHILD_SA"
-			return 1
-			;;
-	esac
-	vip=$(peer_vip "$peer")
-	if ! pin_vip "$vip" || ! ensure_dns_routes || ! datapath_ok; then
-		log_event fail "$peer" "${note}: datapath dead vip=${vip:-?}"
-		return 1
-	fi
-	echo 0 > "$STATE/fail-count"
-	clear_fallback_fail
-	echo "$peer" > "$STATE/active"
-	echo "$peer" > "$STATE/logged-up"
-	record_health "$peer"
-	log_event ok "$peer" "${note} vip=${vip:-?}"
-	return 0
+    local peer="$1" note="$2" health vip
+    read_sas || return 3
+    health=$(sa_health "$peer")
+    case "$health" in
+        connecting|transition)
+            transition_grace "$peer" "$health" && return 2
+            return 1
+            ;;
+        healthy)
+            rm -f "$STATE/transition-$peer"
+            vip=$(peer_vip "$peer")
+            if pin_vip "$vip" && ensure_dns_routes && datapath_ok; then
+                mark_connected "$peer" "$note vip=${vip:-?}"
+                return 0
+            fi
+            ;;
+        child|down) rm -f "$STATE/transition-$peer" ;;
+    esac
+    return 1
 }
 
-# Initiate only the child; keep IKE and do not flush VIP.
-initiate_child() {
-	local peer="$1"
-	swanctl --initiate --child "$peer" --timeout 15 >/dev/null 2>&1
+record_failure() {
+    local reason="$1" count streak delay=30 repairs from now
+    if [ "${2:-}" = repair ]; then
+        repairs=$(increment "$STATE/child-fail-$active")
+        if [ "$peer_count" -eq 1 ] && [ "$repairs" -ge "$CHILD_FAIL_LIMIT" ]; then
+            echo 1 > "$STATE/full-pending-$active"
+        fi
+    fi
+    count=$(increment "$STATE/fail-count")
+    echo "$active" > "$STATE/active"
+    log_event fail "$active" "$reason (#$count)"
+    bump_fallback_fail
+    streak=$(read_uint "$STATE/fallback-fail")
+    # Three failed attempts per tier: 30x3, 60x3, 120x3, 240x3, then 300.
+    while [ "$streak" -gt 3 ] && [ "$delay" -lt 300 ]; do
+        delay=$((delay * 2))
+        streak=$((streak - 3))
+    done
+    [ "$delay" -le 300 ] || delay=300
+    now=$(cut -d. -f1 /proc/uptime)
+    echo $((now + delay)) > "$STATE/retry-after"
+    log_event backoff "$active" "retry in ${delay}s"
+    if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
+        from=$active
+        active=$(next_peer "$active")
+        echo "$active" > "$STATE/active"
+        echo 0 > "$STATE/fail-count"
+        clear_peer_tracking "$active"
+        log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+        # The next full dial must confirm cleanup of *all* Mango SAs first.
+    fi
 }
 
-dial_peer() {
-	local peer="$1"
-	prepare_dial || return 1
-	swanctl --initiate --ike "$peer" --child "$peer" --timeout 15 >/dev/null 2>&1
+claim_full_rebuild() {
+    local now after
+    now=$(cut -d. -f1 /proc/uptime)
+    after=$(read_uint "$STATE/full-after-$active")
+    if [ "$now" -lt "$after" ]; then
+        log_event backoff "$active" "full IKE recovery cooldown: $((after - now))s"
+        return 1
+    fi
+    echo $((now + FULL_REBUILD_COOLDOWN)) > "$STATE/full-after-$active"
+    return 0
 }
 
-mark_healthy_idle() {
-	local vip="$1"
-	echo 0 > "$STATE/fail-count"
-	clear_fallback_fail
-	echo "$active" > "$STATE/active"
-	record_health "$active"
-	if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
-		log_event ok "$active" "connected vip=${vip:-?}"
-		echo "$active" > "$STATE/logged-up"
-	fi
+full_dial() {
+    local result
+    rm -f "$STATE/logged-up" "$STATE/health-up"
+    if ! prepare_dial; then
+        record_failure 'full dial cleanup/setup unconfirmed'
+        return 0
+    fi
+    clear_peer_tracking "$active"
+    begin_connecting "$active"
+    swanctl --initiate --ike "$active" --child "$active" --timeout 15 >/dev/null 2>&1 || true
+    if mark_up "$active" connected; then
+        return 0
+    else
+        result=$?
+    fi
+    case "$result" in
+        2) return 0 ;;
+        3) log_event fail "$active" 'SA query unavailable after dial; defer'; return 0 ;;
+    esac
+    if [ "$(sa_health "$active")" = healthy ]; then
+        # CHILD installed but no datapath proof yet: debounce before repairing.
+        probe_failed || true
+        return 0
+    fi
+    record_failure 'dial failed'
 }
 
-# Use uptime so NTP clock changes cannot bypass or prolong the backoff.
-now=$(cut -d. -f1 /proc/uptime)
-retry=$(cat "$STATE/retry-after" 2>/dev/null || echo 0)
-case "$retry" in ''|*[!0-9]*) retry=0 ;; esac
-if [ "$now" -lt "$retry" ]; then exit 0; fi
+repair_child() {
+    local result
+    rm -f "$STATE/logged-up" "$STATE/health-up"
+    if [ "$peer_count" -eq 1 ] && [ -f "$STATE/full-pending-$active" ]; then
+        if claim_full_rebuild; then
+            log_event fail "$active" 'CHILD repairs exhausted; controlled full IKE recovery'
+            full_dial
+        fi
+        return 0
+    fi
+    log_event fail "$active" 'repairing CHILD only'
+    swanctl --initiate --child "$active" --timeout 15 >/dev/null 2>&1 || true
+    if mark_up "$active" connected; then
+        return 0
+    else
+        result=$?
+    fi
+    case "$result" in
+        2) return 0 ;;
+        3) log_event fail "$active" 'SA query unavailable after CHILD repair; defer'; return 0 ;;
+    esac
+    record_failure 'CHILD repair failed' repair
+}
 
-health=$(sa_health "$active")
-case "$health" in
-healthy)
-	for p in $PEERS; do
-		[ "$p" = "$active" ] && continue
-		case "$(sa_health "$p")" in
-			healthy|skip|child)
-				swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
-				;;
-		esac
-	done
-	sas=$(read_sas)
-	vip=$(peer_vip "$active")
-	if pin_vip "$vip" && ensure_dns_routes && datapath_ok; then
-		# Keep VIP stable while healthy: only pin/routes, never flush+readd.
-		mark_healthy_idle "$vip"
-		exit 0
-	fi
-	# IKE + CHILD look installed but probe failed: re-initiate the child only.
-	# Do not terminate IKE or clear_vip — that races rekeys and drops NAT.
-	rm -f "$STATE/logged-up" "$STATE/health-up"
-	log_event fail "$active" "datapath dead; reinitiate child"
-	if initiate_child "$active" && mark_up "$active" "connected"; then
-		exit 0
-	fi
-	# Child repair failed this tick; count toward rotation without tearing IKE down.
-	count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
-	case "$count" in
-		''|*[!0-9]*) count=0 ;;
-	esac
-	count=$((count + 1))
-	echo "$count" > "$STATE/fail-count"
-	echo "$active" > "$STATE/active"
-	log_event fail "$active" "child repair failed (#$count)"
-	bump_fallback_fail
-	streak=$(cat "$STATE/fallback-fail")
-	delay=30
-	while [ "$streak" -gt 2 ] && [ "$delay" -lt 300 ]; do
-		delay=$((delay * 2))
-		streak=$((streak - 2))
-	done
-	[ "$delay" -le 300 ] || delay=300
-	now=$(cut -d. -f1 /proc/uptime)
-	echo $((now + delay)) > "$STATE/retry-after"
-	log_event backoff "$active" "retry in ${delay}s"
-	peer_count=0
-	for p in $PEERS; do peer_count=$((peer_count + 1)); done
-	if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
-		from=$active
-		active=$(next_peer "$active")
-		echo "$active" > "$STATE/active"
-		log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
-		terminate_all
-		echo 0 > "$STATE/fail-count"
-	fi
-	exit 0
-	;;
-skip)
-	# Rekey / delete still in flight. Flushing or dialing races the new CHILD_SA.
-	exit 0
-	;;
-child)
-	# IKE is up without an INSTALLED child.
-	vip=$(peer_vip "$active")
-	if [ -n "$vip" ]; then
-		# Have a tunnel address: repair with child-only initiate (no flush).
-		pin_vip "$vip" || true
-		ensure_dns_routes || true
-		if initiate_child "$active" && mark_up "$active" "connected"; then
-			exit 0
-		fi
-		rm -f "$STATE/logged-up" "$STATE/health-up"
-		count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
-		case "$count" in
-			''|*[!0-9]*) count=0 ;;
-		esac
-		count=$((count + 1))
-		echo "$count" > "$STATE/fail-count"
-		echo "$active" > "$STATE/active"
-		log_event fail "$active" "child dial failed (#$count)"
-		bump_fallback_fail
-		streak=$(cat "$STATE/fallback-fail")
-		delay=30
-		while [ "$streak" -gt 2 ] && [ "$delay" -lt 300 ]; do
-			delay=$((delay * 2))
-			streak=$((streak - 2))
-		done
-		[ "$delay" -le 300 ] || delay=300
-		now=$(cut -d. -f1 /proc/uptime)
-		echo $((now + delay)) > "$STATE/retry-after"
-		log_event backoff "$active" "retry in ${delay}s"
-		peer_count=0
-		for p in $PEERS; do peer_count=$((peer_count + 1)); done
-		if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
-			from=$active
-			active=$(next_peer "$active")
-			echo "$active" > "$STATE/active"
-			log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
-			terminate_all
-			echo 0 > "$STATE/fail-count"
-		fi
-		exit 0
-	fi
-	# No VIP (typical after INTERNAL_ADDRESS_FAILURE): orphan IKE cannot be
-	# fixed by CREATE_CHILD_SA alone. Tear it down and fall through to full dial.
-	log_event fail "$active" "IKE up without VIP; full redial"
-	swanctl --terminate --ike "$active" --timeout 5 >/dev/null 2>&1 || true
-	rm -f "$STATE/logged-up" "$STATE/health-up"
-	sas=$(read_sas)
-	;;
-esac
-
-# down / orphan-IKE cleanup: full dial with VIP clear.
-rm -f "$STATE/logged-up" "$STATE/health-up"
-
-if dial_peer "$active"; then
-	if mark_up "$active" "connected"; then
-		exit 0
-	fi
-fi
-
-count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
-case "$count" in
-	''|*[!0-9]*) count=0 ;;
-esac
-count=$((count + 1))
-echo "$count" > "$STATE/fail-count"
-echo "$active" > "$STATE/active"
-log_event fail "$active" "dial failed (#$count)"
-bump_fallback_fail
-streak=$(cat "$STATE/fallback-fail")
-delay=30
-while [ "$streak" -gt 2 ] && [ "$delay" -lt 300 ]; do
-    delay=$((delay * 2))
-    streak=$((streak - 2))
-done
-[ "$delay" -le 300 ] || delay=300
-# Refresh uptime after the blocking initiate timeout.
-now=$(cut -d. -f1 /proc/uptime)
-echo $((now + delay)) > "$STATE/retry-after"
-log_event backoff "$active" "retry in ${delay}s"
+expired_transition() {
+    local phase="$1" fresh
+    # Recheck before teardown: a newly INSTALLED child wins over an old timer.
+    read_sas || { log_event fail "$active" 'SA query unavailable during recovery'; return 0; }
+    fresh=$(sa_health "$active")
+    case "$fresh" in
+        healthy|child|down) rm -f "$STATE/transition-$active"; return 0 ;;
+    esac
+    transition_grace "$active" "$fresh" && return 0
+    if [ "$phase" != connecting ]; then
+        claim_full_rebuild || return 0
+    fi
+    rm -f "$STATE/logged-up" "$STATE/health-up"
+    if /usr/libexec/mango-ikev2-cleanup "$active"; then
+        rm -f "$STATE/transition-$active"
+        record_failure 'negotiation grace expired; old SA removed'
+    else
+        record_failure 'negotiation grace expired; SA cleanup unconfirmed'
+    fi
+    # No flush or new initiate here. Respect backoff, then use the full-dial
+    # cleanup barrier again before changing the shared xfrm VIP.
+}
 
 peer_count=0
 for p in $PEERS; do peer_count=$((peer_count + 1)); done
-if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
-	from=$active
-	active=$(next_peer "$active")
-	echo "$active" > "$STATE/active"
-	log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
-	terminate_all
-    # The next watch cycle dials this peer after backoff, never in a burst.
-    echo 0 > "$STATE/fail-count"
+sas=
+if ! read_sas; then
+    log_event fail "$active" 'SA query unavailable; defer without changing VIP'
+    exit 0
 fi
+health=$(sa_health "$active")
+case "$health" in
+    connecting|transition)
+        if transition_grace "$active" "$health"; then exit 0; fi
+        # Keep observing the original grace clock during backoff, but do not
+        # repeat termination on every watchdog tick if cleanup is stuck.
+        now=$(cut -d. -f1 /proc/uptime)
+        retry=$(read_uint "$STATE/retry-after")
+        [ "$now" -ge "$retry" ] || exit 0
+        expired_transition "$health"
+        exit 0
+        ;;
+    *) rm -f "$STATE/transition-$active" ;;
+esac
+
+now=$(cut -d. -f1 /proc/uptime)
+retry=$(read_uint "$STATE/retry-after")
+[ "$now" -ge "$retry" ] || exit 0
+
+case "$health" in
+    healthy)
+        for p in $PEERS; do
+            [ "$p" = "$active" ] && continue
+            if [ -n "$(peer_block "$p")" ]; then
+                /usr/libexec/mango-ikev2-cleanup "$p" || \
+                    log_event fail "$p" 'inactive SA cleanup unconfirmed'
+            fi
+        done
+        read_sas || exit 0
+        # Cleanup of another peer can coincide with a rekey of the active peer.
+        health=$(sa_health "$active")
+        case "$health" in
+            connecting|transition) transition_grace "$active" "$health" || expired_transition "$health"; exit 0 ;;
+            healthy) ;;
+            *) exit 0 ;;
+        esac
+        vip=$(peer_vip "$active")
+        if pin_vip "$vip" && ensure_dns_routes && datapath_ok; then
+            mark_connected "$active" "connected vip=${vip:-?}"
+            exit 0
+        fi
+        probe_failed || exit 0
+        repair_child
+        ;;
+    child)
+        vip=$(peer_vip "$active")
+        if [ -n "$vip" ]; then
+            if ! pin_vip "$vip" || ! ensure_dns_routes; then
+                record_failure 'CHILD setup failed' repair
+                exit 0
+            fi
+            repair_child
+        else
+            log_event fail "$active" 'IKE up without VIP; confirmed cleanup before full redial'
+            full_dial
+        fi
+        ;;
+    down) full_dial ;;
+esac
 exit 0

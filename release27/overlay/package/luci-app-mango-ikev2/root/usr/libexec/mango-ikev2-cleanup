@@ -1,0 +1,57 @@
+#!/bin/sh
+# Called under the service/failover lock. Only manage the three Mango peers.
+# A successful terminate RPC is not proof that a SA has disappeared.
+set -eu
+[ "$#" -gt 0 ] || set -- mango mango2 mango3
+for peer in "$@"; do
+    case "$peer" in mango|mango2|mango3) ;; *) exit 2 ;; esac
+done
+
+read_sas() {
+    local output
+    output=$(swanctl --list-sas 2>/dev/null) || return 2
+    sas=$output
+}
+
+present() {
+    printf '%s\n' "$sas" | grep -q "^$1: #$2,"
+}
+
+wait_gone() {
+    local peer="$1" id="$2" attempt=0
+    while [ "$attempt" -lt 3 ]; do
+        read_sas || return 2
+        present "$peer" "$id" || return 0
+        attempt=$((attempt + 1))
+        [ "$attempt" -ge 3 ] || sleep 1
+    done
+    return 1
+}
+
+read_sas || exit 2
+# Capture IDs once. A newly created SA with the same name is not force-killed.
+snapshot=$sas
+for peer in "$@"; do
+    ids=$(printf '%s\n' "$snapshot" | sed -n "s/^${peer}: #\([0-9][0-9]*\),.*/\1/p")
+    for id in $ids; do
+        swanctl --terminate --ike-id "$id" --timeout 3 >/dev/null 2>&1 || true
+        if wait_gone "$peer" "$id"; then
+            continue
+        else
+            result=$?
+            [ "$result" -ne 2 ] || exit 2
+        fi
+        # One bounded force escalation for this old SA ID, then verify again.
+        swanctl --terminate --ike-id "$id" --force --timeout 3 >/dev/null 2>&1 || true
+        wait_gone "$peer" "$id" || exit $?
+    done
+done
+
+# Includes SAs that appeared during cleanup. Unknown is never treated as empty.
+read_sas || exit 2
+for peer in "$@"; do
+    if printf '%s\n' "$sas" | grep -q "^${peer}: "; then
+        exit 1
+    fi
+done
+exit 0

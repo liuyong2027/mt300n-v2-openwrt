@@ -174,16 +174,14 @@ mango_ikev2_apply() {
     fi
     # Leave recovery running even when WAN is not ready at boot.
     rm -f "$CONF_DIR/retry-after" "$CONF_DIR/logged-up" "$CONF_DIR/health-up"
+    rm -f "$CONF_DIR"/probe-fail-* "$CONF_DIR"/child-fail-* \
+        "$CONF_DIR"/transition-* "$CONF_DIR"/full-pending-* "$CONF_DIR"/full-after-*
     # A new service session must not inherit the previous 300s backoff tier.
     # Reset before WAN/vici setup too: the watcher may recover setup later.
     echo 0 > "$CONF_DIR/fail-count"
     echo 0 > "$CONF_DIR/fallback-fail"
     mango_ikev2_watch_start
-    swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
-    swanctl --terminate --ike mango2 --timeout 3 2>/dev/null || :
-    swanctl --terminate --ike mango3 --timeout 3 2>/dev/null || :
     mango_ikev2_ensure_xfrm || return 1
-    ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || :
     umask 077
     /usr/libexec/mango-ikev2-generate swanctl > "$CONF_DIR/swanctl.conf" || return 1
     ln -sf "$CONF_DIR/swanctl.conf" /etc/swanctl/conf.d/mango.conf
@@ -198,6 +196,10 @@ mango_ikev2_apply() {
         [ "$tries" -lt 10 ] || return 1
         sleep 1
     done
+    # VICI is ready now. Do not clear a shared VIP while any old Mango SA
+    # survives a failed/asynchronous terminate, including after Save & Apply.
+    /usr/libexec/mango-ikev2-cleanup || return 1
+    ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || :
     echo mango > "$CONF_DIR/active"
     flock -u 9
     exec 9>&-

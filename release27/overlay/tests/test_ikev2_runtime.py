@@ -12,7 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / 'package/luci-app-mango-ikev2/root'
 MOCK = r'''#!/usr/bin/env python3
-import json, os, sys
+import json, os, re, sys
 from pathlib import Path
 r = Path(os.environ['FAKE_ROOT'])
 f = r / 'fixture.json'
@@ -20,16 +20,44 @@ d = json.loads(f.read_text())
 n, a = Path(sys.argv[0]).name, sys.argv[1:]
 with (r / 'trace').open('a') as out: out.write(json.dumps([n] + a) + '\n')
 def save(): f.write_text(json.dumps(d))
+def remove_sa(identifier):
+    lines, show = [], True
+    for line in (r / 'sas').read_text().splitlines():
+        match = re.match(r'^(\S+): #(\d+),', line)
+        if match:
+            show = match.group(2) != identifier if identifier.isdigit() else match.group(1) != identifier
+        if show: lines.append(line)
+    (r / 'sas').write_text('\n'.join(lines) + '\n')
 if n == 'uci':
     key = a[-1].rsplit('.', 1)[-1]
     if key not in d['uci']: sys.exit(1)
     print(d['uci'][key])
 elif n == 'cut': print(d['now'])
 elif n == 'swanctl':
-    if a[0] == '--list-sas': print((r / 'sas').read_text(), end='')
+    if a[0] == '--list-sas':
+        if d.get('list_rc') or (d.get('term_seen') and d.get('list_fail_after_terminate')): sys.exit(1)
+        d['list_reads'] = d.get('list_reads', 0) + 1
+        if d.get('sas_on_read') == d['list_reads']:
+            (r / 'sas').write_text(d['next_sas'])
+        save()
+        if d.get('pending_id'):
+            d['delete_reads'] -= 1
+            if d['delete_reads'] <= 0:
+                remove_sa(d.pop('pending_id'))
+            save()
+        print((r / 'sas').read_text(), end='')
     elif a[0] == '--load-all': sys.exit(d.get('load_rc', 0))
     elif a[0] == '--initiate':
-        if not d.get('dial_ok', False): sys.exit(1)
+        if d.get('list_fail_after_init'): d['list_rc'] = 1; save()
+        full = '--ike' in a
+        if d.get('init_transition'):
+            peer = a[a.index('--ike' if full else '--child') + 1]
+            if d['init_transition'] == 'CONNECTING':
+                (r / 'sas').write_text(f'{peer}: #1, CONNECTING, IKEv2\n')
+            else:
+                (r / 'sas').write_text(f'{peer}: #1, ESTABLISHED, IKEv2\n  local id @ 192.0.2.2[4500] [10.0.0.8]\n  {peer}: #1, reqid 1, REKEYED, TUNNEL\n    local  10.0.0.8/32\n')
+            sys.exit(1)
+        if not d.get('full_ok' if full else 'child_ok', d.get('dial_ok', False)): sys.exit(1)
         if '--ike' in a:
             p = a[a.index('--ike') + 1]
         elif '--child' in a:
@@ -37,14 +65,23 @@ elif n == 'swanctl':
         else:
             sys.exit(1)
         vip = d.get('dial_vip', '10.0.0.8')
-        (r / 'sas').write_text(f'{p}: #1, ESTABLISHED, IKEv2\n  local id @ 192.0.2.2[4500] [{vip}]\n  {p}: #1, reqid 1, INSTALLED, TUNNEL\n    local  {vip}/32\n')
+        uid = {'mango': 1, 'mango2': 2, 'mango3': 3}[p]
+        remove_sa(p)
+        with (r / 'sas').open('a') as out: out.write(f'{p}: #{uid}, ESTABLISHED, IKEv2\n  local id @ 192.0.2.2[4500] [{vip}]\n  {p}: #1, reqid 1, INSTALLED, TUNNEL\n    local  {vip}/32\n')
     elif a[0] == '--terminate':
-        p = a[a.index('--ike') + 1]
-        lines, show = [], True
-        for line in (r / 'sas').read_text().splitlines():
-            if line and not line[0].isspace(): show = not line.startswith(p + ': ')
-            if show: lines.append(line)
-        (r / 'sas').write_text('\n'.join(lines) + '\n')
+        d['term_seen'] = True
+        mode = d.get('terminate_mode', 'normal')
+        save()
+        if mode == 'stuck': sys.exit(1)
+        if mode == 'force_only' and '--force' not in a: sys.exit(0)
+        identifier = a[a.index('--ike-id' if '--ike-id' in a else '--ike') + 1]
+        if mode == 'deferred' and '--force' not in a:
+            d.update(pending_id=identifier, delete_reads=2); save()
+        else:
+            remove_sa(identifier)
+            if mode == 'new_sa':
+                with (r / 'sas').open('a') as out: out.write('mango: #99, ESTABLISHED, IKEv2\n')
+        sys.exit(d.get('terminate_rc', 0))
 elif n == 'ip':
     if a[:2] == ['link', 'show']: sys.exit(0)
     elif a[:5] == ['-4', '-o', 'addr', 'show', 'dev']:
@@ -62,6 +99,12 @@ elif n == 'ip':
 elif n == 'ping':
     sys.exit(0 if d.get('esp_ok', True) and '10.0.0.8/32' in d['addrs']
              and all(x in d['routes'] for x in ['default', '1.1.1.1/32', '8.8.8.8/32']) else 1)
+elif n == 'curl':
+    connected = ('10.0.0.8/32' in d['addrs'] and all(x in d['routes'] for x in ['default', '1.1.1.1/32', '8.8.8.8/32']))
+    endpoint = a[a.index('--resolve') + 1]
+    ok = d.get('https_ok', False) and endpoint not in d.get('https_fail_endpoints', [])
+    if not (connected and ok): print('000', end=''); sys.exit(1)
+    print(d.get('http_code', '204'), end='')
 elif n == 'mango-ikev2-generate':
     if not d.get('wan_up', True): sys.exit(1)
     print('connections {}')
@@ -70,7 +113,8 @@ elif n == 'mango-ikev2-fallback-ssr': sys.exit(d.get('helper_rc', 1))
 
 
 def sa(peer='mango', installed=True, vip='10.0.0.8', child_state='INSTALLED'):
-    text = (f'{peer}: #1, ESTABLISHED, IKEv2\n'
+    uid = {'mango': 1, 'mango2': 2, 'mango3': 3}[peer]
+    text = (f'{peer}: #{uid}, ESTABLISHED, IKEv2\n'
             f'  local id @ 192.0.2.2[4500] [{vip}]\n')
     if installed:
         text += (f'  {peer}: #1, reqid 1, {child_state}, TUNNEL\n'
@@ -80,7 +124,8 @@ def sa(peer='mango', installed=True, vip='10.0.0.8', child_state='INSTALLED'):
 
 def sa_rekeyed_only(peer='mango', vip='10.0.0.8'):
     """IKE up with only a REKEYED child — the rekey window before INSTALLED."""
-    return (f'{peer}: #1, ESTABLISHED, IKEv2\n'
+    uid = {'mango': 1, 'mango2': 2, 'mango3': 3}[peer]
+    return (f'{peer}: #{uid}, ESTABLISHED, IKEv2\n'
             f'  local id @ 192.0.2.2[4500] [{vip}]\n'
             f'  {peer}: #1, reqid 1, REKEYED, TUNNEL\n'
             f'    local  {vip}/32\n')
@@ -99,8 +144,11 @@ class Runtime(unittest.TestCase):
         mock.write_text(MOCK)
         mock.chmod(0o755)
         for name in ['uci', 'swanctl', 'ip', 'ping', 'cut', 'mango-ikev2-log',
-                     'mango-ikev2-generate', 'mango-ikev2-link']:
+                     'mango-ikev2-generate', 'mango-ikev2-link', 'curl', 'sleep']:
             (self.bin / name).symlink_to(mock)
+        cleanup = self.bin / 'mango-ikev2-cleanup'
+        cleanup.write_text((PACKAGE / 'usr/libexec/mango-ikev2-cleanup').read_text())
+        cleanup.chmod(0o755)
         self.mock = mock
         self.d = dict(uci=dict(enabled='1', mode='split', server2='backup1.example.com',
                                server3='backup2.example.com'), now=1000,
@@ -157,14 +205,14 @@ class Runtime(unittest.TestCase):
 
     def test_default_rotation_all_peers_and_backoff_cap(self):
         peers, delays = [], []
-        for _ in range(12):
+        for _ in range(16):
             now = self.d['now']
             self.run_cycle()
             peers.append(self.value('active'))
             delays.append(int(self.value('retry-after')) - now)
-        self.assertEqual(peers, ['mango', 'mango2', 'mango2', 'mango3', 'mango3', 'mango', 'mango', 'mango2', 'mango2', 'mango3', 'mango3', 'mango'])
-        self.assertEqual(delays, [30, 30, 60, 60, 120, 120, 240, 240, 300, 300, 300, 300])
-        self.assertEqual(len([r for r in self.trace('swanctl') if '--initiate' in r]), 12)
+        self.assertEqual(peers, ['mango', 'mango2', 'mango2', 'mango3', 'mango3', 'mango', 'mango', 'mango2', 'mango2', 'mango3', 'mango3', 'mango', 'mango', 'mango2', 'mango2', 'mango3'])
+        self.assertEqual(delays, [30, 30, 30, 60, 60, 60, 120, 120, 120, 240, 240, 240, 300, 300, 300, 300])
+        self.assertEqual(len([r for r in self.trace('swanctl') if '--initiate' in r]), 16)
 
     def test_missing_ssr_helper_does_not_freeze_rotation(self):
         self.d['uci'].update(ssr_fallback='1', ssr_fallback_fails='1')
@@ -205,7 +253,7 @@ class Runtime(unittest.TestCase):
     def test_dead_esp_reinitiates_child_without_flush(self):
         self.sas(sa())
         self.d.update(esp_ok=False, dial_ok=False)
-        self.run_cycle()
+        for _ in range(3): self.run_cycle()
         self.assertFalse(any('flush' in r for r in self.trace('ip')))
         self.assertTrue(any('--initiate' in r and '--child' in r and '--ike' not in r
                             for r in self.trace('swanctl')))
@@ -244,7 +292,7 @@ class Runtime(unittest.TestCase):
                  "  local  '192.0.2.2' @ 192.0.2.2[4500]\n")
         self.d.update(dial_ok=True, esp_ok=True, addrs=['10.0.0.8/32'])
         self.run_cycle()
-        terms = [r for r in self.trace('swanctl') if '--terminate' in r and 'mango' in r]
+        terms = [r for r in self.trace('swanctl') if '--terminate' in r and '--ike-id' in r]
         self.assertTrue(terms)
         inits = [r for r in self.trace('swanctl') if '--initiate' in r]
         self.assertTrue(any('--ike' in r for r in inits))
@@ -313,9 +361,321 @@ class Runtime(unittest.TestCase):
         self.run_cycle()
         self.assertEqual(self.status()['state'], 'down')
 
+    def test_icmp_blocked_https_healthy_does_not_repair(self):
+        self.sas(sa())
+        self.d.update(esp_ok=False, https_ok=True)
+        self.env['HTTPS_PROXY'] = 'http://unusable-proxy.example:8080'
+        for _ in range(4): self.run_cycle()
+        self.assertEqual(self.value('logged-up'), 'mango')
+        self.assertFalse(any('--initiate' in row or '--terminate' in row
+                             for row in self.trace('swanctl')))
+        self.assertFalse((self.state / 'probe-fail-mango').exists())
+        for row in self.trace('curl'):
+            self.assertEqual(row[row.index('--interface') + 1], 'xfrm-mango')
+            self.assertEqual(row[row.index('--noproxy') + 1], '*')
+            self.assertEqual(row[row.index('--proto') + 1], '=https')
+            self.assertIn('--resolve', row)
+            self.assertNotIn('--insecure', row)
+            self.assertNotIn('-k', row)
+            self.assertNotIn('--location', row)
+
+    def test_second_https_endpoint_can_confirm_datapath(self):
+        self.sas(sa())
+        self.d.update(esp_ok=False, https_ok=True,
+                      https_fail_endpoints=['cloudflare-dns.com:443:1.1.1.1'])
+        self.run_cycle()
+        self.assertEqual(self.value('logged-up'), 'mango')
+        self.assertEqual(len(self.trace('curl')), 2)
+        self.assertIn('dns.google:443:8.8.8.8', self.trace('curl')[-1])
+
+    def test_unhealthy_https_status_is_not_a_success(self):
+        self.sas(sa())
+        self.d.update(esp_ok=False, https_ok=True, http_code='503')
+        self.run_cycle()
+        self.assertFalse((self.state / 'logged-up').exists())
+        self.assertEqual(self.value('probe-fail-mango'), '1')
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+
+    def test_three_bad_probe_cycles_before_first_child_repair(self):
+        self.sas(sa())
+        self.d['esp_ok'] = False
+        for _ in range(2):
+            self.run_cycle()
+            self.d['now'] += 30
+            self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+            self.assertFalse((self.state / 'fallback-fail').exists())
+        self.run_cycle()
+        repairs = [row for row in self.trace('swanctl') if '--initiate' in row]
+        self.assertEqual(len(repairs), 1)
+        self.assertNotIn('--ike', repairs[0])
+        self.assertEqual(self.value('fallback-fail'), '1')
+        self.assertFalse(any('flush' in row for row in self.trace('ip')))
+
+    def test_success_breaks_probe_failure_streak(self):
+        self.sas(sa())
+        self.d['esp_ok'] = False
+        for _ in range(2): self.run_cycle()
+        self.d['https_ok'] = True
+        self.run_cycle()
+        self.assertFalse((self.state / 'probe-fail-mango').exists())
+        self.d['https_ok'] = False
+        for _ in range(2): self.run_cycle()
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+        self.assertEqual(self.value('probe-fail-mango'), '2')
+
+    def test_new_child_without_datapath_proof_is_debounced(self):
+        self.d.update(full_ok=True, esp_ok=False)
+        self.run_cycle()
+        self.assertEqual(self.value('probe-fail-mango'), '1')
+        self.assertFalse((self.state / 'fallback-fail').exists())
+        self.assertFalse((self.state / 'health-up').exists())
+        self.run_cycle()
+        self.assertFalse(any('--child' in row and '--ike' not in row
+                             for row in self.trace('swanctl') if '--initiate' in row))
+
+    def test_single_peer_gets_one_full_recovery_then_cooldown(self):
+        self.d['uci'].update(server2='', server3='')
+        self.sas(sa())
+        self.d.update(esp_ok=False, child_ok=False, full_ok=True)
+        # Two probe grace cycles, three failed CHILD attempts, then full recovery.
+        for _ in range(6): self.run_cycle()
+        full = lambda: [row for row in self.trace('swanctl')
+                        if '--initiate' in row and '--ike' in row]
+        self.assertEqual(len(full()), 1)
+        deadline = int(self.value('full-after-mango'))
+        self.assertEqual(deadline - self.d['now'], 300)
+        # The new CHILD still has no datapath. It must not be torn down each tick.
+        for _ in range(4): self.run_cycle()
+        self.assertTrue((self.state / 'full-pending-mango').exists())
+        self.d['now'] = deadline - 1
+        self.run_cycle(advance=False)
+        self.assertEqual(len(full()), 1)
+        self.d['now'] = deadline
+        self.run_cycle(advance=False)
+        self.assertEqual(len(full()), 2)
+        self.assertEqual(int(self.value('full-after-mango')), deadline + 300)
+
+    def test_healthy_cycle_keeps_full_recovery_rate_limit(self):
+        self.sas(sa())
+        (self.state / 'full-after-mango').write_text('1300')
+        (self.state / 'full-pending-mango').write_text('1')
+        (self.state / 'child-fail-mango').write_text('3')
+        self.run_cycle()
+        self.assertEqual(self.value('full-after-mango'), '1300')
+        self.assertFalse((self.state / 'full-pending-mango').exists())
+        self.assertFalse((self.state / 'child-fail-mango').exists())
+
+    def test_repair_and_full_failures_share_tripled_backoff(self):
+        self.sas(sa())
+        self.d['esp_ok'] = False
+        for _ in range(2): self.run_cycle()
+        delays = []
+        for _ in range(4):
+            now = self.d['now']
+            self.run_cycle()
+            delays.append(int(self.value('retry-after')) - now)
+        self.assertEqual(delays, [30, 30, 30, 60])
+
+    def orphan(self):
+        self.sas('mango: #1, ESTABLISHED, IKEv2\n  local id @ 192.0.2.2[4500]\n')
+
+    def test_stuck_termination_never_flushes_or_redials(self):
+        self.orphan()
+        self.d['terminate_mode'] = 'stuck'
+        self.run_cycle()
+        terms = [row for row in self.trace('swanctl') if '--terminate' in row]
+        self.assertEqual(len(terms), 2)
+        self.assertIn('--force', terms[-1])
+        self.assertTrue(all('--ike-id' in row for row in terms))
+        self.assertIn('ESTABLISHED', (self.r / 'sas').read_text())
+        self.assertFalse(any('flush' in row for row in self.trace('ip')))
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+
+    def test_force_cleanup_is_verified_before_vip_flush(self):
+        self.orphan()
+        self.d.update(terminate_mode='force_only', dial_ok=True)
+        self.run_cycle()
+        rows = self.trace()
+        force = next(i for i, row in enumerate(rows) if '--force' in row)
+        flush = next(i for i, row in enumerate(rows) if row[0] == 'ip' and 'flush' in row)
+        initiate = next(i for i, row in enumerate(rows) if '--initiate' in row)
+        self.assertLess(force, flush)
+        self.assertLess(flush, initiate)
+        self.assertTrue(any('--list-sas' in row for row in rows[force + 1:flush]))
+
+    def test_async_termination_is_polled_without_unneeded_force(self):
+        self.orphan()
+        self.d.update(terminate_mode='deferred', dial_ok=True)
+        self.run_cycle()
+        rows = self.trace()
+        term = next(i for i, row in enumerate(rows) if '--terminate' in row)
+        flush = next(i for i, row in enumerate(rows) if row[0] == 'ip' and 'flush' in row)
+        self.assertGreaterEqual(sum('--list-sas' in row for row in rows[term + 1:flush]), 2)
+        self.assertFalse(any('--force' in row for row in rows))
+
+    def test_sa_query_failure_is_not_treated_as_empty(self):
+        self.sas(sa())
+        self.d['list_rc'] = 1
+        self.run_cycle()
+        self.assertFalse(any('--terminate' in row or '--initiate' in row
+                             for row in self.trace('swanctl')))
+        self.assertEqual(self.trace('ip'), [])
+
+    def test_query_error_after_terminate_blocks_flush_and_force(self):
+        self.orphan()
+        self.d['list_fail_after_terminate'] = True
+        self.run_cycle()
+        self.assertFalse(any('--force' in row for row in self.trace('swanctl')))
+        self.assertFalse(any('flush' in row for row in self.trace('ip')))
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+
+    def test_new_sa_during_cleanup_is_not_killed_or_ignored(self):
+        self.orphan()
+        self.d['terminate_mode'] = 'new_sa'
+        self.run_cycle()
+        self.assertIn('mango: #99,', (self.r / 'sas').read_text())
+        self.assertFalse(any('--ike-id' in row and '99' in row for row in self.trace('swanctl')))
+        self.assertFalse(any('flush' in row for row in self.trace('ip')))
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+
+    def test_multiple_old_sa_ids_are_all_confirmed_gone(self):
+        self.orphan()
+        with (self.r / 'sas').open('a') as out:
+            out.write('mango: #11, ESTABLISHED, IKEv2\n')
+        self.d['dial_ok'] = True
+        self.run_cycle()
+        ids = [row[row.index('--ike-id') + 1] for row in self.trace('swanctl')
+               if '--terminate' in row]
+        self.assertEqual(ids, ['1', '11'])
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_cleanup_does_not_touch_unmanaged_connection(self):
+        self.sas('other: #8, ESTABLISHED, IKEv2\n')
+        self.d['dial_ok'] = True
+        self.run_cycle()
+        self.assertIn('other: #8,', (self.r / 'sas').read_text())
+        self.assertFalse(any('--ike-id' in row and '8' in row for row in self.trace('swanctl')))
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_connecting_grace_is_bounded_and_respects_retry_after_cleanup(self):
+        self.sas('mango: #1, CONNECTING, IKEv2\n')
+        self.run_cycle(advance=False)
+        self.assertEqual(self.value('transition-mango'), '1000 connecting')
+        self.d['now'] = 1059
+        self.run_cycle(advance=False)
+        self.assertFalse(any('--terminate' in row for row in self.trace('swanctl')))
+        self.d['now'] = 1060
+        self.run_cycle(advance=False)
+        self.assertTrue(any('--terminate' in row for row in self.trace('swanctl')))
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+        self.assertFalse(any('flush' in row for row in self.trace('ip')))
+        self.assertEqual(self.value('retry-after'), '1090')
+        self.d.update(now=1090, dial_ok=True)
+        self.run_cycle()
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_rekey_state_changes_do_not_restart_grace_clock(self):
+        self.sas(sa_rekeyed_only())
+        self.run_cycle(advance=False)
+        self.d['now'] = 1100
+        self.sas(sa_rekeyed_only().replace('REKEYED', 'DELETING'))
+        self.run_cycle(advance=False)
+        self.assertEqual(self.value('transition-mango'), '1000 transition')
+        self.assertFalse(any('--terminate' in row for row in self.trace('swanctl')))
+        self.d['now'] = 1120
+        self.run_cycle(advance=False)
+        self.assertTrue(any('--terminate' in row for row in self.trace('swanctl')))
+        self.assertFalse(any('flush' in row for row in self.trace('ip')))
+        self.assertEqual(self.value('full-after-mango'), '1420')
+
+    def test_stuck_connecting_cleanup_obeys_backoff(self):
+        self.sas('mango: #1, CONNECTING, IKEv2\n')
+        self.d['terminate_mode'] = 'stuck'
+        self.run_cycle(advance=False)
+        self.d['now'] = 1060
+        self.run_cycle(advance=False)
+        self.assertEqual(self.value('retry-after'), '1090')
+        count = len([r for r in self.trace('swanctl') if '--terminate' in r])
+        self.assertEqual(count, 2)
+        self.d['now'] = 1089
+        self.run_cycle(advance=False)
+        self.assertEqual(len([r for r in self.trace('swanctl') if '--terminate' in r]), count)
+        self.assertEqual(self.value('fail-count'), '1')
+        self.d['now'] = 1090
+        self.run_cycle(advance=False)
+        self.assertEqual(len([r for r in self.trace('swanctl') if '--terminate' in r]), count + 2)
+
+    def test_child_installed_during_timeout_recheck_is_not_terminated(self):
+        self.sas(sa_rekeyed_only())
+        (self.state / 'transition-mango').write_text('1 transition\n')
+        self.d.update(sas_on_read=2, next_sas=sa())
+        self.run_cycle(advance=False)
+        self.assertFalse(any('--terminate' in r or '--initiate' in r for r in self.trace('swanctl')))
+        self.assertFalse((self.state / 'transition-mango').exists())
+        self.run_cycle()
+        self.assertEqual(self.value('logged-up'), 'mango')
+
+    def test_installed_child_wins_over_old_rekey_and_expired_timer(self):
+        self.sas(sa() + '  mango: #9, reqid 1, REKEYED, TUNNEL\n')
+        (self.state / 'transition-mango').write_text('1 transition\n')
+        self.run_cycle()
+        self.assertEqual(self.value('logged-up'), 'mango')
+        self.assertFalse(any('--terminate' in row or '--initiate' in row
+                             for row in self.trace('swanctl')))
+        self.assertFalse((self.state / 'transition-mango').exists())
+
+    def test_recovery_clears_transition_clock_for_next_episode(self):
+        self.sas(sa_rekeyed_only())
+        self.run_cycle(advance=False)
+        self.sas(sa())
+        self.d['now'] = 1050
+        self.run_cycle()
+        self.sas(sa_rekeyed_only())
+        self.d['now'] = 1100
+        self.run_cycle(advance=False)
+        self.assertEqual(self.value('transition-mango'), '1100 transition')
+
+    def test_post_child_transition_is_pending_not_connected_and_times_out(self):
+        self.sas(sa(installed=False))
+        self.d['init_transition'] = 'REKEYED'
+        self.run_cycle(advance=False)
+        self.assertEqual(self.value('transition-mango'), '1000 transition')
+        self.assertFalse((self.state / 'logged-up').exists())
+        self.assertFalse((self.state / 'fail-count').exists())
+        self.d['now'] = 1120
+        self.run_cycle(advance=False)
+        self.assertTrue(any('--terminate' in row for row in self.trace('swanctl')))
+
+    def test_full_initiate_detach_does_not_hide_stuck_connecting(self):
+        self.d['init_transition'] = 'CONNECTING'
+        self.run_cycle(advance=False)
+        self.assertFalse((self.state / 'logged-up').exists())
+        self.assertFalse((self.state / 'fail-count').exists())
+        self.d['now'] = 1060
+        self.run_cycle(advance=False)
+        self.assertEqual(self.value('fail-count'), '1')
+        self.assertTrue(any('--terminate' in row for row in self.trace('swanctl')))
+
+    def test_post_initiate_query_failure_does_not_report_connected(self):
+        self.d.update(dial_ok=True, list_fail_after_init=True)
+        self.run_cycle()
+        self.assertFalse((self.state / 'logged-up').exists())
+        self.assertFalse((self.state / 'health-up').exists())
+        prior = len([row for row in self.trace('swanctl') if '--initiate' in row])
+        self.run_cycle()
+        self.assertEqual(len([row for row in self.trace('swanctl') if '--initiate' in row]), prior)
+
+    def test_apply_also_confirms_cleanup_before_clearing_vip(self):
+        prepared = self.prepare_init()
+        self.orphan()
+        self.d['terminate_mode'] = 'stuck'
+        self.assertNotEqual(self.run_init(prepared, 'reload').returncode, 0)
+        self.assertFalse(any('flush' in row for row in self.trace('ip')))
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+
     def prepare_init(self):
         for name in ['mango-ikev2-fw', 'mango-ikev2-watch-start', 'mango-ikev2-dns-on',
-                     'swanctl-service', 'sleep', 'nft']:
+                     'swanctl-service', 'nft']:
             (self.bin / name).symlink_to(self.mock)
         self.script.chmod(0o755)
         (self.bin / 'mango-ikev2-failover').symlink_to(self.script)
@@ -368,11 +728,17 @@ mango_ikev2_dns_off() { :; }
                 for name, value in [('active', 'mango3'), ('fail-count', '1'),
                                     ('fallback-fail', '12'), ('retry-after', '99999')]:
                     (self.state / name).write_text(value)
+                tracking = ['probe-fail-mango', 'child-fail-mango', 'transition-mango',
+                            'full-pending-mango', 'full-after-mango']
+                for name in tracking:
+                    (self.state / name).write_text('99999')
                 self.assertEqual(self.run_init(prepared, action).returncode, 0)
                 self.assertEqual(self.value('active'), 'mango')
                 self.assertEqual(self.value('fail-count'), '1')
                 self.assertEqual(self.value('fallback-fail'), '1')
                 self.assertEqual(int(self.value('retry-after')) - self.d['now'], 30)
+                for name in tracking:
+                    self.assertFalse((self.state / name).exists(), name)
 
     def test_unready_wan_reload_resets_counts_before_delayed_watch_retry(self):
         prepared = self.prepare_init()
@@ -390,7 +756,6 @@ mango_ikev2_dns_off() { :; }
         self.assertEqual(int(self.value('retry-after')) - self.d['now'], 30)
 
     def test_wan_reload_does_not_inherit_hotplug_lock(self):
-        (self.bin / 'sleep').symlink_to(self.mock)
         stub = self.r / 'reload'
         stub.write_text('''#!/bin/sh
 if [ -e /proc/self/fd/7 ]; then
