@@ -12,23 +12,18 @@
 set -eu
 STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
 XFRM_IF=xfrm-mango
+MANGO_IKEV2_LIFECYCLE=${MANGO_IKEV2_LIFECYCLE:-/usr/lib/mango-ikev2/lifecycle.sh}
+# shellcheck disable=SC1090
+. "$MANGO_IKEV2_LIFECYCLE"
+# Same lock as apply/stop. A nested stop (SSR fallback) sees LOCK_HELD.
+if ! mango_ikev2_lifecycle_enter; then
+	exit 0
+fi
+# Re-read after the lock so a stop/reload that ran first is not ignored.
 enabled=$(uci -q get mango_ikev2.main.enabled || true)
 mode=$(uci -q get mango_ikev2.main.mode || true)
 [ "$enabled" = 1 ] || exit 0
 [ -n "$mode" ] && [ "$mode" != direct ] || exit 0
-
-# mango_ikev2_apply dials, then starts the watch loop. The previous watch can
-# still be inside a 15s+ initiate, so two failover processes can overlap.
-LOCK="${MANGO_IKEV2_LOCK:-/var/lock/mango-ikev2-failover.lock}"
-mkdir -p "$(dirname "$LOCK")" "$STATE"
-exec 9>"$LOCK"
-lock_wait=${MANGO_IKEV2_LOCK_WAIT:-120}
-case "$lock_wait" in
-	''|*[!0-9]*) lock_wait=120 ;;
-esac
-if ! flock -w "$lock_wait" 9; then
-	exit 0
-fi
 
 server2=$(uci -q get mango_ikev2.main.server2 || true)
 server3=$(uci -q get mango_ikev2.main.server3 || true)
@@ -134,15 +129,23 @@ clear_vip() {
 }
 
 refresh_wan_bind() {
-	mkdir -p "$STATE" /etc/swanctl/conf.d
-	/usr/libexec/mango-ikev2-generate swanctl > "$STATE/swanctl.conf" || return 1
-	ln -sf "$STATE/swanctl.conf" /etc/swanctl/conf.d/mango.conf
+	local dir gen tmp
+	dir=${MANGO_IKEV2_SWANCTL_DIR:-/etc/swanctl/conf.d}
+	gen=${MANGO_IKEV2_GENERATE:-/usr/libexec/mango-ikev2-generate}
+	mkdir -p "$STATE" "$dir" || return 1
+	tmp=$(mktemp "$STATE/swanctl.XXXXXX") || return 1
+	if ! "$gen" swanctl > "$tmp" || [ ! -s "$tmp" ]; then
+		rm -f "$tmp"
+		return 1
+	fi
+	mv "$tmp" "$STATE/swanctl.conf" || return 1
+	ln -sfn "$STATE/swanctl.conf" "$dir/mango.conf" || return 1
 	swanctl --load-conns --noprompt >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1 || return 1
 }
 
 prepare_dial() {
 	clear_vip
-	refresh_wan_bind || true
+	refresh_wan_bind
 }
 
 # healthy: an INSTALLED child is up (even if another child is still REKEYED).
@@ -202,17 +205,17 @@ wait_sas_gone() {
 # onto xfrm-mango needs that address on the tunnel device itself.
 pin_vip() {
 	local vip="$1"
-	[ -n "$vip" ] || return 0
-	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	[ -n "$vip" ] || return 1
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
 	ip -4 addr show dev "$XFRM_IF" 2>/dev/null | grep -q "$vip" && return 0
-	ip addr replace "$vip/32" dev "$XFRM_IF" || true
+	ip addr replace "$vip/32" dev "$XFRM_IF"
 }
 
 # Keep the new VIP. Remove only different addresses. Never flush here.
 sync_vip() {
 	local vip="$1" addr
-	[ -n "$vip" ] || return 0
-	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	[ -n "$vip" ] || return 1
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
 	for addr in $(ip -4 addr show dev "$XFRM_IF" 2>/dev/null | sed -n 's/.*inet \([0-9.][0-9.]*\)\/[0-9][0-9]*.*/\1/p'); do
 		[ "$addr" = "$vip" ] && continue
 		ip -4 addr del "$addr/32" dev "$XFRM_IF" 2>/dev/null || \
@@ -224,13 +227,13 @@ sync_vip() {
 # Split egress uses mark→table 101→xfrm; dnsmasq uses main table so GFW DNS
 # needs /32s on xfrm. Teardown/redial/link flaps drop these — reinstall while up.
 ensure_dns_routes() {
-	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
 	ip -4 route replace default dev "$XFRM_IF" table 101 2>/dev/null || \
-		ip -4 route replace default via 0.0.0.0 dev "$XFRM_IF" table 101 2>/dev/null || true
+		ip -4 route replace default via 0.0.0.0 dev "$XFRM_IF" table 101 2>/dev/null || return 1
 	ip -4 rule show | grep -q '10001:.*fwmark 0x101.*lookup 101' || \
-		ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || true
-	ip -4 route replace 1.1.1.1/32 dev "$XFRM_IF" 2>/dev/null || true
-	ip -4 route replace 8.8.8.8/32 dev "$XFRM_IF" 2>/dev/null || true
+		ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || return 1
+	ip -4 route replace 1.1.1.1/32 dev "$XFRM_IF" 2>/dev/null || return 1
+	ip -4 route replace 8.8.8.8/32 dev "$XFRM_IF" 2>/dev/null || return 1
 }
 
 # Prefer the IKE-level [VIP]. It stays put across a child rekey. A bracketed
@@ -404,6 +407,14 @@ handle_int_addr() {
 	log_event fail "$peer" "INTERNAL_ADDRESS_FAILURE"
 	save_charon_snip
 	if iaf_round_complete; then
+		# An IKE with no VIP cannot be repaired by another CHILD initiate.
+		if any_ike_sa; then
+			vip=$(peer_vip "$peer")
+			if [ -z "$vip" ]; then
+				terminate_all
+				wait_sas_gone
+			fi
+		fi
 		backoff=$(state_num "${MANGO_IKEV2_INT_ADDR_BACKOFF:-45}" 45)
 		now=$(date +%s)
 		echo $((now + backoff)) > "$STATE/int-addr-until"
@@ -468,8 +479,11 @@ mark_up() {
 			;;
 	esac
 	vip=$(peer_vip "$peer")
-	sync_vip "$vip"
-	ensure_dns_routes
+	if [ -z "$vip" ] || ! sync_vip "$vip" || ! ensure_dns_routes; then
+		log_event fail "$peer" "${note}: vip or policy route failed"
+		save_charon_snip
+		return 1
+	fi
 	if ! datapath_ok; then
 		log_event fail "$peer" "${note}: datapath dead vip=${vip:-?}"
 		save_charon_snip
@@ -503,7 +517,9 @@ dial_child_and_mark() {
 
 dial_full_and_mark() {
 	local peer="$1" note="$2" rc
-	prepare_dial
+	if ! prepare_dial; then
+		return 1
+	fi
 	rc=0
 	initiate "$peer" full || rc=$?
 	case "$rc" in
@@ -548,8 +564,14 @@ finish_redial_failure() {
 			save_charon_snip
 			exit 0
 		fi
+		if ! prepare_dial; then
+			echo 1 > "$STATE/fail-count"
+			log_event fail "$active" "切换后拨号失败"
+			save_charon_snip
+			bump_fallback_fail
+			exit 0
+		fi
 		rc=0
-		prepare_dial
 		initiate "$active" full || rc=$?
 		case "$rc" in
 			0)
@@ -582,9 +604,7 @@ healthy)
 		esac
 	done
 	vip=$(peer_vip "$active")
-	sync_vip "$vip"
-	ensure_dns_routes
-	if datapath_ok; then
+	if sync_vip "$vip" && ensure_dns_routes && datapath_ok; then
 		# A keep-SA miss logs fail but leaves logged-up in place. Remember
 		# that count before clearing it, and emit one recovery instead of
 		# an ok line on every healthy tick.
@@ -643,8 +663,28 @@ child)
 		exit 0
 	fi
 	vip=$(peer_vip "$active")
-	pin_vip "$vip"
-	ensure_dns_routes
+	if [ -z "$vip" ]; then
+		log_event fail "$active" "IKE up without VIP; full redial"
+		save_charon_snip
+		terminate_all
+		wait_sas_gone
+		if any_ike_sa; then
+			log_event fail "$active" "SA still present after terminate; skip redial"
+			save_charon_snip
+			exit 0
+		fi
+		rm -f "$STATE/logged-up"
+		if dial_full_and_mark "$active" "connected"; then
+			exit 0
+		fi
+		finish_redial_failure "$active"
+	fi
+	if ! pin_vip "$vip" || ! ensure_dns_routes; then
+		log_event fail "$active" "vip or policy route failed"
+		save_charon_snip
+		rm -f "$STATE/logged-up"
+		finish_redial_failure "$active"
+	fi
 	if dial_child_and_mark "$active" "connected"; then
 		exit 0
 	fi

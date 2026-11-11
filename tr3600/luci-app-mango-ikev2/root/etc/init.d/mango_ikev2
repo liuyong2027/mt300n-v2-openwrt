@@ -8,6 +8,11 @@ STOP=10
 
 CONF_DIR=/var/etc/mango-ikev2
 XFRM_IF=xfrm-mango
+IKE_ETC=${MANGO_IKEV2_ETC:-/etc/mango-ikev2}
+DNSMASQ_INIT=${MANGO_IKEV2_DNSMASQ_INIT:-/etc/init.d/dnsmasq}
+MANGO_IKEV2_LIFECYCLE=${MANGO_IKEV2_LIFECYCLE:-/usr/lib/mango-ikev2/lifecycle.sh}
+# shellcheck disable=SC1090
+. "$MANGO_IKEV2_LIFECYCLE"
 
 extra_command "status" "Show brief IKEv2 client state"
 
@@ -20,6 +25,10 @@ start() {
 }
 
 stop() {
+    mango_ikev2_lifecycle_enter || return 1
+    # Re-read under the lock. Stop still tears the tunnel down.
+    enabled=$(uci -q get mango_ikev2.main.enabled || true)
+    mode=$(uci -q get mango_ikev2.main.mode || true)
     mango_ikev2_teardown
 }
 
@@ -46,16 +55,16 @@ mango_ikev2_dns_on() {
     local sec conf
     sec=$(mango_ikev2_dns_section)
     [ -n "$sec" ] || return 1
-    mkdir -p /etc/mango-ikev2/dnsmasq.d
-    conf=/etc/mango-ikev2/dnsmasq.d/ikev2.conf
-    if [ ! -s /etc/mango-ikev2/dns-orig ]; then
+    mkdir -p "$IKE_ETC/dnsmasq.d"
+    conf=$IKE_ETC/dnsmasq.d/ikev2.conf
+    if [ ! -s "$IKE_ETC/dns-orig" ]; then
         {
             echo "section=$sec"
             echo "noresolv=$(uci -q get "dhcp.${sec}.noresolv" || true)"
             echo "filter_aaaa=$(uci -q get "dhcp.${sec}.filter_aaaa" || true)"
             uci -q get "dhcp.${sec}.server" | tr ' ' '\n' | sed 's/^/server /'
             uci -q get "dhcp.${sec}.confdir" | tr ' ' '\n' | sed 's/^/confdir /'
-        } > /etc/mango-ikev2/dns-orig
+        } > "$IKE_ETC/dns-orig"
     fi
     # Write to a temp file first so a failed/empty generate cannot leave
     # noresolv=1 pointing at a blank snippet (local DNS REFUSED).
@@ -67,53 +76,60 @@ mango_ikev2_dns_on() {
     uci set "dhcp.${sec}.noresolv=1"
     uci set "dhcp.${sec}.filter_aaaa=1"
     uci -q delete "dhcp.${sec}.server"
-    if ! uci -q get "dhcp.${sec}.confdir" | tr ' ' '\n' | grep -qx /etc/mango-ikev2/dnsmasq.d; then
-        uci add_list "dhcp.${sec}.confdir=/etc/mango-ikev2/dnsmasq.d"
+    if ! uci -q get "dhcp.${sec}.confdir" | tr ' ' '\n' | grep -qx "$IKE_ETC/dnsmasq.d"; then
+        uci add_list "dhcp.${sec}.confdir=$IKE_ETC/dnsmasq.d"
     fi
     uci commit dhcp
-    /etc/init.d/dnsmasq restart
+    "$DNSMASQ_INIT" restart
 }
 
 mango_ikev2_dns_off() {
-    local sec line val has_server=0
-    # Always drop the IKEv2 conf snippet first. An empty leftover with
-    # noresolv=1 makes local dnsmasq REFUSE every name (Baidu included).
-    rm -f /etc/mango-ikev2/dnsmasq.d/ikev2.conf
-    sec=
-    [ -s /etc/mango-ikev2/dns-orig ] && sec=$(sed -n 's/^section=//p' /etc/mango-ikev2/dns-orig | head -n 1)
+    local sec line val has_server=0 had_snip=0 orig
+    orig=$IKE_ETC/dns-orig
+    # Always drop the IKEv2 conf snippet. Without a backup, do not touch
+    # dnsmasq server/confdir/noresolv/filter_aaaa that IKEv2 did not record.
+    if [ -f "$IKE_ETC/dnsmasq.d/ikev2.conf" ]; then
+        had_snip=1
+    fi
+    rm -f "$IKE_ETC/dnsmasq.d/ikev2.conf"
+    if [ ! -s "$orig" ]; then
+        if [ "$had_snip" = 1 ]; then
+            "$DNSMASQ_INIT" restart
+        fi
+        return 0
+    fi
+    sec=$(sed -n 's/^section=//p' "$orig" | head -n 1)
     [ -n "$sec" ] || sec=$(mango_ikev2_dns_section)
     [ -n "$sec" ] || return 0
     uci -q delete "dhcp.${sec}.server"
     uci -q delete "dhcp.${sec}.confdir"
     uci -q delete "dhcp.${sec}.noresolv"
     uci -q delete "dhcp.${sec}.filter_aaaa"
-    if [ -s /etc/mango-ikev2/dns-orig ]; then
-        while IFS= read -r line; do
-            case "$line" in
-                section=*|noresolv=*|filter_aaaa=*) ;;
-                'server '*)
-                    uci add_list "dhcp.${sec}.server=${line#server }"
-                    has_server=1
-                    ;;
-                'confdir '*)
-                    # Never put the IKEv2 snippet dir back while tearing down.
-                    [ "${line#confdir }" = "/etc/mango-ikev2/dnsmasq.d" ] && continue
-                    uci add_list "dhcp.${sec}.confdir=${line#confdir }"
-                    ;;
-            esac
-        done < /etc/mango-ikev2/dns-orig
-        val=$(sed -n 's/^noresolv=//p' /etc/mango-ikev2/dns-orig | head -n 1)
-        [ -n "$val" ] && uci set "dhcp.${sec}.noresolv=$val"
-        val=$(sed -n 's/^filter_aaaa=//p' /etc/mango-ikev2/dns-orig | head -n 1)
-        [ -n "$val" ] && uci set "dhcp.${sec}.filter_aaaa=$val"
-    fi
+    while IFS= read -r line; do
+        case "$line" in
+            section=*|noresolv=*|filter_aaaa=*) ;;
+            'server '*)
+                uci add_list "dhcp.${sec}.server=${line#server }"
+                has_server=1
+                ;;
+            'confdir '*)
+                # Never put the IKEv2 snippet dir back while tearing down.
+                [ "${line#confdir }" = "$IKE_ETC/dnsmasq.d" ] && continue
+                uci add_list "dhcp.${sec}.confdir=${line#confdir }"
+                ;;
+        esac
+    done < "$orig"
+    val=$(sed -n 's/^noresolv=//p' "$orig" | head -n 1)
+    [ -n "$val" ] && uci set "dhcp.${sec}.noresolv=$val"
+    val=$(sed -n 's/^filter_aaaa=//p' "$orig" | head -n 1)
+    [ -n "$val" ] && uci set "dhcp.${sec}.filter_aaaa=$val"
     # If restore had nothing to put back, keep dnsmasq able to use WAN DNS.
     if [ "$has_server" = 0 ] && ! uci -q get "dhcp.${sec}.server" >/dev/null; then
         uci -q delete "dhcp.${sec}.noresolv"
     fi
     uci commit dhcp
-    rm -f /etc/mango-ikev2/dns-orig
-    /etc/init.d/dnsmasq restart
+    rm -f "$orig"
+    "$DNSMASQ_INIT" restart
 }
 
 mango_ikev2_watch_stop() {
@@ -156,8 +172,7 @@ mango_ikev2_ensure_xfrm() {
     [ -n "$tunlink" ] || tunlink=$(uci -q get network.wan.ifname)
     [ -n "$tunlink" ] || tunlink=eth0
     if ip link show "$XFRM_IF" >/dev/null 2>&1; then
-        # Keep the link, but drop any leftover VIP before a fresh IKE dial.
-        ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || :
+        # Keep any VIP. Callers flush only after the old SA is gone.
         ip link set "$XFRM_IF" mtu "$mtu" up || return 1
         return 0
     fi
@@ -212,13 +227,78 @@ mango_ikev2_load_all() {
     swanctl --load-all --noprompt
 }
 
+mango_ikev2_sa_present() {
+    swanctl --list-sas 2>/dev/null | grep -E -q '^[A-Za-z][A-Za-z0-9_]*: .*(ESTABLISHED|CONNECTING|REKEYING),'
+}
+
+mango_ikev2_wait_sa_gone() {
+    local i=0 max=20 pause extra
+    pause=${MANGO_IKEV2_SA_POLL:-1}
+    extra=${MANGO_IKEV2_POST_TERM_WAIT:-15}
+    case "$pause" in ''|*[!0-9]*) pause=1 ;; esac
+    case "$extra" in ''|*[!0-9]*) extra=15 ;; esac
+    while [ "$i" -lt "$max" ]; do
+        mango_ikev2_sa_present || break
+        i=$((i + 1))
+        [ "$pause" -gt 0 ] && sleep "$pause" || true
+    done
+    if [ "$extra" -gt 0 ]; then
+        sleep "$extra"
+    fi
+}
+
+mango_ikev2_terminate_all() {
+    swanctl --terminate --ike mango --timeout 3 >/dev/null 2>&1 || :
+    swanctl --terminate --ike mango2 --timeout 3 >/dev/null 2>&1 || :
+    swanctl --terminate --ike mango3 --timeout 3 >/dev/null 2>&1 || :
+}
+
+# 0 config changed and installed, 2 unchanged, 1 failure (old file kept).
+mango_ikev2_stage_swanctl() {
+    local gen tmp dir
+    gen=${MANGO_IKEV2_GENERATE:-/usr/libexec/mango-ikev2-generate}
+    dir=${MANGO_IKEV2_SWANCTL_DIR:-/etc/swanctl/conf.d}
+    mkdir -p "$CONF_DIR" "$dir" || return 1
+    tmp=$(mktemp "$CONF_DIR/swanctl.XXXXXX") || return 1
+    if ! "$gen" swanctl > "$tmp" || [ ! -s "$tmp" ]; then
+        rm -f "$tmp"
+        echo 'swanctl generate failed' >&2
+        return 1
+    fi
+    if [ -f "$CONF_DIR/swanctl.conf" ] && cmp -s "$tmp" "$CONF_DIR/swanctl.conf"; then
+        rm -f "$tmp"
+        return 2
+    fi
+    printf '%s\n' "$tmp"
+    return 0
+}
+
+mango_ikev2_install_swanctl() {
+    local tmp dir
+    tmp=$1
+    dir=${MANGO_IKEV2_SWANCTL_DIR:-/etc/swanctl/conf.d}
+    mv "$tmp" "$CONF_DIR/swanctl.conf" || return 1
+    ln -sfn "$CONF_DIR/swanctl.conf" "$dir/mango.conf" || return 1
+    swanctl --load-conns --noprompt >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1
+}
+
+mango_ikev2_flush_vip_if_clear() {
+    if mango_ikev2_sa_present; then
+        echo 'IKE SA still present; not flushing VIP' >&2
+        return 1
+    fi
+    ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || true
+}
+
 mango_ikev2_apply() {
-    local enabled mode
-    mkdir -p "$CONF_DIR" /etc/mango-ikev2 /etc/swanctl/conf.d
+    local enabled mode staged rc same
+    mango_ikev2_lifecycle_enter || return 1
+    mkdir -p "$CONF_DIR" "$IKE_ETC" /etc/swanctl/conf.d
     mango_ikev2_prefer_soft_crypto
     mango_ikev2_claim_charon
-    enabled=$(uci -q get mango_ikev2.main.enabled)
-    mode=$(uci -q get mango_ikev2.main.mode)
+    # Re-check under the lock. A stop that ran first must not be dialed over.
+    enabled=$(uci -q get mango_ikev2.main.enabled || true)
+    mode=$(uci -q get mango_ikev2.main.mode || true)
     if [ "$enabled" != 1 ]; then
         mango_ikev2_teardown
         /usr/libexec/mango-ikev2-fw || :
@@ -248,9 +328,34 @@ mango_ikev2_apply() {
             return 1
         }
     fi
-    /usr/libexec/mango-ikev2-generate swanctl > "$CONF_DIR/swanctl.conf" || return 1
-    ln -sf "$CONF_DIR/swanctl.conf" /etc/swanctl/conf.d/mango.conf
-    mango_ikev2_ensure_xfrm || return 1
+    staged=$(mango_ikev2_stage_swanctl) || rc=$?
+    rc=${rc:-0}
+    if [ "$rc" = 1 ]; then
+        return 1
+    fi
+    same=0
+    [ "$rc" = 2 ] && same=1
+    if [ "$same" = 1 ] && mango_ikev2_sa_present; then
+        # Reload with the same swanctl text keeps the live VIP.
+        mango_ikev2_ensure_xfrm || return 1
+        /usr/libexec/mango-ikev2-fw || return 1
+        mango_ikev2_dns_on || return 1
+        /usr/libexec/mango-ikev2-failover || true
+        mango_ikev2_watch_start
+        return 0
+    fi
+    if mango_ikev2_sa_present; then
+        mango_ikev2_terminate_all
+        mango_ikev2_wait_sa_gone
+        if mango_ikev2_sa_present; then
+            rm -f "$staged"
+            echo 'IKE SA still present after terminate; not flushing' >&2
+            return 1
+        fi
+    fi
+    if [ "$same" != 1 ]; then
+        mango_ikev2_install_swanctl "$staged" || return 1
+    fi
     /etc/init.d/swanctl enable 2>/dev/null || :
     # Do not restart a live charon: that races S95 load-all against vici.
     if pidof charon >/dev/null 2>&1; then
@@ -260,14 +365,14 @@ mango_ikev2_apply() {
     fi
     mango_ikev2_wait_vici || return 1
     mango_ikev2_load_all || return 1
+    mango_ikev2_ensure_xfrm || return 1
     # Install the nft set before dnsmasq starts adding GFW answers into it.
     /usr/libexec/mango-ikev2-fw || return 1
     mango_ikev2_dns_on || return 1
     echo mango > "$CONF_DIR/active"
     echo 0 > "$CONF_DIR/fail-count"
     echo 0 > "$CONF_DIR/fallback-fail"
-    # Never dial while a previous VIP still sits on xfrm-mango.
-    ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || :
+    mango_ikev2_flush_vip_if_clear || return 1
     /usr/libexec/mango-ikev2-failover || true
     mango_ikev2_watch_start
 }

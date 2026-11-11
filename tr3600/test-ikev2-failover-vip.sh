@@ -160,7 +160,13 @@ esac
 printf '%s' 000
 exit 1
 EOF
-chmod 755 "$tmp/bin/uci" "$tmp/bin/swanctl" "$tmp/bin/ip" "$tmp/bin/ping" "$tmp/bin/curl"
+mkdir -p "$tmp/swanctl"
+cat > "$tmp/bin/generate" << 'EOF'
+#!/bin/sh
+printf '%s\n' '# swanctl test'
+exit 0
+EOF
+chmod 755 "$tmp/bin/uci" "$tmp/bin/swanctl" "$tmp/bin/ip" "$tmp/bin/ping" "$tmp/bin/curl" "$tmp/bin/generate"
 
 IP_LOG=$tmp/ip.log
 SWANCTL_LOG=$tmp/swanctl.log
@@ -171,6 +177,9 @@ SWANCTL_DOWN=$tmp/swan-down
 export IP_LOG SWANCTL_LOG PING_LOG CURL_LOG SAS_FILE SWANCTL_DOWN
 export MANGO_IKEV2_LOCK=$tmp/failover.lock
 export MANGO_IKEV2_LOCK_WAIT=5
+export MANGO_IKEV2_LIFECYCLE=$root/tr3600/luci-app-mango-ikev2/root/usr/lib/mango-ikev2/lifecycle.sh
+export MANGO_IKEV2_GENERATE=$tmp/bin/generate
+export MANGO_IKEV2_SWANCTL_DIR=$tmp/swanctl
 export MANGO_IKEV2_POST_TERM_WAIT=0
 export MANGO_IKEV2_SA_POLL=0
 export MANGO_IKEV2_SNIP=$tmp/snip
@@ -692,20 +701,50 @@ PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script"
 test "$(grep -c 'datapath recovered vip=10.5.0.2' "$RECOVERY_LOG")" = 2
 unset MANGO_IKEV2_LOG RECOVERY_LOG
 
+# IKE without a VIP is not a CHILD repair. Terminate, then full dial.
+cat > "$tmp/sas" << 'EOF'
+mango: #4, ESTABLISHED, IKEv2, aaaa_i* bbbb_r
+  local  'vpn-user' @ 192.0.2.10[4500]
+  remote 'nordvpn' @ 203.0.113.5[4500]
+  established 20s ago, rekeying in 3000s
+EOF
+rm -f "$SWANCTL_DOWN" "$tmp/state/int-addr-until"
+printf '%s\n' mango > "$tmp/state/active"
+printf '%s\n' 0 > "$tmp/state/fail-count"
+printf '%s\n' 0 > "$tmp/state/fallback-fail"
+echo $(( $(date +%s) + 120 )) > "$tmp/state/int-addr-until"
+reset_logs
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script" >/dev/null 2>"$tmp/orphan-wait.err"
+if grep -q -- '--terminate' "$SWANCTL_LOG" || grep -q -- '--initiate' "$SWANCTL_LOG"; then
+	printf '%s\n' 'backoff tick repaired an orphan IKE' >&2
+	cat "$SWANCTL_LOG" >&2
+	exit 1
+fi
+rm -f "$tmp/state/int-addr-until"
+reset_logs
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script" >/dev/null 2>"$tmp/orphan.err"
+grep -q -- '--terminate --ike mango' "$SWANCTL_LOG"
+grep -q -- '--initiate --ike mango' "$SWANCTL_LOG"
+if grep -q -- '--initiate --child mango --timeout' "$SWANCTL_LOG" && ! grep -q -- '--initiate --ike mango' "$SWANCTL_LOG"; then
+	printf '%s\n' 'orphan IKE was repaired as CHILD only' >&2
+	exit 1
+fi
+
 python3 - "$script" "$log_script" << 'PY'
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text()
 log = Path(sys.argv[2]).read_text()
 assert text.count("clear_vip") == 3, text.count("clear_vip")
-assert "prepare_dial() {\n\tclear_vip\n" in text
+assert "prepare_dial() {\n\tclear_vip\n\trefresh_wan_bind\n}" in text
+assert "refresh_wan_bind || true" not in text
 assert "if any_ike_sa; then\n\t\treturn 0\n\tfi\n\tif ip link show" in text
 dead = text.index('log_event fail "$active" "datapath dead; redial"')
 skip = text.index('SA still present after terminate; skip redial', dead)
 assert "reset_datapath_fail" not in text[dead:skip]
 cleared = text.index("\treset_datapath_fail\n\tclear_vip\n", skip)
 assert cleared > skip
-start = text.index("\tvip=$(peer_vip \"$active\")\n\tsync_vip \"$vip\"\n\tensure_dns_routes\n\tif datapath_ok; then\n")
+start = text.index('\tvip=$(peer_vip "$active")\n\tif sync_vip "$vip" && ensure_dns_routes && datapath_ok; then\n')
 end = text.index("\tfi\n\t# SA looks fine but tunnel probe failed", start)
 healthy = text[start:end]
 assert "clear_vip" not in healthy
@@ -720,7 +759,10 @@ assert '[ "$n" -lt 3 ]' in text
 assert "REKEYING|REKEYED|DELETING" in text
 assert "MANGO_IKEV2_POST_TERM_WAIT:-15" in text
 assert "MANGO_IKEV2_INT_ADDR_BACKOFF:-45" in text
-assert "flock -w" in text
+assert "mango_ikev2_lifecycle_enter" in text
+life = Path(sys.argv[1]).resolve().parents[1] / 'lib/mango-ikev2/lifecycle.sh'
+assert "flock -w" in life.read_text()
+assert "MANGO_IKEV2_LOCK_HELD" in life.read_text()
 assert "INTERNAL_ADDRESS_FAILURE; all peers; backoff" in text
 assert "iaf_round_complete" in text
 assert "swanctl --initiate --child" in text
