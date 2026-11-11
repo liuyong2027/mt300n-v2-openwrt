@@ -1,0 +1,30 @@
+{
+  "source_commit": "2ba098ddff1b044c5bb0d7b23975c8a9135a42fc",
+  "base_recipe_commit": "588ed68c02d8bbdaa0db19af106b91d9ec15c508",
+  "build_url": "https://github.com/liuyong2027/mt300n-v2-openwrt/actions/runs/42957607849",
+  "artifact_id": 13830651678,
+  "build_conclusion": "success",
+  "openwrt_version": "25.12.5",
+  "openwrt_commit": "f0a60eee2fe051741c643ea6118718aae1ef17fb",
+  "kernel_profile": "production",
+  "profile": "ikev2",
+  "release_marker": "27",
+  "local_checks": {
+    "runtime_tests": 51,
+    "wan_tests": 3,
+    "model_and_syntax_checks": "passed"
+  },
+  "ci_checks": {
+    "validation": "passed",
+    "full_compilation": "passed",
+    "image_format_and_space": "passed",
+    "packaged_fix_files_matched": 10
+  },
+  "artifact_zip_sha256": "405200ec465eb15fb98039b2689041be083dcb1b3a41b5c4bd2d102659195682",
+  "published_image_name": "mt300n-v2-r27-recovery-2ba098d-sysupgrade.bin",
+  "published_image_sha256": "87088be86581dee5a9427fe226a00d12b3d5909f98c1723232883cc4b6ce6f6e",
+  "image_bytes": 9896230,
+  "margin_bytes": 6553306,
+  "image_modified_for_publication": false,
+  "hardware_acceptance": "Initial user-reported post-flash connectivity passed; see HARDWARE-ACCEPTANCE-27.json. Original CI report retains build-time pending status."
+}

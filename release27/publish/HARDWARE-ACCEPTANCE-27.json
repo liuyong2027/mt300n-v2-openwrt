@@ -1,0 +1,24 @@
+{
+  "firmware_source_commit": "2ba098ddff1b044c5bb0d7b23975c8a9135a42fc",
+  "firmware_sha256": "87088be86581dee5a9427fe226a00d12b3d5909f98c1723232883cc4b6ce6f6e",
+  "date": "2026-11-11",
+  "device": "GL.iNet GL-MT300N-V2",
+  "evidence_source": "User-provided SSH output after flashing; no direct device access by build environment.",
+  "scope": "Initial post-flash connectivity only",
+  "user_reported_checks": {
+    "three_runtime_script_hashes_match_build": true,
+    "ikev2_enabled": true,
+    "mode": "split",
+    "state": "up",
+    "active_peer": "primary",
+    "ike_established_s": 323,
+    "event_log_contains_success": true,
+    "event_log_contains_failure_or_switch": false
+  },
+  "pending": [
+    "Fault injection and recovery",
+    "Backoff and peer rotation on hardware",
+    "Restart recovery",
+    "Long-term stability"
+  ]
+}

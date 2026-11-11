@@ -1,0 +1,29 @@
+{
+  "name": "Publish verified Release 27",
+  "on": {
+    "push": {
+      "branches": ["codex/publish-release27"],
+      "paths": [".github/workflows/publish-release27.yml", "release27/publish/**"]
+    }
+  },
+  "permissions": {"contents": "write", "actions": "read"},
+  "concurrency": {"group": "publish-release27", "cancel-in-progress": false},
+  "jobs": {
+    "publish": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 15,
+      "steps": [
+        {
+          "name": "Checkout publication recipe",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {"persist-credentials": false}
+        },
+        {
+          "name": "Verify original build, upload, publish, then remove superseded release",
+          "env": {"GH_TOKEN": "${{ github.token }}"},
+          "run": "python3 release27/publish/publish.py"
+        }
+      ]
+    }
+  }
+}
