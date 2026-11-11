@@ -146,7 +146,14 @@ mango_ikev2_watch_start() {
     watch=${MANGO_IKEV2_WATCH:-/usr/libexec/mango-ikev2-watch}
     pidfile=${MANGO_IKEV2_WATCH_PID:-/var/run/mango-ikev2-watch.pid}
     mango_ikev2_watch_stop
-    "$watch" >/dev/null 2>&1 &
+    # apply holds the lifecycle lock on fd 9 and exports LOCK_HELD.
+    # The watchdog and its sleep/failover children must not inherit either,
+    # or stop/reload/yield wait out the flock timeout and leave the tunnel up.
+    (
+        unset MANGO_IKEV2_LOCK_HELD || true
+        exec 9>&- 2>/dev/null || true
+        exec "$watch"
+    ) >/dev/null 2>&1 &
     echo $! > "$pidfile"
 }
 
