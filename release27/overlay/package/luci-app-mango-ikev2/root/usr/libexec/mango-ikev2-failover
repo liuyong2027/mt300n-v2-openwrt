@@ -144,7 +144,7 @@ sa_health() {
             printf '%s\n' connecting
             return 0
         fi
-        if printf '%s\n' "$block" | grep -E -q "^${peer}: .*(REKEYING|DELETING),"; then
+		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*(CREATED|PASSIVE|REKEYING|REKEYED|DELETING|DESTROYING),"; then
             printf '%s\n' transition
             return 0
         fi

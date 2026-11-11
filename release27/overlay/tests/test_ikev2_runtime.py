@@ -588,6 +588,22 @@ class Runtime(unittest.TestCase):
         self.assertFalse(any('flush' in row for row in self.trace('ip')))
         self.assertEqual(self.value('full-after-mango'), '1420')
 
+    def test_ike_transition_states_also_get_bounded_grace(self):
+        for phase in ['CREATED', 'PASSIVE', 'REKEYING', 'REKEYED', 'DELETING', 'DESTROYING']:
+            with self.subTest(phase=phase):
+                for p in self.state.iterdir():
+                    if p.name != 'failover.lock': p.unlink()
+                (self.r / 'trace').write_text('')
+                self.d['now'] = 1000
+                self.sas(f'mango: #1, {phase}, IKEv2\n')
+                self.run_cycle(advance=False)
+                self.assertEqual(self.value('transition-mango'), '1000 transition')
+                self.assertFalse(any('--terminate' in r or '--initiate' in r for r in self.trace('swanctl')))
+                self.d['now'] = 1120
+                self.run_cycle(advance=False)
+                self.assertTrue(any('--terminate' in r for r in self.trace('swanctl')))
+                self.assertEqual(self.value('retry-after'), '1150')
+
     def test_stuck_connecting_cleanup_obeys_backoff(self):
         self.sas('mango: #1, CONNECTING, IKEv2\n')
         self.d['terminate_mode'] = 'stuck'
