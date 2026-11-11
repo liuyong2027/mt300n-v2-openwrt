@@ -205,9 +205,18 @@ mkdir -p "$tmp/state" "$tmp/swanctl" "$tmp/etc"
 printf '%s\n' 'cidrs' > "$tmp/etc/cn-cidrs.txt"
 printf '%s\n' 1 > "$UCI_DIR/values/mango_ikev2.main.enabled"
 printf '%s\n' split > "$UCI_DIR/values/mango_ikev2.main.mode"
+cat > "$tmp/bin/fw" << 'EOF'
+#!/bin/sh
+printf '%s\n' fw >> "${FW_LOG:?}"
+exit 0
+EOF
+chmod 755 "$tmp/bin/fw"
+: > "$tmp/fw.log"
 CONF_DIR=$tmp/state
 WATCH_LOG=$tmp/watch.log
 export WATCH_LOG \
+	FW_LOG=$tmp/fw.log \
+	MANGO_IKEV2_FW=$tmp/bin/fw \
 	MANGO_IKEV2_GENERATE=$tmp/bin/generate \
 	MANGO_IKEV2_PEER_ENGINE=$tmp/bin/peer \
 	MANGO_IKEV2_WATCH=$tmp/bin/watch \
@@ -225,6 +234,11 @@ grep -q 'swanctl generate failed; watchdog will retry' "$tmp/apply.err"
 test "$(cat "$WATCH_LOG")" = started
 test -s "$tmp/watch.pid"
 test ! -f "$tmp/state/swanctl.conf"
+test ! -s "$tmp/fw.log"
+if grep -q connected "$tmp/apply.err" "$tmp/apply.out"; then
+	printf '%s\n' 'failed generate claimed connected' >&2
+	exit 1
+fi
 kill "$(cat "$tmp/watch.pid")" 2>/dev/null || true
 wait "$(cat "$tmp/watch.pid")" 2>/dev/null || true
 

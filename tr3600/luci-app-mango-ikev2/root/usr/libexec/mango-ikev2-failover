@@ -143,9 +143,37 @@ refresh_wan_bind() {
 	swanctl --load-conns --noprompt >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1 || return 1
 }
 
+# Boot can start the watchdog before WAN exists, so apply never created the
+# xfrm device or the fw4 rules. A later generate must build that datapath
+# before the dial; a failed generate must not.
+ensure_xfrm() {
+	local ifid mtu tunlink
+	ifid=$(uci -q get mango_ikev2.main.ifid || true)
+	mtu=$(uci -q get mango_ikev2.main.xfrm_mtu || true)
+	ifid=${ifid:-42}
+	mtu=${mtu:-1280}
+	tunlink=$(uci -q get network.wan.device || true)
+	[ -n "$tunlink" ] || tunlink=$(uci -q get network.wan.ifname || true)
+	[ -n "$tunlink" ] || tunlink=eth0
+	if ip link show "$XFRM_IF" >/dev/null 2>&1; then
+		ip link set "$XFRM_IF" mtu "$mtu" up || return 1
+		return 0
+	fi
+	ip link add "$XFRM_IF" type xfrm dev "$tunlink" if_id "$ifid" || return 1
+	ip link set "$XFRM_IF" mtu "$mtu" up || return 1
+}
+
+install_fw() {
+	local fw
+	fw=${MANGO_IKEV2_FW:-/usr/libexec/mango-ikev2-fw}
+	"$fw"
+}
+
 prepare_dial() {
 	clear_vip
-	refresh_wan_bind
+	refresh_wan_bind || return 1
+	ensure_xfrm || return 1
+	install_fw || return 1
 }
 
 # healthy: an INSTALLED child is up (even if another child is still REKEYED).

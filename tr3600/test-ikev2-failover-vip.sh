@@ -166,7 +166,14 @@ cat > "$tmp/bin/generate" << 'EOF'
 printf '%s\n' '# swanctl test'
 exit 0
 EOF
-chmod 755 "$tmp/bin/uci" "$tmp/bin/swanctl" "$tmp/bin/ip" "$tmp/bin/ping" "$tmp/bin/curl" "$tmp/bin/generate"
+cat > "$tmp/bin/fw" << 'EOF'
+#!/bin/sh
+if [ -n "${FW_LOG:-}" ]; then
+	printf '%s\n' fw >> "$FW_LOG"
+fi
+exit 0
+EOF
+chmod 755 "$tmp/bin/uci" "$tmp/bin/swanctl" "$tmp/bin/ip" "$tmp/bin/ping" "$tmp/bin/curl" "$tmp/bin/generate" "$tmp/bin/fw"
 
 IP_LOG=$tmp/ip.log
 SWANCTL_LOG=$tmp/swanctl.log
@@ -179,6 +186,7 @@ export MANGO_IKEV2_LOCK=$tmp/failover.lock
 export MANGO_IKEV2_LOCK_WAIT=5
 export MANGO_IKEV2_LIFECYCLE=$root/tr3600/luci-app-mango-ikev2/root/usr/lib/mango-ikev2/lifecycle.sh
 export MANGO_IKEV2_GENERATE=$tmp/bin/generate
+export MANGO_IKEV2_FW=$tmp/bin/fw
 export MANGO_IKEV2_SWANCTL_DIR=$tmp/swanctl
 export MANGO_IKEV2_POST_TERM_WAIT=0
 export MANGO_IKEV2_SA_POLL=0
@@ -730,13 +738,137 @@ if grep -q -- '--initiate --child mango --timeout' "$SWANCTL_LOG" && ! grep -q -
 	exit 1
 fi
 
+# A failed generate must not create xfrm-mango. The next generate that
+# succeeds must create it, install fw, and only then pin the VIP and routes.
+cat > "$tmp/bin/ip" << 'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "${IP_LOG:?}"
+case "$*" in
+	"link show xfrm-mango")
+		[ -f "${XFRM_UP:?}" ] || exit 1
+		exit 0
+		;;
+	"link add xfrm-mango type xfrm dev eth0 if_id 42")
+		touch "$XFRM_UP"
+		exit 0
+		;;
+	"link set xfrm-mango mtu 1280 up")
+		[ -f "$XFRM_UP" ] || exit 1
+		exit 0
+		;;
+	*"-4 addr show"*)
+		if [ -f "${VIP_PINNED:-}" ]; then
+			printf '%s\n' 'inet 10.6.1.169/32 scope global xfrm-mango'
+		fi
+		exit 0
+		;;
+	*"addr replace 10.6.1.169/32 dev xfrm-mango")
+		touch "${VIP_PINNED:?}"
+		exit 0
+		;;
+	*"-4 rule show"*)
+		if [ -f "${RULE_UP:-}" ]; then
+			printf '%s\n' '10001: from all fwmark 0x101 lookup 101'
+		fi
+		exit 0
+		;;
+	*"rule add priority 10001 fwmark 0x101/0xffffffff table 101")
+		touch "${RULE_UP:?}"
+		exit 0
+		;;
+	*"route replace"*)
+		exit 0
+		;;
+esac
+exit 0
+EOF
+chmod 755 "$tmp/bin/ip"
+cat > "$tmp/bin/generate" << 'EOF'
+#!/bin/sh
+echo 'WAN IPv4 unavailable' >&2
+exit 1
+EOF
+cat > "$tmp/sas-up" << 'EOF'
+mango: #1, ESTABLISHED, IKEv2
+  local 192.168.0.101[10.6.1.169]
+  remote vpn.example[203.0.113.5]
+  mango: #1, INSTALLED, TUNNEL
+    local  10.6.1.169/32
+    remote 0.0.0.0/0
+EOF
+RETRY_LOG=$tmp/retry-events.log
+FW_LOG=$tmp/fw.log
+XFRM_UP=$tmp/xfrm-up
+VIP_PINNED=$tmp/vip-pinned
+RULE_UP=$tmp/rule-up
+export RETRY_LOG FW_LOG XFRM_UP VIP_PINNED RULE_UP
+export MANGO_IKEV2_LOG=$tmp/bin/event-log
+export RECOVERY_LOG=$RETRY_LOG
+rm -f "$XFRM_UP" "$VIP_PINNED" "$RULE_UP" "$tmp/state/swanctl.conf" \
+	"$tmp/state/int-addr-until" "$tmp/state/int-addr-round" "$tmp/state/logged-up"
+: > "$RETRY_LOG"
+: > "$FW_LOG"
+touch "$SWANCTL_DOWN"
+printf '%s\n' mango > "$tmp/state/active"
+printf '%s\n' 0 > "$tmp/state/fail-count"
+printf '%s\n' 0 > "$tmp/state/fallback-fail"
+unset UCI_SERVER2 UCI_SERVER3 IAF_PEERS INITIATE_STDERR_FILE SAS_AFTER_INITIATE SWANCTL_KEEP_SA IP_ADDR_SHOW || true
+PING_RC=0
+export PING_RC
+reset_logs
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script" >/dev/null 2>"$tmp/retry-down.err"
+test ! -f "$XFRM_UP"
+test ! -s "$FW_LOG"
+test ! -e "$tmp/state/swanctl.conf"
+if grep -q connected "$RETRY_LOG"; then
+	printf '%s\n' 'failed generate logged connected' >&2
+	cat "$RETRY_LOG" >&2
+	exit 1
+fi
+grep -q 'dial failed' "$RETRY_LOG"
+
+cat > "$tmp/bin/generate" << 'EOF'
+#!/bin/sh
+printf '%s\n' '# swanctl from wan 192.168.0.101'
+exit 0
+EOF
+rm -f "$XFRM_UP" "$VIP_PINNED" "$RULE_UP" "$tmp/state/logged-up"
+: > "$RETRY_LOG"
+: > "$FW_LOG"
+touch "$SWANCTL_DOWN"
+printf '%s\n' 0 > "$tmp/state/fail-count"
+printf '%s\n' 0 > "$tmp/state/fallback-fail"
+SAS_AFTER_INITIATE=$tmp/sas-up
+export SAS_AFTER_INITIATE
+reset_logs
+PATH="$tmp/bin:$PATH" MANGO_IKEV2_STATE=$tmp/state sh "$script" >/dev/null 2>"$tmp/retry-up.err" || {
+	printf '%s\n' 'retry dial exited non-zero' >&2
+	cat "$tmp/retry-up.err" >&2
+	exit 1
+}
+test -f "$XFRM_UP"
+grep -q 'link add xfrm-mango type xfrm dev eth0 if_id 42' "$IP_LOG"
+test "$(cat "$FW_LOG")" = fw
+grep -q 'addr replace 10.6.1.169/32 dev xfrm-mango' "$IP_LOG"
+grep -q -- '-4 route replace default dev xfrm-mango table 101' "$IP_LOG"
+grep -q 'rule add priority 10001 fwmark 0x101/0xffffffff table 101' "$IP_LOG"
+grep -q -- '-4 route replace 1.1.1.1/32 dev xfrm-mango' "$IP_LOG"
+grep -q -- '-4 route replace 8.8.8.8/32 dev xfrm-mango' "$IP_LOG"
+grep -q 'ok mango connected vip=10.6.1.169' "$RETRY_LOG"
+if grep -q 'vip or policy route failed' "$RETRY_LOG"; then
+	printf '%s\n' 'retry still failed VIP or policy setup' >&2
+	cat "$RETRY_LOG" "$IP_LOG" >&2
+	exit 1
+fi
+grep -q '192.168.0.101' "$tmp/state/swanctl.conf"
+
 python3 - "$script" "$log_script" << 'PY'
 import sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text()
 log = Path(sys.argv[2]).read_text()
 assert text.count("clear_vip") == 3, text.count("clear_vip")
-assert "prepare_dial() {\n\tclear_vip\n\trefresh_wan_bind\n}" in text
+assert "prepare_dial() {\n\tclear_vip\n\trefresh_wan_bind || return 1\n\tensure_xfrm || return 1\n\tinstall_fw || return 1\n}" in text
 assert "refresh_wan_bind || true" not in text
 assert "if any_ike_sa; then\n\t\treturn 0\n\tfi\n\tif ip link show" in text
 dead = text.index('log_event fail "$active" "datapath dead; redial"')
