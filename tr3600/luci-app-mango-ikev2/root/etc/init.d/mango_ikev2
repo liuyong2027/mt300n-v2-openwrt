@@ -68,7 +68,7 @@ mango_ikev2_dns_on() {
     fi
     # Write to a temp file first so a failed/empty generate cannot leave
     # noresolv=1 pointing at a blank snippet (local DNS REFUSED).
-    if ! /usr/libexec/mango-ikev2-generate dnsmasq > "$conf.tmp" || [ ! -s "$conf.tmp" ]; then
+    if ! "${MANGO_IKEV2_GENERATE:-/usr/libexec/mango-ikev2-generate}" dnsmasq > "$conf.tmp" || [ ! -s "$conf.tmp" ]; then
         rm -f "$conf.tmp"
         return 1
     fi
@@ -162,19 +162,19 @@ mango_ikev2_teardown() {
     ip -4 route del 1.1.1.1/32 dev xfrm-mango 2>/dev/null || :
     ip -4 route del 8.8.8.8/32 dev xfrm-mango 2>/dev/null || :
     nft delete table inet mango_ikev2 2>/dev/null || :
-    rm -f /etc/swanctl/conf.d/mango.conf
+    rm -f "${MANGO_IKEV2_SWANCTL_DIR:-/etc/swanctl/conf.d}/mango.conf"
     mango_ikev2_dns_off || :
-    /usr/libexec/mango-ikev2-peer-engine release || :
+    "${MANGO_IKEV2_PEER_ENGINE:-/usr/libexec/mango-ikev2-peer-engine}" release || :
 }
 
 mango_ikev2_ensure_xfrm() {
     local ifid mtu tunlink
-    ifid=$(uci -q get mango_ikev2.main.ifid)
-    mtu=$(uci -q get mango_ikev2.main.xfrm_mtu)
+    ifid=$(uci -q get mango_ikev2.main.ifid || true)
+    mtu=$(uci -q get mango_ikev2.main.xfrm_mtu || true)
     ifid=${ifid:-42}
     mtu=${mtu:-1280}
-    tunlink=$(uci -q get network.wan.device)
-    [ -n "$tunlink" ] || tunlink=$(uci -q get network.wan.ifname)
+    tunlink=$(uci -q get network.wan.device || true)
+    [ -n "$tunlink" ] || tunlink=$(uci -q get network.wan.ifname || true)
     [ -n "$tunlink" ] || tunlink=eth0
     if ip link show "$XFRM_IF" >/dev/null 2>&1; then
         # Keep any VIP. Callers flush only after the old SA is gone.
@@ -187,9 +187,10 @@ mango_ikev2_ensure_xfrm() {
 
 # EIP196 crypto_safexcel IRQ oopses during ESP on TR3600; keep software crypto.
 mango_ikev2_prefer_soft_crypto() {
-    mkdir -p /etc/modprobe.d
+    # Best effort. A missing modprobe.d must not abort the tunnel start.
+    mkdir -p /etc/modprobe.d 2>/dev/null || return 0
     if [ ! -f /etc/modprobe.d/blacklist-crypto-safexcel.conf ]; then
-        printf '%s\n' 'blacklist crypto_safexcel' > /etc/modprobe.d/blacklist-crypto-safexcel.conf
+        printf '%s\n' 'blacklist crypto_safexcel' > /etc/modprobe.d/blacklist-crypto-safexcel.conf 2>/dev/null || return 0
     fi
     if [ -f /etc/modules.d/90-crypto-hw-safexcel ]; then
         mv /etc/modules.d/90-crypto-hw-safexcel /etc/modules.d/90-crypto-hw-safexcel.disabled 2>/dev/null || :
@@ -211,7 +212,7 @@ mango_ikev2_claim_charon() {
 mango_ikev2_wait_vici() {
     local i=0
     while [ "$i" -lt 30 ]; do
-        if [ -S /var/run/charon.vici ] && pidof charon >/dev/null 2>&1; then
+        if [ -S "${MANGO_IKEV2_VICI:-/var/run/charon.vici}" ] && pidof charon >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
@@ -298,15 +299,18 @@ mango_ikev2_flush_vip_if_clear() {
 mango_ikev2_apply() {
     local enabled mode staged rc same
     mango_ikev2_lifecycle_enter || return 1
-    mkdir -p "$CONF_DIR" "$IKE_ETC" /etc/swanctl/conf.d
+    mkdir -p "$CONF_DIR" "$IKE_ETC" "${MANGO_IKEV2_SWANCTL_DIR:-/etc/swanctl/conf.d}"
     mango_ikev2_prefer_soft_crypto
     mango_ikev2_claim_charon
     # Re-check under the lock. A stop that ran first must not be dialed over.
     enabled=$(uci -q get mango_ikev2.main.enabled || true)
     mode=$(uci -q get mango_ikev2.main.mode || true)
+    # echo goes to LuCI fs.exec stderr and is dropped. logread needs this.
+    command -v logger >/dev/null 2>&1 && \
+        logger -t mango_ikev2 "apply enabled=${enabled:-unset} mode=${mode:-unset}" || true
     if [ "$enabled" != 1 ]; then
         mango_ikev2_teardown
-        /usr/libexec/mango-ikev2-fw || :
+        "${MANGO_IKEV2_FW:-/usr/libexec/mango-ikev2-fw}" || :
         return 0
     fi
     # Any enabled IKEv2 mode owns WAN egress; stop SSR Plus+ client.
@@ -318,7 +322,7 @@ mango_ikev2_apply() {
         swanctl --terminate --ike mango3 --timeout 3 2>/dev/null || :
         ip link del "$XFRM_IF" 2>/dev/null || :
         mango_ikev2_dns_off || return 1
-        /usr/libexec/mango-ikev2-fw || return 1
+        "${MANGO_IKEV2_FW:-/usr/libexec/mango-ikev2-fw}" || return 1
         return 0
     fi
     if [ ! -s "$IKE_ETC/cn-cidrs.txt" ] && [ "$mode" = split ]; then
@@ -347,9 +351,9 @@ mango_ikev2_apply() {
     if [ "$same" = 1 ] && mango_ikev2_sa_present; then
         # Reload with the same swanctl text keeps the live VIP.
         mango_ikev2_ensure_xfrm || return 1
-        /usr/libexec/mango-ikev2-fw || return 1
+        "${MANGO_IKEV2_FW:-/usr/libexec/mango-ikev2-fw}" || return 1
         mango_ikev2_dns_on || return 1
-        /usr/libexec/mango-ikev2-failover || true
+        "${MANGO_IKEV2_FAILOVER:-/usr/libexec/mango-ikev2-failover}" || true
         mango_ikev2_watch_start
         return 0
     fi
@@ -376,12 +380,12 @@ mango_ikev2_apply() {
     mango_ikev2_load_all || return 1
     mango_ikev2_ensure_xfrm || return 1
     # Install the nft set before dnsmasq starts adding GFW answers into it.
-    /usr/libexec/mango-ikev2-fw || return 1
+    "${MANGO_IKEV2_FW:-/usr/libexec/mango-ikev2-fw}" || return 1
     mango_ikev2_dns_on || return 1
     echo mango > "$CONF_DIR/active"
     echo 0 > "$CONF_DIR/fail-count"
     echo 0 > "$CONF_DIR/fallback-fail"
     mango_ikev2_flush_vip_if_clear || return 1
-    /usr/libexec/mango-ikev2-failover || true
+    "${MANGO_IKEV2_FAILOVER:-/usr/libexec/mango-ikev2-failover}" || true
     mango_ikev2_watch_start
 }

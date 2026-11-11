@@ -44,4 +44,6 @@ uci -q get mango_ikev2.main >/dev/null 2>&1 && {
 
 # Service enabled so Save & Apply works; UCI enabled defaults to 0 (no tunnel).
 /etc/init.d/mango_ikev2 enable
+# Keep the config.change hook running even after IKEv2 itself is stopped.
+/etc/init.d/mango-ikev2-track enable
 exit 0

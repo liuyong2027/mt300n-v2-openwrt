@@ -204,13 +204,38 @@ return view.extend({
 		]);
 	},
 
-	handleSaveApply: function(ev, mode) {
-		// This LuCI build does not reload mango_ikev2 from ucitrack.
-		// Commit first, then reload so the saved mode actually takes effect.
-		return this.handleSave(ev).then(function() {
-			return ui.changes.apply(mode == '0');
+	handleSaveApply: function(ev) {
+		var self = this;
+		// The LuCI changes-apply dialog does not return a Promise, so a
+		// reload chained after it runs before ubus commits. A fallback
+		// leaves enabled=0; that early reload then takes the teardown path
+		// and never claims SSR. Commit first. With no UCI diff, still
+		// reload so an already-enabled but down tunnel is started.
+		return Promise.resolve(self.handleSave ? self.handleSave(ev) : null).then(function() {
+			return uci.changes();
+		}).then(function(changes) {
+			var pending = false;
+			var configs = changes || {};
+			Object.keys(configs).forEach(function(name) {
+				if (Array.isArray(configs[name]) && configs[name].length)
+					pending = true;
+			});
+			if (!pending)
+				return null;
+			return uci.callApply(10, true).then(function() {
+				return uci.callConfirm();
+			});
 		}).then(function() {
 			return fs.exec('/etc/init.d/mango_ikev2', ['reload']);
+		}).then(function(result) {
+			if (result && result.code !== 0) {
+				ui.addNotification(null, E('p', {}, 'IKEv2 应用未完成，请查看系统日志'), 'error');
+				return;
+			}
+			if (typeof window !== 'undefined' && window.location)
+				window.location = window.location.href.split('#')[0];
+		}).catch(function(err) {
+			ui.addNotification(null, E('p', {}, 'IKEv2 应用失败：' + (err && err.message ? err.message : err)), 'error');
 		});
 	},
 
