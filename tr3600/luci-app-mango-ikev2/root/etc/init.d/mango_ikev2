@@ -6,7 +6,7 @@
 START=95
 STOP=10
 
-CONF_DIR=/var/etc/mango-ikev2
+CONF_DIR=${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}
 XFRM_IF=xfrm-mango
 IKE_ETC=${MANGO_IKEV2_ETC:-/etc/mango-ikev2}
 DNSMASQ_INIT=${MANGO_IKEV2_DNSMASQ_INIT:-/etc/init.d/dnsmasq}
@@ -133,16 +133,21 @@ mango_ikev2_dns_off() {
 }
 
 mango_ikev2_watch_stop() {
-    if [ -f /var/run/mango-ikev2-watch.pid ]; then
-        kill "$(cat /var/run/mango-ikev2-watch.pid)" 2>/dev/null || :
-        rm -f /var/run/mango-ikev2-watch.pid
+    local pidfile
+    pidfile=${MANGO_IKEV2_WATCH_PID:-/var/run/mango-ikev2-watch.pid}
+    if [ -f "$pidfile" ]; then
+        kill "$(cat "$pidfile")" 2>/dev/null || :
+        rm -f "$pidfile"
     fi
 }
 
 mango_ikev2_watch_start() {
+    local watch pidfile
+    watch=${MANGO_IKEV2_WATCH:-/usr/libexec/mango-ikev2-watch}
+    pidfile=${MANGO_IKEV2_WATCH_PID:-/var/run/mango-ikev2-watch.pid}
     mango_ikev2_watch_stop
-    /usr/libexec/mango-ikev2-watch >/dev/null 2>&1 &
-    echo $! > /var/run/mango-ikev2-watch.pid
+    "$watch" >/dev/null 2>&1 &
+    echo $! > "$pidfile"
 }
 
 mango_ikev2_teardown() {
@@ -305,7 +310,7 @@ mango_ikev2_apply() {
         return 0
     fi
     # Any enabled IKEv2 mode owns WAN egress; stop SSR Plus+ client.
-    /usr/libexec/mango-ikev2-peer-engine claim || :
+    "${MANGO_IKEV2_PEER_ENGINE:-/usr/libexec/mango-ikev2-peer-engine}" claim || :
     if [ "$mode" = direct ]; then
         mango_ikev2_watch_stop
         swanctl --terminate --ike mango --timeout 3 2>/dev/null || :
@@ -316,13 +321,13 @@ mango_ikev2_apply() {
         /usr/libexec/mango-ikev2-fw || return 1
         return 0
     fi
-    if [ ! -s /etc/mango-ikev2/cn-cidrs.txt ] && [ "$mode" = split ]; then
+    if [ ! -s "$IKE_ETC/cn-cidrs.txt" ] && [ "$mode" = split ]; then
         /usr/libexec/mango-ikev2-cn-update || {
             echo 'split 模式需要中国 IP 列表，请先更新' >&2
             return 1
         }
     fi
-    if [ "$mode" = gfw ] && [ ! -s /etc/mango-ikev2/gfw-domains.txt ]; then
+    if [ "$mode" = gfw ] && [ ! -s "$IKE_ETC/gfw-domains.txt" ]; then
         /usr/libexec/mango-ikev2-gfw-update || {
             echo 'gfw 模式需要域名列表，请先更新' >&2
             return 1
@@ -331,6 +336,10 @@ mango_ikev2_apply() {
     staged=$(mango_ikev2_stage_swanctl) || rc=$?
     rc=${rc:-0}
     if [ "$rc" = 1 ]; then
+        # WAN may not be ready at boot. Keep the watchdog so a later tick
+        # can generate again. Do not install a config or claim connected.
+        echo 'swanctl generate failed; watchdog will retry' >&2
+        mango_ikev2_watch_start
         return 1
     fi
     same=0

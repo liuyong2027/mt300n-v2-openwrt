@@ -135,12 +135,17 @@ fi
 
 cat > "$tmp/network.sh" << 'EOF'
 #!/bin/sh
-network_flush_cache() { :; }
+# Match OpenWrt: flush unsets the cache, then the getter tests it.
+# Under nounset that test aborts unless the caller disabled nounset.
+network_flush_cache() { unset __NETWORK_CACHE; }
+__network_ifstatus() { [ -z "$__NETWORK_CACHE" ] && __NETWORK_CACHE="cached"; }
 network_get_device() {
+	__network_ifstatus
 	[ -n "${MOCK_WAN_DEV:-}" ] || return 1
 	eval "$1=\$MOCK_WAN_DEV"
 }
 network_get_ipaddr() {
+	__network_ifstatus
 	[ -n "${MOCK_WAN_IP:-}" ] || return 1
 	eval "$1=\$MOCK_WAN_IP"
 }
@@ -178,5 +183,49 @@ grep -q 'unavailable' "$tmp/wan.err"
 
 grep -q 'mango-ikev2-wan-addr' "$root/tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-generate"
 grep -q 'os.exit(1)' "$root/tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-generate"
+grep -q 'set +u' "$wan"
+
+# Generate failure must still start the watchdog, and must not install a config.
+cat > "$tmp/bin/generate" << 'EOF'
+#!/bin/sh
+echo 'generate failed' >&2
+exit 1
+EOF
+cat > "$tmp/bin/peer" << 'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat > "$tmp/bin/watch" << 'EOF'
+#!/bin/sh
+printf '%s\n' started >> "${WATCH_LOG:?}"
+sleep 60
+EOF
+chmod 755 "$tmp/bin/generate" "$tmp/bin/peer" "$tmp/bin/watch"
+mkdir -p "$tmp/state" "$tmp/swanctl" "$tmp/etc"
+printf '%s\n' 'cidrs' > "$tmp/etc/cn-cidrs.txt"
+printf '%s\n' 1 > "$UCI_DIR/values/mango_ikev2.main.enabled"
+printf '%s\n' split > "$UCI_DIR/values/mango_ikev2.main.mode"
+CONF_DIR=$tmp/state
+WATCH_LOG=$tmp/watch.log
+export WATCH_LOG \
+	MANGO_IKEV2_GENERATE=$tmp/bin/generate \
+	MANGO_IKEV2_PEER_ENGINE=$tmp/bin/peer \
+	MANGO_IKEV2_WATCH=$tmp/bin/watch \
+	MANGO_IKEV2_WATCH_PID=$tmp/watch.pid \
+	MANGO_IKEV2_LOCK=$tmp/apply.lock \
+	MANGO_IKEV2_SWANCTL_DIR=$tmp/swanctl \
+	MANGO_IKEV2_LOCK_WAIT=5
+unset MANGO_IKEV2_LOCK_HELD || true
+set +e
+mango_ikev2_apply >"$tmp/apply.out" 2>"$tmp/apply.err"
+rc=$?
+set -e
+test "$rc" = 1
+grep -q 'swanctl generate failed; watchdog will retry' "$tmp/apply.err"
+test "$(cat "$WATCH_LOG")" = started
+test -s "$tmp/watch.pid"
+test ! -f "$tmp/state/swanctl.conf"
+kill "$(cat "$tmp/watch.pid")" 2>/dev/null || true
+wait "$(cat "$tmp/watch.pid")" 2>/dev/null || true
 
 echo "lifecycle lock nests; DNS off keeps foreign settings; WAN address is not the VIP"

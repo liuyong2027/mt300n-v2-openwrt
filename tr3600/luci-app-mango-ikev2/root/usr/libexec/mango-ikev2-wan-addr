@@ -1,7 +1,11 @@
 #!/bin/sh
 # Print the runtime WAN IPv4 for IKE local_addrs. Fail closed.
 # Never select an address that is also the xfrm-mango VIP.
-set -eu
+set -e
+# OpenWrt network.sh flushes its cache with `unset __NETWORK_CACHE` and then
+# tests [ -z "$__NETWORK_CACHE" ]. nounset aborts that test, so keep it off
+# around these helpers.
+set +u
 net_sh=${MANGO_IKEV2_NETWORK_SH:-/lib/functions/network.sh}
 # shellcheck disable=SC1090
 . "$net_sh"
@@ -16,6 +20,7 @@ network_get_ipaddr addr wan || {
 	echo 'WAN IPv4 unavailable' >&2
 	exit 1
 }
+set -u
 case "$addr" in
 	''|*[!0-9.]*)
 		echo 'WAN IPv4 unavailable' >&2
