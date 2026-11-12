@@ -1,0 +1,21 @@
+#!/bin/sh /etc/rc.common
+# LuCI's generic Apply emits a ubus config.change for mango_ikev2.
+# This image has no /etc/config/ucitrack and no /sbin/luci-reload, so the
+# ucitrack init may be absent and that event would not start IKEv2.
+# Register the reload here and leave this helper enabled after fallback
+# stops mango_ikev2 itself. Do not mark mango_ikev2 USE_PROCD: the stock
+# ucitrack hook only attaches to non-procd inits.
+START=19
+USE_PROCD=1
+
+start_service() {
+	return 0
+}
+
+service_triggers() {
+	if [ -x /etc/init.d/ucitrack ]; then
+		return 0
+	fi
+	procd_add_config_trigger "config.change" "mango_ikev2" \
+		/etc/init.d/mango_ikev2 reload
+}

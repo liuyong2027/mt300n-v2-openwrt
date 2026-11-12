@@ -65,9 +65,9 @@ net.ipv4.tcp_congestion_control = bbr
         release=(self.tree/'files/etc/cudy-release').read_text().strip()
         self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.0')
         source=json.loads((self.tree/'reports/ssrplus-source.json').read_text())
-        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok']
+        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog']
         self.assertEqual(source['firmware_version'],'1.3.0')
-        self.assertEqual(source['candidate_revision'],2)
+        self.assertEqual(source['candidate_revision'],3)
         self.assertEqual(source['integrated_field_fixes'],field_fixes)
         self.assertEqual(source['openwrt_release'],'25.12.6')
         self.assertIn('patch-probe-mobile.py',prepare)
@@ -461,7 +461,11 @@ class OverlayPatchTests(unittest.TestCase):
         self.assertIn('$(GO_BIN_PATH) python3',self.makefile.read_text())
         self.assertIn('--go go --out',self.makefile.read_text())
         self.assertNotIn('$(STAGING_DIR_HOSTPKG)/bin/go',self.makefile.read_text())
-        self.assertIn('/usr/libexec/cudy-ss-gate started',self.init.read_text())
+        patched=self.init.read_text()
+        self.assertIn('/usr/libexec/cudy-ss-gate started',patched)
+        start=patched.index('\nstart() {')
+        body=patched[start:]
+        self.assertLess(body.index('mango-ikev2-peer-engine yield'), body.index('start_without_cudy_gate'))
 
     def test_changed_or_duplicate_overlay_command_is_rejected(self):
         for command in ('',self.command+self.command):

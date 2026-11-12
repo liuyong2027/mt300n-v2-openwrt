@@ -1,11 +1,25 @@
 #!/bin/sh
 # One dial attempt for the active IKEv2 server.
 # After two failed attempts, switch to the next configured server.
-# Also recovers "IKE up / ESP dead" by clearing VIP leftovers and redialing.
-# After enough consecutive dial failures, optionally fall back to SSR Plus+.
+# A CHILD_SA rekey keeps the previous child for a few seconds. Any INSTALLED
+# child is healthy; REKEYING/REKEYED/DELETING skips the tick. The tunnel VIP
+# is flushed only when no IKE SA exists.
+# INTERNAL_ADDRESS_FAILURE switches to the next server immediately and does
+# not count toward the SSR fallback threshold. After every configured server
+# has returned that notify in the current round, back off and retry the primary.
+# After a terminate, wait until the SA list is empty, then a bit longer, so
+# NordVPN can release the old address lease before the next dial.
 set -eu
 STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
 XFRM_IF=xfrm-mango
+MANGO_IKEV2_LIFECYCLE=${MANGO_IKEV2_LIFECYCLE:-/usr/lib/mango-ikev2/lifecycle.sh}
+# shellcheck disable=SC1090
+. "$MANGO_IKEV2_LIFECYCLE"
+# Same lock as apply/stop. A nested stop (SSR fallback) sees LOCK_HELD.
+if ! mango_ikev2_lifecycle_enter; then
+	exit 0
+fi
+# Re-read after the lock so a stop/reload that ran first is not ignored.
 enabled=$(uci -q get mango_ikev2.main.enabled || true)
 mode=$(uci -q get mango_ikev2.main.mode || true)
 [ "$enabled" = 1 ] || exit 0
@@ -13,7 +27,6 @@ mode=$(uci -q get mango_ikev2.main.mode || true)
 
 server2=$(uci -q get mango_ikev2.main.server2 || true)
 server3=$(uci -q get mango_ikev2.main.server3 || true)
-mkdir -p "$STATE"
 active=$(cat "$STATE/active" 2>/dev/null || echo mango)
 case "$active" in
 	mango|mango2|mango3) ;;
@@ -48,7 +61,8 @@ next_peer() {
 }
 
 log_event() {
-	/usr/libexec/mango-ikev2-log "$@" 2>/dev/null || true
+	local logger=${MANGO_IKEV2_LOG:-/usr/libexec/mango-ikev2-log}
+	"$logger" "$@" 2>/dev/null || true
 }
 
 clear_fallback_fail() {
@@ -81,73 +95,208 @@ terminate_all() {
 	swanctl --terminate --ike mango3 --timeout 3 >/dev/null 2>&1 || true
 }
 
-# Drop tunnel VIP before IKE dial so charon cannot source from 10.x.
+# Whole listing for one peer. --ike limits the query; the awk cut still
+# drops a following peer if an older swanctl returns the full dump.
+peer_block() {
+	local peer="$1" raw
+	raw=$(swanctl --list-sas --ike "$peer" 2>/dev/null || true)
+	printf '%s\n' "$raw" | awk -v p="$peer" '
+		index($0, p ": ") == 1 { show = 1 }
+		show {
+			if (NR > 1 && $0 ~ /^[a-zA-Z][a-zA-Z0-9_]*: / && index($0, p ": ") != 1) exit
+			print
+		}
+	'
+}
+
+# Any IKE SA still owns the NordVPN lease and the xfrm address. Child-only
+# lines are indented, so they do not count once the IKE SA is gone.
+any_ike_sa() {
+	local raw
+	raw=$(swanctl --list-sas 2>/dev/null || true)
+	printf '%s\n' "$raw" | grep -E -q '^[A-Za-z][A-Za-z0-9_]*: .*(ESTABLISHED|CONNECTING|REKEYING),'
+}
+
+# Drop the tunnel VIP only when no IKE SA exists. A flush while the SA is
+# up removes the address charon still routes, and the next probe looks dead.
 clear_vip() {
+	if any_ike_sa; then
+		return 0
+	fi
 	if ip link show "$XFRM_IF" >/dev/null 2>&1; then
 		ip -4 addr flush dev "$XFRM_IF" 2>/dev/null || true
 	fi
 }
 
 refresh_wan_bind() {
-	mkdir -p "$STATE" /etc/swanctl/conf.d
-	/usr/libexec/mango-ikev2-generate swanctl > "$STATE/swanctl.conf" || return 1
-	ln -sf "$STATE/swanctl.conf" /etc/swanctl/conf.d/mango.conf
+	local dir gen tmp
+	dir=${MANGO_IKEV2_SWANCTL_DIR:-/etc/swanctl/conf.d}
+	gen=${MANGO_IKEV2_GENERATE:-/usr/libexec/mango-ikev2-generate}
+	mkdir -p "$STATE" "$dir" || return 1
+	tmp=$(mktemp "$STATE/swanctl.XXXXXX") || return 1
+	if ! "$gen" swanctl > "$tmp" || [ ! -s "$tmp" ]; then
+		rm -f "$tmp"
+		return 1
+	fi
+	mv "$tmp" "$STATE/swanctl.conf" || return 1
+	ln -sfn "$STATE/swanctl.conf" "$dir/mango.conf" || return 1
 	swanctl --load-conns --noprompt >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1 || return 1
+}
+
+# Boot can start the watchdog before WAN exists, so apply never created the
+# xfrm device or the fw4 rules. A later generate must build that datapath
+# before the dial; a failed generate must not.
+ensure_xfrm() {
+	local ifid mtu tunlink
+	ifid=$(uci -q get mango_ikev2.main.ifid || true)
+	mtu=$(uci -q get mango_ikev2.main.xfrm_mtu || true)
+	ifid=${ifid:-42}
+	mtu=${mtu:-1280}
+	tunlink=$(uci -q get network.wan.device || true)
+	[ -n "$tunlink" ] || tunlink=$(uci -q get network.wan.ifname || true)
+	[ -n "$tunlink" ] || tunlink=eth0
+	if ip link show "$XFRM_IF" >/dev/null 2>&1; then
+		ip link set "$XFRM_IF" mtu "$mtu" up || return 1
+		return 0
+	fi
+	ip link add "$XFRM_IF" type xfrm dev "$tunlink" if_id "$ifid" || return 1
+	ip link set "$XFRM_IF" mtu "$mtu" up || return 1
+}
+
+install_fw() {
+	local fw
+	fw=${MANGO_IKEV2_FW:-/usr/libexec/mango-ikev2-fw}
+	"$fw"
+}
+
+# Boot apply returns before dns_on when WAN is not ready, and shutdown
+# removes the snippet. Install it once when the tunnel comes up. A later
+# healthy tick must not restart dnsmasq if the snippet is already in place.
+client_dns_ready() {
+	local etc sec
+	etc=${MANGO_IKEV2_ETC:-/etc/mango-ikev2}
+	[ -s "$etc/dnsmasq.d/ikev2.conf" ] || return 1
+	sec=$(uci show dhcp 2>/dev/null | sed -n 's/^dhcp\.\([^=]*\)=dnsmasq$/\1/p' | head -n 1)
+	[ -n "$sec" ] || return 1
+	[ "$(uci -q get "dhcp.${sec}.noresolv" || true)" = 1 ] || return 1
+	[ "$(uci -q get "dhcp.${sec}.filter_aaaa" || true)" = 1 ] || return 1
+	uci -q get "dhcp.${sec}.confdir" 2>/dev/null | tr ' ' '\n' | grep -qx "$etc/dnsmasq.d"
+}
+
+ensure_client_dns() {
+	client_dns_ready && return 0
+	IKE_ETC=${MANGO_IKEV2_ETC:-/etc/mango-ikev2}
+	DNSMASQ_INIT=${MANGO_IKEV2_DNSMASQ_INIT:-/etc/init.d/dnsmasq}
+	# shellcheck disable=SC1090
+	. "$(dirname "$MANGO_IKEV2_LIFECYCLE")/dns.sh"
+	mango_ikev2_dns_on
 }
 
 prepare_dial() {
 	clear_vip
-	refresh_wan_bind || true
+	refresh_wan_bind || return 1
+	ensure_xfrm || return 1
+	install_fw || return 1
 }
 
-read_sas() {
-	swanctl --list-sas 2>/dev/null || true
+# healthy: an INSTALLED child is up (even if another child is still REKEYED).
+# skip: IKE is up and a child is REKEYING, REKEYED, DELETING, or otherwise
+#       mid-transition, with no INSTALLED child yet. Do nothing this tick.
+# child: IKE is ESTABLISHED and no child is installed or in transition.
+# down: no usable IKE SA.
+sa_health() {
+	local peer="$1" block
+	block=$(peer_block "$peer")
+	if ! printf '%s\n' "$block" | grep -E -q "^${peer}: .*ESTABLISHED"; then
+		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*(CONNECTING|REKEYING),"; then
+			printf '%s\n' skip
+			return 0
+		fi
+		printf '%s\n' down
+		return 0
+	fi
+	if printf '%s\n' "$block" | grep -E -q '(^|[[:space:],])INSTALLED(,|[[:space:]]|$)'; then
+		printf '%s\n' healthy
+		return 0
+	fi
+	if printf '%s\n' "$block" | grep -E -q '(^|[[:space:],])(REKEYING|REKEYED|DELETING|INSTALLING|UPDATING|DESTROYING)(,|[[:space:]]|$)'; then
+		printf '%s\n' skip
+		return 0
+	fi
+	printf '%s\n' child
+	return 0
 }
 
-sas=$(read_sas)
-established() {
-	printf '%s\n' "$sas" | grep -A8 "^$1: .*ESTABLISHED" | grep -q INSTALLED
+state_num() {
+	local raw="$1" fallback="$2"
+	case "$raw" in
+		''|*[!0-9]*) raw=$fallback ;;
+	esac
+	printf '%s' "$raw"
+}
+
+# Poll until list-sas has no IKE SA, then wait so the peer can drop the lease.
+wait_sas_gone() {
+	local i=0 max=20 pause extra
+	pause=$(state_num "${MANGO_IKEV2_SA_POLL:-1}" 1)
+	extra=$(state_num "${MANGO_IKEV2_POST_TERM_WAIT:-15}" 15)
+	while [ "$i" -lt "$max" ]; do
+		if ! any_ike_sa; then
+			break
+		fi
+		i=$((i + 1))
+		[ "$pause" -gt 0 ] && sleep "$pause" || true
+	done
+	if [ "$extra" -gt 0 ]; then
+		sleep "$extra"
+	fi
 }
 
 # strongSwan installs the NordVPN address on the WAN interface. Masquerade
 # onto xfrm-mango needs that address on the tunnel device itself.
 pin_vip() {
 	local vip="$1"
-	[ -n "$vip" ] || return 0
-	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	[ -n "$vip" ] || return 1
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
 	ip -4 addr show dev "$XFRM_IF" 2>/dev/null | grep -q "$vip" && return 0
-	ip addr replace "$vip/32" dev "$XFRM_IF" || true
+	ip addr replace "$vip/32" dev "$XFRM_IF"
+}
+
+# Keep the new VIP. Remove only different addresses. Never flush here.
+sync_vip() {
+	local vip="$1" addr
+	[ -n "$vip" ] || return 1
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
+	for addr in $(ip -4 addr show dev "$XFRM_IF" 2>/dev/null | sed -n 's/.*inet \([0-9.][0-9.]*\)\/[0-9][0-9]*.*/\1/p'); do
+		[ "$addr" = "$vip" ] && continue
+		ip -4 addr del "$addr/32" dev "$XFRM_IF" 2>/dev/null || \
+			ip -4 addr del "$addr" dev "$XFRM_IF" 2>/dev/null || true
+	done
+	pin_vip "$vip"
 }
 
 # Split egress uses mark→table 101→xfrm; dnsmasq uses main table so GFW DNS
 # needs /32s on xfrm. Teardown/redial/link flaps drop these — reinstall while up.
 ensure_dns_routes() {
-	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 0
+	ip link show "$XFRM_IF" >/dev/null 2>&1 || return 1
 	ip -4 route replace default dev "$XFRM_IF" table 101 2>/dev/null || \
-		ip -4 route replace default via 0.0.0.0 dev "$XFRM_IF" table 101 2>/dev/null || true
+		ip -4 route replace default via 0.0.0.0 dev "$XFRM_IF" table 101 2>/dev/null || return 1
 	ip -4 rule show | grep -q '10001:.*fwmark 0x101.*lookup 101' || \
-		ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || true
-	ip -4 route replace 1.1.1.1/32 dev "$XFRM_IF" 2>/dev/null || true
-	ip -4 route replace 8.8.8.8/32 dev "$XFRM_IF" 2>/dev/null || true
+		ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || return 1
+	ip -4 route replace 1.1.1.1/32 dev "$XFRM_IF" 2>/dev/null || return 1
+	ip -4 route replace 8.8.8.8/32 dev "$XFRM_IF" 2>/dev/null || return 1
 }
 
-# VIP for one peer only: prefer INSTALLED child local x/32, else IKE [vip].
-# Never take the first VIP from a multi-peer swanctl dump.
+# Prefer the IKE-level [VIP]. It stays put across a child rekey. A bracketed
+# UDP port (no dot) is not a VIP. Fall back to the child local /32.
 peer_vip() {
 	local peer="$1" block vip
-	block=$(printf '%s\n' "$sas" | awk -v p="$peer" '
-		index($0, p ": ") == 1 { show = 1 }
-		show {
-			if (NR > 1 && $0 ~ /^[a-zA-Z][a-zA-Z0-9_]*: / && index($0, p ": ") != 1) exit
-			print
-		}
-	')
-	vip=$(printf '%s\n' "$block" | sed -n 's/^    local  \([0-9][0-9.]*\)\/32$/\1/p' | head -n 1)
-	[ -n "$vip" ] || vip=$(printf '%s\n' "$block" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	block=$(peer_block "$peer")
+	vip=$(printf '%s\n' "$block" | sed -n 's/^[[:space:]]*local .*\[\([0-9]\{1,3\}\.[0-9.]*\)\].*/\1/p' | head -n 1)
+	[ -n "$vip" ] || vip=$(printf '%s\n' "$block" | sed -n 's/^[[:space:]]*local  \([0-9][0-9.]*\)\/32$/\1/p' | head -n 1)
 	printf '%s' "$vip"
 }
 
-# IKE/DPD can stay up while ESP is dead; require a real tunnel probe.
 # ICMP alone is lossy on some VPN paths, so HTTP 2xx also counts as healthy.
 http_probe() {
 	local url="$1" code
@@ -191,57 +340,345 @@ bump_datapath_fail() {
 	printf "%s" "$n"
 }
 
-# Only record "connected" after CHILD_SA + correct VIP pin + datapath probe.
+capture_charon() {
+	if [ -n "${MANGO_IKEV2_CHARON_LOG:-}" ]; then
+		[ -f "$MANGO_IKEV2_CHARON_LOG" ] && cat "$MANGO_IKEV2_CHARON_LOG"
+		return 0
+	fi
+	if command -v logread >/dev/null 2>&1; then
+		logread -e charon 2>/dev/null | tail -n 80 || true
+	fi
+	if [ -r /var/log/charon.log ]; then
+		tail -n 80 /var/log/charon.log || true
+	fi
+	return 0
+}
+
+# Drop EAP identities, secrets, and ESP key dumps. Keep the notify text.
+# mawk has no IGNORECASE and treats "?" as a literal, so match on tolower().
+sanitize_charon() {
+	awk '
+		function hexdump(s,    i, c, hex, sp) {
+			if (s ~ /[^0-9A-Fa-f[:space:]]/) return 0
+			hex = 0
+			sp = 0
+			for (i = 1; i <= length(s); i++) {
+				c = substr(s, i, 1)
+				if (c ~ /[0-9A-Fa-f]/) hex++
+				else sp++
+			}
+			return hex >= 16 && sp >= 4
+		}
+		{
+			line = tolower($0)
+			if (line ~ /eap.identity/) next
+			if (line ~ /eap_id/) next
+			if (line ~ /(^|[^a-z])idi([^a-z]|$)/) next
+			if (line ~ /secret/) next
+			if (line ~ /password/) next
+			if (line ~ /passphrase/) next
+			if (line ~ /mschap/) next
+			if (line ~ /nt-hash/) next
+			if (line ~ /sk_ei/ || line ~ /sk_er/ || line ~ /sk_ai/ || line ~ /sk_ar/ || line ~ /sk_pi/ || line ~ /sk_pr/ || line ~ /sk_d/) next
+			if (line ~ /encryption key/) next
+			if (line ~ /integrity key/) next
+			if (line ~ /(^|[^a-z])key( =>|:)/) next
+			if (hexdump($0)) next
+			print
+		}
+	'
+}
+
+save_charon_snip() {
+	local dest tmp
+	dest=${MANGO_IKEV2_SNIP:-/var/log/mango-ikev2-charon-snip.log}
+	mkdir -p "$(dirname "$dest")" 2>/dev/null || return 0
+	tmp=${dest}.tmp
+	capture_charon | sanitize_charon | tail -n 40 > "$tmp" 2>/dev/null || return 0
+	mv "$tmp" "$dest" 2>/dev/null || return 0
+	return 0
+}
+
+int_addr_count() {
+	local n
+	n=$(capture_charon | grep -c INTERNAL_ADDRESS_FAILURE || true)
+	case "$n" in
+		''|*[!0-9]*) n=0 ;;
+	esac
+	printf '%s\n' "$n"
+}
+
+backoff_active() {
+	local until now
+	until=$(cat "$STATE/int-addr-until" 2>/dev/null || true)
+	case "$until" in
+		''|*[!0-9]*) return 1 ;;
+	esac
+	now=$(date +%s)
+	[ "$now" -lt "$until" ]
+}
+
+clear_int_addr_round() {
+	rm -f "$STATE/int-addr-round" "$STATE/int-addr-until"
+}
+
+iaf_mark() {
+	local peer="$1" cur
+	cur=$(cat "$STATE/int-addr-round" 2>/dev/null || true)
+	case " $cur " in
+		*" $peer "*) ;;
+		*) printf '%s\n' "$cur $peer" | awk '{$1=$1; print}' > "$STATE/int-addr-round" ;;
+	esac
+}
+
+iaf_seen() {
+	local peer="$1" cur
+	cur=$(cat "$STATE/int-addr-round" 2>/dev/null || true)
+	case " $cur " in
+		*" $peer "*) return 0 ;;
+	esac
+	return 1
+}
+
+iaf_round_complete() {
+	local p
+	for p in $PEERS; do
+		iaf_seen "$p" || return 1
+	done
+	return 0
+}
+
+# Switch immediately. Do not bump the SSR fallback counter. When every
+# configured peer has failed this way in the current round, back off and
+# retry the primary on a later tick. A live IKE SA is terminated and drained
+# before the next dial.
+handle_int_addr() {
+	local peer="$1" next from backoff now
+	iaf_mark "$peer"
+	log_event fail "$peer" "INTERNAL_ADDRESS_FAILURE"
+	save_charon_snip
+	if iaf_round_complete; then
+		# An IKE with no VIP cannot be repaired by another CHILD initiate.
+		if any_ike_sa; then
+			vip=$(peer_vip "$peer")
+			if [ -z "$vip" ]; then
+				terminate_all
+				wait_sas_gone
+			fi
+		fi
+		backoff=$(state_num "${MANGO_IKEV2_INT_ADDR_BACKOFF:-45}" 45)
+		now=$(date +%s)
+		echo $((now + backoff)) > "$STATE/int-addr-until"
+		rm -f "$STATE/int-addr-round"
+		active=${PEERS%% *}
+		echo "$active" > "$STATE/active"
+		log_event fail "$active" "INTERNAL_ADDRESS_FAILURE; all peers; backoff ${backoff}s"
+		exit 0
+	fi
+	from=$peer
+	next=$(next_peer "$peer")
+	active=$next
+	echo "$active" > "$STATE/active"
+	log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+	if any_ike_sa; then
+		terminate_all
+		wait_sas_gone
+		if any_ike_sa; then
+			log_event fail "$active" "SA still present after terminate; skip redial"
+			save_charon_snip
+			exit 0
+		fi
+	fi
+	if dial_full_and_mark "$active" "切换后连通"; then
+		exit 0
+	fi
+	finish_redial_failure "$active"
+}
+
+# 0 connected, 1 failed, 2 INTERNAL_ADDRESS_FAILURE (caller must not count it).
+initiate() {
+	local peer="$1" kind="$2" out rc before after
+	before=$(int_addr_count)
+	rc=0
+	if [ "$kind" = child ]; then
+		out=$(swanctl --initiate --child "$peer" --timeout 15 2>&1) || rc=$?
+	else
+		out=$(swanctl --initiate --ike "$peer" --child "$peer" --timeout 15 2>&1) || rc=$?
+	fi
+	if printf '%s\n' "$out" | grep -q INTERNAL_ADDRESS_FAILURE; then
+		return 2
+	fi
+	after=$(int_addr_count)
+	if [ "$rc" -ne 0 ] && [ "${after:-0}" -gt "${before:-0}" ]; then
+		return 2
+	fi
+	return "$rc"
+}
+
+# Only record "connected" after CHILD_SA + VIP pin + datapath probe.
+# Foreign addresses are deleted; the current VIP is not flushed.
 mark_up() {
-	local peer="$1" note="$2" vip
-	sas=$(read_sas)
-	if ! established "$peer"; then
-		log_event fail "$peer" "${note}: no CHILD_SA"
+	local peer="$1" note="$2" vip health
+	health=$(sa_health "$peer")
+	case "$health" in
+		healthy) ;;
+		skip) return 0 ;;
+		*)
+			log_event fail "$peer" "${note}: no CHILD_SA"
+			save_charon_snip
+			return 1
+			;;
+	esac
+	vip=$(peer_vip "$peer")
+	if [ -z "$vip" ] || ! sync_vip "$vip" || ! ensure_dns_routes; then
+		log_event fail "$peer" "${note}: vip or policy route failed"
+		save_charon_snip
 		return 1
 	fi
-	vip=$(peer_vip "$peer")
-	clear_vip
-	pin_vip "$vip"
-	ensure_dns_routes
 	if ! datapath_ok; then
 		log_event fail "$peer" "${note}: datapath dead vip=${vip:-?}"
+		save_charon_snip
 		return 1
 	fi
+	# Same snippet apply installs. A miss here is retried on a later tick;
+	# do not count it as a dead tunnel.
+	ensure_client_dns || true
 	echo 0 > "$STATE/fail-count"
 	reset_datapath_fail
 	clear_fallback_fail
+	clear_int_addr_round
 	echo "$peer" > "$STATE/active"
 	echo "$peer" > "$STATE/logged-up"
 	log_event ok "$peer" "${note} vip=${vip:-?}"
 	return 0
 }
 
-dial_peer() {
-	local peer="$1"
-	prepare_dial
-	swanctl --initiate --ike "$peer" --child "$peer" --timeout 15 >/dev/null 2>&1
+dial_child_and_mark() {
+	local peer="$1" note="$2" rc
+	rc=0
+	initiate "$peer" child || rc=$?
+	case "$rc" in
+		0)
+			if mark_up "$peer" "$note"; then
+				return 0
+			fi
+			return 1
+			;;
+		2) handle_int_addr "$peer" ;;
+		*) return 1 ;;
+	esac
 }
 
-if established "$active"; then
+dial_full_and_mark() {
+	local peer="$1" note="$2" rc
+	if ! prepare_dial; then
+		return 1
+	fi
+	rc=0
+	initiate "$peer" full || rc=$?
+	case "$rc" in
+		0)
+			if mark_up "$peer" "$note"; then
+				return 0
+			fi
+			return 1
+			;;
+		2) handle_int_addr "$peer" ;;
+		*) return 1 ;;
+	esac
+}
+
+finish_redial_failure() {
+	local peer="$1" from next rc
+	# A non-IAF failure ends the address-failure round.
+	rm -f "$STATE/int-addr-round"
+	count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
+	case "$count" in
+		''|*[!0-9]*) count=0 ;;
+	esac
+	count=$((count + 1))
+	echo "$count" > "$STATE/fail-count"
+	echo "$peer" > "$STATE/active"
+	log_event fail "$peer" "dial failed (#$count)"
+	save_charon_snip
+	bump_fallback_fail
+
+	peer_count=0
+	for p in $PEERS; do peer_count=$((peer_count + 1)); done
+	if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
+		from=$peer
+		next=$(next_peer "$peer")
+		active=$next
+		echo "$active" > "$STATE/active"
+		log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
+		terminate_all
+		wait_sas_gone
+		if any_ike_sa; then
+			log_event fail "$active" "SA still present after terminate; skip redial"
+			save_charon_snip
+			exit 0
+		fi
+		if ! prepare_dial; then
+			echo 1 > "$STATE/fail-count"
+			log_event fail "$active" "切换后拨号失败"
+			save_charon_snip
+			bump_fallback_fail
+			exit 0
+		fi
+		rc=0
+		initiate "$active" full || rc=$?
+		case "$rc" in
+			0)
+				if ! mark_up "$active" "切换后连通"; then
+					echo 1 > "$STATE/fail-count"
+					bump_fallback_fail
+				fi
+				;;
+			2) handle_int_addr "$active" ;;
+			*)
+				echo 1 > "$STATE/fail-count"
+				log_event fail "$active" "切换后拨号失败"
+				save_charon_snip
+				bump_fallback_fail
+				;;
+		esac
+	fi
+	exit 0
+}
+
+health=$(sa_health "$active")
+case "$health" in
+healthy)
 	for p in $PEERS; do
 		[ "$p" = "$active" ] && continue
-		if established "$p"; then
-			swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
-		fi
+		case "$(sa_health "$p")" in
+			healthy|skip|child)
+				swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
+				;;
+		esac
 	done
-	sas=$(read_sas)
-	if datapath_ok; then
-		vip=$(peer_vip "$active")
-		# Refresh pin/routes without claiming a new "connected" event every 30s.
-		pin_vip "$vip"
-		ensure_dns_routes
+	vip=$(peer_vip "$active")
+	if sync_vip "$vip" && ensure_dns_routes && datapath_ok; then
+		# Missing only after a boot retry or teardown. Already-installed
+		# DNS returns before dnsmasq is restarted.
+		ensure_client_dns || true
+		# A keep-SA miss logs fail but leaves logged-up in place. Remember
+		# that count before clearing it, and emit one recovery instead of
+		# an ok line on every healthy tick.
+		prev=$(cat "$STATE/datapath-fail" 2>/dev/null || echo 0)
+		case "$prev" in
+			''|*[!0-9]*) prev=0 ;;
+		esac
 		echo 0 > "$STATE/fail-count"
 		reset_datapath_fail
 		clear_fallback_fail
+		clear_int_addr_round
 		echo "$active" > "$STATE/active"
 		if [ ! -f "$STATE/logged-up" ] || [ "$(cat "$STATE/logged-up" 2>/dev/null)" != "$active" ]; then
 			log_event ok "$active" "connected vip=${vip:-?}"
 			echo "$active" > "$STATE/logged-up"
+		elif [ "$prev" -ge 1 ]; then
+			log_event ok "$active" "datapath recovered vip=${vip:-?}"
 		fi
 		exit 0
 	fi
@@ -251,51 +688,75 @@ if established "$active"; then
 	n=$(bump_datapath_fail)
 	if [ "$n" -lt 3 ]; then
 		log_event fail "$active" "datapath probe failed (#$n/3); keep SA"
+		save_charon_snip
 		exit 0
 	fi
 	rm -f "$STATE/logged-up"
-	reset_datapath_fail
 	log_event fail "$active" "datapath dead; redial"
+	save_charon_snip
 	terminate_all
-	clear_vip
-	sas=
-fi
-
-rm -f "$STATE/logged-up"
-
-if dial_peer "$active"; then
-	if mark_up "$active" "connected"; then
+	wait_sas_gone
+	if any_ike_sa; then
+		# Leave datapath-fail at 3. The next tick must terminate again, not
+		# collect three more probe misses against the same stuck SA.
+		log_event fail "$active" "SA still present after terminate; skip redial"
+		save_charon_snip
 		exit 0
 	fi
-fi
-
-count=$(cat "$STATE/fail-count" 2>/dev/null || echo 0)
-case "$count" in
-	''|*[!0-9]*) count=0 ;;
-esac
-count=$((count + 1))
-echo "$count" > "$STATE/fail-count"
-echo "$active" > "$STATE/active"
-log_event fail "$active" "dial failed (#$count)"
-bump_fallback_fail
-
-peer_count=0
-for p in $PEERS; do peer_count=$((peer_count + 1)); done
-if [ "$count" -ge 2 ] && [ "$peer_count" -ge 2 ]; then
-	from=$active
-	active=$(next_peer "$active")
-	echo "$active" > "$STATE/active"
-	log_event switch "$active" "节点切换 $(peer_label "$from") → $(peer_label "$active")"
-	terminate_all
-	if dial_peer "$active"; then
-		if ! mark_up "$active" "切换后连通"; then
-			echo 1 > "$STATE/fail-count"
-			bump_fallback_fail
-		fi
-	else
-		echo 1 > "$STATE/fail-count"
-		log_event fail "$active" "切换后拨号失败"
-		bump_fallback_fail
+	reset_datapath_fail
+	clear_vip
+	if dial_full_and_mark "$active" "connected"; then
+		exit 0
 	fi
-fi
+	finish_redial_failure "$active"
+	;;
+skip)
+	# Child rekey or delete is still in progress. Flushing or dialing here
+	# races the new CHILD_SA and NordVPN answers with a duplicate.
+	exit 0
+	;;
+child)
+	if backoff_active; then
+		exit 0
+	fi
+	vip=$(peer_vip "$active")
+	if [ -z "$vip" ]; then
+		log_event fail "$active" "IKE up without VIP; full redial"
+		save_charon_snip
+		terminate_all
+		wait_sas_gone
+		if any_ike_sa; then
+			log_event fail "$active" "SA still present after terminate; skip redial"
+			save_charon_snip
+			exit 0
+		fi
+		rm -f "$STATE/logged-up"
+		if dial_full_and_mark "$active" "connected"; then
+			exit 0
+		fi
+		finish_redial_failure "$active"
+	fi
+	if ! pin_vip "$vip" || ! ensure_dns_routes; then
+		log_event fail "$active" "vip or policy route failed"
+		save_charon_snip
+		rm -f "$STATE/logged-up"
+		finish_redial_failure "$active"
+	fi
+	if dial_child_and_mark "$active" "connected"; then
+		exit 0
+	fi
+	rm -f "$STATE/logged-up"
+	finish_redial_failure "$active"
+	;;
+*)
+	if backoff_active; then
+		exit 0
+	fi
+	rm -f "$STATE/logged-up"
+	if dial_full_and_mark "$active" "connected"; then
+		exit 0
+	fi
+	finish_redial_failure "$active"
+	;;
+esac
 exit 0

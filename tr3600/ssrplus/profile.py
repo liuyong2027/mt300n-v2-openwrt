@@ -11,6 +11,32 @@ ROOT=Path(__file__).resolve().parents[2]
 PROFILE=Path(__file__).resolve().parent
 SSR_COMMIT='80d7bfff625b33db8afe80934638d96d214ceadc'
 
+def ssrplus_connectivity_probe(text):
+    """Router status probes for the dual-stack image.
+
+    Direct stays on the WAN. Split/global/gfw through IKEv2 must leave on
+    xfrm-mango, because that firewall does not mark OUTPUT. SSR stays unmarked
+    so its OUTPUT redirect still applies. A missing tunnel fails the probe.
+    """
+    old = "    set -- \"$@\" --proxy socks5h://127.0.0.1:10809 --connect-timeout 4 --max-time 8 --max-filesize 65536\n"
+    new = """    set -- "$@" --connect-timeout 4 --max-time 8 --max-filesize 65536
+    ike_on=$(uci -q get mango_ikev2.main.enabled || true)
+    ike_mode=$(uci -q get mango_ikev2.main.mode || true)
+    if [ "$ike_on" = 1 ] && [ -n "$ike_mode" ] && [ "$ike_mode" != direct ]; then
+        if ip link show xfrm-mango >/dev/null 2>&1; then
+            set -- "$@" --interface xfrm-mango
+        else
+            printf '%s\\n' 'xfrm-mango missing {rc=1 http=000 error=no tunnel}'
+            exit 1
+        fi
+    fi
+"""
+    if text.count(old) != 1:
+        raise ValueError('connectivity probe proxy line changed')
+    text = text.replace(old, new, 1)
+    text = text.replace('/tmp/mango-connectivity-error.', '/tmp/cudy-connectivity-error.')
+    return text
+
 def replace(path,old,new,count=1):
     text=path.read_text(encoding='utf-8')
     if text.count(old)!=count:
@@ -247,21 +273,19 @@ return M
     local ok=report:match('\\nCUDY_PROBE_OK$')~=nil
 """+s[b:]
     led.write_text(s,encoding='utf-8',newline='\n')
-    probe=(ROOT/'tr3600/led-probe/mango-connectivity-probe').read_text(encoding='utf-8')
-    probe=probe.replace(' --proxy socks5h://127.0.0.1:10809','')
-    probe=probe.replace('/tmp/mango-connectivity-error.','/tmp/cudy-connectivity-error.')
+    probe=ssrplus_connectivity_probe((ROOT/'tr3600/led-probe/mango-connectivity-probe').read_text(encoding='utf-8'))
     (ROOT/'tr3600/luci-app-cudy-led/root/usr/libexec/cudy-connectivity-probe').write_text(probe,encoding='utf-8',newline='\n')
     # Retain upgrade LED suspend/resume separately from the retired Mango probe.
     replace(p,'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"',
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
         'firmware_version':'1.3.0','release_stage':'candidate; hardware acceptance pending',
-        'candidate_revision':2,
+        'candidate_revision':3,
         'openwrt_commit':OPENWRT_COMMIT_25_12_6,
         'openwrt_release':'25.12.6',
-        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok'],
+        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog'],
         'base':'tr3600-v1.2.0','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
-        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+; VIP from active peer CHILD_SA after datapath probe',
+        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+; IKE VIP re-pinned before the datapath probe; rekey overlap does not flush; INTERNAL_ADDRESS_FAILURE rotates to the next server',
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',

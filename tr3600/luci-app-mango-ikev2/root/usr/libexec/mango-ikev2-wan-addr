@@ -1,0 +1,39 @@
+#!/bin/sh
+# Print the runtime WAN IPv4 for IKE local_addrs. Fail closed.
+# Never select an address that is also the xfrm-mango VIP.
+set -e
+# OpenWrt network.sh flushes its cache with `unset __NETWORK_CACHE` and then
+# tests [ -z "$__NETWORK_CACHE" ]. nounset aborts that test, so keep it off
+# around these helpers.
+set +u
+net_sh=${MANGO_IKEV2_NETWORK_SH:-/lib/functions/network.sh}
+# shellcheck disable=SC1090
+. "$net_sh"
+network_flush_cache >/dev/null 2>&1 || true
+dev=
+addr=
+network_get_device dev wan || {
+	echo 'WAN device unavailable' >&2
+	exit 1
+}
+network_get_ipaddr addr wan || {
+	echo 'WAN IPv4 unavailable' >&2
+	exit 1
+}
+set -u
+case "$addr" in
+	''|*[!0-9.]*)
+		echo 'WAN IPv4 unavailable' >&2
+		exit 1
+		;;
+esac
+# A dotted quad only. Reject the tunnel VIP if charon also installed it here.
+echo "$addr" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || {
+	echo 'WAN IPv4 unavailable' >&2
+	exit 1
+}
+if ip -4 -o addr show dev xfrm-mango 2>/dev/null | grep -q "inet ${addr}/"; then
+	echo 'refusing tunnel VIP as IKE source address' >&2
+	exit 1
+fi
+printf '%s\n' "$addr"

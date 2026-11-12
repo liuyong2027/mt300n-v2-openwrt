@@ -3,7 +3,7 @@
 set -eu
 
 STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
-LOCK=/var/run/mango-ikev2-fallback.lock
+LOCK=${MANGO_IKEV2_FALLBACK_LOCK:-/var/run/mango-ikev2-fallback.lock}
 
 [ "$(uci -q get mango_ikev2.main.ssr_fallback || echo 1)" = 1 ] || exit 0
 [ "$(uci -q get mango_ikev2.main.enabled || true)" = 1 ] || exit 0
@@ -14,20 +14,24 @@ fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
 
 fails=$(cat "$STATE/fallback-fail" 2>/dev/null || echo 0)
-/usr/libexec/mango-ikev2-log switch mango "IKEv2 连续失败 ${fails} 次，回退 SSR" || true
+MANGO_IKEV2_LOG=${MANGO_IKEV2_LOG:-/usr/libexec/mango-ikev2-log}
+"$MANGO_IKEV2_LOG" switch mango "IKEv2 连续失败 ${fails} 次，回退 SSR" || true
 
 uci set mango_ikev2.main.enabled=0
 uci commit mango_ikev2
 
 # Stop watch/failover and tear the tunnel down before starting SSR.
-/etc/init.d/mango_ikev2 stop >/dev/null 2>&1 || true
+# enabled is already 0, so the SSR start hook does not yield again.
+MANGO_IKEV2_INIT=${MANGO_IKEV2_INIT:-/etc/init.d/mango_ikev2}
+MANGO_IKEV2_PEER_ENGINE=${MANGO_IKEV2_PEER_ENGINE:-/usr/libexec/mango-ikev2-peer-engine}
+"$MANGO_IKEV2_INIT" stop >/dev/null 2>&1 || true
 
-if /usr/libexec/mango-ikev2-peer-engine restore; then
+if "$MANGO_IKEV2_PEER_ENGINE" restore; then
 	mkdir -p "$STATE"
 	echo 0 > "$STATE/fallback-fail"
-	/usr/libexec/mango-ikev2-log ok mango "已回退到 SSR" || true
+	"$MANGO_IKEV2_LOG" ok mango "已回退到 SSR" || true
 	exit 0
 fi
 
-/usr/libexec/mango-ikev2-log fail mango "回退 SSR 失败（无可用节点）" || true
+"$MANGO_IKEV2_LOG" fail mango "回退 SSR 失败（无可用节点）" || true
 exit 1
