@@ -169,6 +169,29 @@ install_fw() {
 	"$fw"
 }
 
+# Boot apply returns before dns_on when WAN is not ready, and shutdown
+# removes the snippet. Install it once when the tunnel comes up. A later
+# healthy tick must not restart dnsmasq if the snippet is already in place.
+client_dns_ready() {
+	local etc sec
+	etc=${MANGO_IKEV2_ETC:-/etc/mango-ikev2}
+	[ -s "$etc/dnsmasq.d/ikev2.conf" ] || return 1
+	sec=$(uci show dhcp 2>/dev/null | sed -n 's/^dhcp\.\([^=]*\)=dnsmasq$/\1/p' | head -n 1)
+	[ -n "$sec" ] || return 1
+	[ "$(uci -q get "dhcp.${sec}.noresolv" || true)" = 1 ] || return 1
+	[ "$(uci -q get "dhcp.${sec}.filter_aaaa" || true)" = 1 ] || return 1
+	uci -q get "dhcp.${sec}.confdir" 2>/dev/null | tr ' ' '\n' | grep -qx "$etc/dnsmasq.d"
+}
+
+ensure_client_dns() {
+	client_dns_ready && return 0
+	IKE_ETC=${MANGO_IKEV2_ETC:-/etc/mango-ikev2}
+	DNSMASQ_INIT=${MANGO_IKEV2_DNSMASQ_INIT:-/etc/init.d/dnsmasq}
+	# shellcheck disable=SC1090
+	. "$(dirname "$MANGO_IKEV2_LIFECYCLE")/dns.sh"
+	mango_ikev2_dns_on
+}
+
 prepare_dial() {
 	clear_vip
 	refresh_wan_bind || return 1
@@ -517,6 +540,9 @@ mark_up() {
 		save_charon_snip
 		return 1
 	fi
+	# Same snippet apply installs. A miss here is retried on a later tick;
+	# do not count it as a dead tunnel.
+	ensure_client_dns || true
 	echo 0 > "$STATE/fail-count"
 	reset_datapath_fail
 	clear_fallback_fail
@@ -633,6 +659,9 @@ healthy)
 	done
 	vip=$(peer_vip "$active")
 	if sync_vip "$vip" && ensure_dns_routes && datapath_ok; then
+		# Missing only after a boot retry or teardown. Already-installed
+		# DNS returns before dnsmasq is restarted.
+		ensure_client_dns || true
 		# A keep-SA miss logs fail but leaves logged-up in place. Remember
 		# that count before clearing it, and emit one recovery instead of
 		# an ok line on every healthy tick.
