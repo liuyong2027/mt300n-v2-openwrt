@@ -1,18 +1,19 @@
 #!/bin/sh
 # Append one IKEv2 connection event. Keeps the last 20 lines.
-# Requires a non-empty result (ok|fail|switch|backoff|down); bare invocation
+# Requires a non-empty result (ok|warn|fail|switch|backoff|down); bare invocation
 # must not write a blank row into the LuCI event log.
+# warn is a debounced probe miss. It is not a failure.
 set -eu
 
 usage() {
-	echo "usage: $0 <ok|fail|switch|backoff|down> <peer> [detail...]" >&2
+	echo "usage: $0 <ok|warn|fail|switch|backoff|down> <peer> [detail...]" >&2
 	exit 2
 }
 
 [ "$#" -ge 1 ] || usage
 result=$1
 case "$result" in
-	ok|fail|switch|backoff|down) ;;
+	ok|warn|fail|switch|backoff|down) ;;
 	*) usage ;;
 esac
 peer=${2:-mango}

@@ -256,9 +256,16 @@ datapath_ok() {
 }
 
 probe_failed() {
-    local count
+    local count lvl
     count=$(increment "$STATE/probe-fail-$active")
-    log_event fail "$active" "tunnel probes failed ($count/$PROBE_FAIL_LIMIT)"
+    # The tunnel is still up below the limit. Only the miss that reaches it
+    # is a failure and may start CHILD repair.
+    if [ "$count" -ge "$PROBE_FAIL_LIMIT" ]; then
+        lvl=fail
+    else
+        lvl=warn
+    fi
+    log_event "$lvl" "$active" "tunnel probes failed ($count/$PROBE_FAIL_LIMIT)"
     [ "$count" -ge "$PROBE_FAIL_LIMIT" ]
 }
 
@@ -288,7 +295,11 @@ begin_connecting() {
 }
 
 mark_connected() {
-    local peer="$1" note="$2"
+    local peer="$1" note="$2" prev_probe
+    # Read first: clear_peer_tracking deletes the counter. Same-peer recovery
+    # must still log ok. Logging only when logged-up changes left the last
+    # success row stuck after a debounced probe miss.
+    prev_probe=$(read_uint "$STATE/probe-fail-$peer")
     echo 0 > "$STATE/fail-count"
     clear_fallback_fail
     clear_peer_tracking "$peer"
@@ -298,6 +309,10 @@ mark_connected() {
         log_event ok "$peer" "$note"
     fi
     echo "$peer" > "$STATE/logged-up"
+    if [ "$prev_probe" -gt 0 ]; then
+        log_event ok "$peer" "probe recovered after $prev_probe failed"
+    fi
+    return 0
 }
 
 # 0 = verified datapath, 2 = bounded negotiation in progress, 3 = unknown SA
