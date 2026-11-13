@@ -410,6 +410,144 @@ class Runtime(unittest.TestCase):
         self.assertNotIn('--ike', repairs[0])
         self.assertEqual(self.value('fallback-fail'), '1')
         self.assertFalse(any('flush' in row for row in self.trace('ip')))
+        probe = [row for row in self.trace('mango-ikev2-log')
+                 if 'tunnel probes failed' in row[-1]]
+        self.assertEqual([(row[1], row[-1]) for row in probe], [
+            ('warn', 'tunnel probes failed (1/3)'),
+            ('warn', 'tunnel probes failed (2/3)'),
+            ('fail', 'tunnel probes failed (3/3)'),
+        ])
+        fail_at = next(i for i, row in enumerate(self.trace())
+                       if row[0] == 'mango-ikev2-log' and row[-1].endswith('(3/3)'))
+        repair_at = next(i for i, row in enumerate(self.trace())
+                         if row[0] == 'swanctl' and '--initiate' in row)
+        self.assertLess(fail_at, repair_at)
+
+    def test_same_peer_probe_recovery_logs_one_ok_and_clean_cycles_do_not(self):
+        self.sas(sa())
+        self.run_cycle()
+        self.assertEqual(
+            [(row[1], row[-1]) for row in self.trace('mango-ikev2-log') if row[1] == 'ok'],
+            [('ok', 'connected vip=10.0.0.8')])
+        (self.r / 'trace').write_text('')
+        self.run_cycle()
+        self.assertEqual(self.trace('mango-ikev2-log'), [])
+
+        self.d['esp_ok'] = False
+        self.run_cycle()
+        self.run_cycle()
+        self.assertEqual(
+            [(row[1], row[-1]) for row in self.trace('mango-ikev2-log')],
+            [('warn', 'tunnel probes failed (1/3)'),
+             ('warn', 'tunnel probes failed (2/3)')])
+        self.assertFalse(any('--initiate' in row for row in self.trace('swanctl')))
+
+        self.d['esp_ok'] = True
+        (self.r / 'trace').write_text('')
+        self.run_cycle()
+        self.assertEqual(
+            [(row[1], row[-1]) for row in self.trace('mango-ikev2-log')],
+            [('ok', 'probe recovered after 2 failed')])
+        self.assertFalse((self.state / 'probe-fail-mango').exists())
+        (self.r / 'trace').write_text('')
+        self.run_cycle()
+        self.assertEqual(self.trace('mango-ikev2-log'), [])
+
+    def test_warn_does_not_move_last_fail_and_recovery_moves_last_ok(self):
+        log = self.r / 'events.log'
+        log.write_text(
+            '2026-11-12 08:00:00\tok\t主服务器\tvpn\tid\tconnected vip=10.0.0.8\n'
+            '2026-11-13 08:30:00\tbackoff\t主服务器\tvpn\tid\tnegotiation grace started (transition)\n'
+            '2026-11-13 09:00:00\twarn\t主服务器\tvpn\tid\ttunnel probes failed (1/3)\n'
+            '2026-11-13 09:00:30\twarn\t主服务器\tvpn\tid\ttunnel probes failed (2/3)\n')
+        status = self.status()
+        self.assertEqual(status['last_ok'], '2026-11-12 08:00:00')
+        self.assertEqual(status['last_fail'], '')
+        self.assertEqual(status['last_switch'], '')
+        log.write_text(log.read_text() +
+            '2026-11-13 09:01:00\tfail\t主服务器\tvpn\tid\ttunnel probes failed (3/3)\n'
+            '2026-11-13 09:02:00\tok\t主服务器\tvpn\tid\tprobe recovered after 1 failed\n'
+            '2026-11-13 09:03:00\tswitch\t备用服务器1\tvpn\tid\t节点切换 主服务器 → 备用服务器1\n')
+        status = self.status()
+        self.assertEqual(status['last_ok'], '2026-11-13 09:02:00')
+        self.assertEqual(status['last_fail'], '2026-11-13 09:01:00')
+        self.assertEqual(status['last_switch'], '2026-11-13 09:03:00')
+        self.assertIn('节点切换', status['last_switch_detail'])
+
+    def test_grace_completion_logged_once_when_sa_returns_healthy(self):
+        self.sas(sa_rekeyed_only())
+        self.run_cycle(advance=False)
+        self.assertEqual(
+            [(row[1], row[-1]) for row in self.trace('mango-ikev2-log')
+             if 'negotiation grace started' in row[-1]],
+            [('backoff', 'negotiation grace started (transition)')])
+        (self.state / 'logged-up').write_text('mango\n')
+        (self.r / 'trace').write_text('')
+        self.sas(sa())
+        self.d['now'] = 1040
+        self.run_cycle(advance=False)
+        self.assertEqual(
+            [row[-1] for row in self.trace('mango-ikev2-log') if row[1] == 'ok'],
+            ['negotiation completed (transition, 40s)'])
+        self.assertFalse((self.state / 'transition-mango').exists())
+        (self.r / 'trace').write_text('')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+
+    def test_connecting_grace_completion_keeps_kind_and_elapsed_time(self):
+        self.sas('mango: #1, CONNECTING, IKEv2\n')
+        self.run_cycle(advance=False)
+        (self.state / 'logged-up').write_text('mango\n')
+        (self.r / 'trace').write_text('')
+        self.sas(sa())
+        self.d['now'] = 1030
+        self.run_cycle(advance=False)
+        self.assertEqual(
+            [row[-1] for row in self.trace('mango-ikev2-log') if row[1] == 'ok'],
+            ['negotiation completed (connecting, 30s)'])
+
+    def test_healthy_cycle_without_grace_window_does_not_log_completion(self):
+        self.sas(sa())
+        (self.state / 'logged-up').write_text('mango\n')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+
+    def test_grace_closed_as_child_down_or_expired_does_not_log_success(self):
+        (self.state / 'transition-mango').write_text('1000 transition\n')
+        self.sas(sa(installed=False))
+        self.run_cycle(advance=False)
+        self.assertFalse(any(row[1] == 'ok' for row in self.trace('mango-ikev2-log')))
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+        self.assertFalse((self.state / 'transition-mango').exists())
+
+        for name in list(self.state.iterdir()):
+            if name.name != 'failover.lock':
+                name.unlink()
+        (self.r / 'trace').write_text('')
+        (self.state / 'transition-mango').write_text('1000 transition\n')
+        self.sas('')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+        self.assertTrue(any(row[1] == 'fail' for row in self.trace('mango-ikev2-log')))
+
+        for name in list(self.state.iterdir()):
+            if name.name != 'failover.lock':
+                name.unlink()
+        (self.r / 'trace').write_text('')
+        self.d['now'] = 1000
+        self.sas(sa_rekeyed_only())
+        self.run_cycle(advance=False)
+        self.d['now'] = 1120
+        (self.r / 'trace').write_text('')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+        self.assertTrue(any('negotiation grace expired' in row[-1]
+                            for row in self.trace('mango-ikev2-log')))
 
     def test_success_breaks_probe_failure_streak(self):
         self.sas(sa())
@@ -795,6 +933,134 @@ fi
             time.sleep(0.02)
         self.assertTrue(result.exists(), 'WAN reload did not run')
         self.assertEqual(result.read_text().strip(), 'closed')
+
+
+class EventLog(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.log = Path(self.temp.name) / 'events.log'
+        self.script = PACKAGE / 'usr/libexec/mango-ikev2-log'
+        self.env = dict(os.environ, MANGO_IKEV2_EVENT_LOG=str(self.log))
+
+    def run_log(self, *args):
+        return subprocess.run(['sh', str(self.script), *args], env=self.env,
+                              text=True, capture_output=True)
+
+    def test_rejects_unknown_and_blank_without_writing(self):
+        for args in [(), ('nope', 'mango', 'x'), ('', 'mango', 'x')]:
+            result = self.run_log(*args)
+            self.assertEqual(result.returncode, 2, (args, result.stderr))
+            self.assertFalse(self.log.exists(), args)
+
+    def test_accepts_warn_and_existing_results(self):
+        for name in ['ok', 'warn', 'fail', 'switch', 'backoff', 'down']:
+            result = self.run_log(name, 'mango', 'detail ' + name)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [line.split('\t') for line in self.log.read_text().splitlines()]
+        self.assertEqual([row[1] for row in rows],
+                         ['ok', 'warn', 'fail', 'switch', 'backoff', 'down'])
+        self.assertTrue(all(row[2] == '主服务器' and row[5] == 'detail ' + row[1] for row in rows))
+        self.assertEqual(len(rows), 6)
+
+    def test_warn_accepted_by_busybox_ash(self):
+        if not Path('/usr/bin/busybox').exists():
+            self.skipTest('busybox ash is not installed')
+        result = subprocess.run(['busybox', 'ash', str(self.script), 'warn', 'mango2',
+                                 'tunnel probes failed (1/3)'],
+                                env=self.env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        unknown = subprocess.run(['busybox', 'ash', str(self.script), 'bogus'],
+                                 env=self.env, text=True, capture_output=True)
+        self.assertEqual(unknown.returncode, 2)
+        row = self.log.read_text().splitlines()[-1].split('\t')
+        self.assertEqual(row[1], 'warn')
+        self.assertEqual(row[2], '备用服务器1')
+        self.assertEqual(row[5], 'tunnel probes failed (1/3)')
+
+    def test_luci_log_view_labels_warn(self):
+        path = (ROOT / 'package/luci-app-mango-ikev2/htdocs/luci-static/resources/view/mango-ikev2/log.js')
+        text = path.read_text()
+        self.assertIn("warn: '警告'", text)
+        self.assertIn("warn: 'warning'", text)
+        self.assertNotIn("warn: 'danger'", text)
+        self.assertNotIn("warn: '失败'", text)
+        self.assertIn("backoff: '协商中'", text)
+        self.assertIn("backoff: ''", text)
+        self.assertNotIn("backoff: 'warning'", text)
+        self.assertNotIn("backoff: 'danger'", text)
+        subprocess.run(['node', '--check', str(path)], check=True)
+
+
+class FirewallInclude(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.r = Path(self.temp.name)
+        self.bin = self.r / 'bin'
+        self.bin.mkdir()
+        self.state = self.r / 'state'
+        self.lock = self.r / 'lock'
+        self.state.mkdir()
+        self.lock.mkdir()
+        (self.bin / 'uci').write_text(
+            '#!/bin/sh\nkey=${3##*.}\n'
+            'case "$key" in enabled) echo 1;; mode) echo split;; *) exit 1;; esac\n')
+        (self.bin / 'nft').write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_NFT"\n'
+            'prev=\nfor arg in "$@"; do\n'
+            '  if [ "$prev" = -f ]; then cat "$arg" >> "$FAKE_NFT_FILES"; printf "\\n---\\n" >> "$FAKE_NFT_FILES"; fi\n'
+            '  prev=$arg\ndone\nexit 0\n')
+        (self.bin / 'logger').write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_LOGGER"\n')
+        (self.bin / 'ip').write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_IP"\n'
+            'if [ "$FAKE_LINK" != present ] && [ "$1 $2 $3" = "link show xfrm-mango" ]; then exit 1; fi\n'
+            'exit 0\n')
+        (self.bin / 'mango-ikev2-generate').write_text('#!/bin/sh\nprintf "%s\\n" "table inet mango_ikev2 {}"\n')
+        for path in self.bin.iterdir():
+            path.chmod(0o755)
+        text = (PACKAGE / 'usr/libexec/mango-ikev2-fw').read_text()
+        text = text.replace('/var/lock', str(self.lock))
+        text = text.replace('/var/etc/mango-ikev2', str(self.state))
+        text = text.replace('/usr/libexec/', str(self.bin) + '/')
+        text = text.replace('/usr/sbin/nft', str(self.bin / 'nft'))
+        self.script = self.r / 'fw'
+        self.script.write_text(text)
+        self.script.chmod(0o755)
+        self.env = dict(os.environ, PATH=str(self.bin) + ':' + os.environ['PATH'],
+                        FAKE_NFT=str(self.r / 'nft.log'),
+                        FAKE_NFT_FILES=str(self.r / 'nft-files'),
+                        FAKE_LOGGER=str(self.r / 'logger.log'),
+                        FAKE_IP=str(self.r / 'ip.log'),
+                        FAKE_LINK='missing')
+
+    def run_fw(self):
+        return subprocess.run(['sh', str(self.script)], env=self.env, text=True,
+                              capture_output=True, timeout=10)
+
+    def test_missing_xfrm_defers_routes_and_still_inserts_accepts(self):
+        result = self.run_fw()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('xfrm-mango not present yet; tunnel routes deferred',
+                      (self.r / 'logger.log').read_text())
+        ip_log = (self.r / 'ip.log').read_text()
+        self.assertNotIn('route replace', ip_log)
+        self.assertNotIn('rule add', ip_log)
+        inserted = (self.r / 'nft-files').read_text()
+        self.assertIn('mango-xfrm-out', inserted)
+        self.assertIn('mango-xfrm-in', inserted)
+        self.assertIn('oifname "xfrm-mango" accept', inserted)
+
+    def test_present_xfrm_still_installs_tunnel_routes(self):
+        self.env['FAKE_LINK'] = 'present'
+        result = self.run_fw()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.r / 'logger.log').exists())
+        ip_log = (self.r / 'ip.log').read_text()
+        self.assertIn('route replace default dev xfrm-mango table 101', ip_log)
+        self.assertIn('route replace 1.1.1.1/32 dev xfrm-mango', ip_log)
+        self.assertIn('route replace 8.8.8.8/32 dev xfrm-mango', ip_log)
+        self.assertIn('rule add priority 10001 fwmark 0x101/0xffffffff table 101', ip_log)
 
 
 if __name__ == '__main__':

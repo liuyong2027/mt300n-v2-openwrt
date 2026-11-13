@@ -12,7 +12,7 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 BASE_COMMIT='7b6152a172415b7a5605ccc3ba9ececb8f951966'
-BASE_SHA256='e7d48db4b3117a29891d3ddfc09a1268f62c54462e8255717bd2387498067d7e'
+BASE_SHA256='6ac31500fcd9d3b2ad995689ffd3cfadb80179e9ef99cf859fdded56a40d469e'
 
 
 def sha(data): return hashlib.sha256(data).hexdigest()

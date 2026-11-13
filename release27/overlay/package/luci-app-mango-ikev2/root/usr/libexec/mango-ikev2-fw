@@ -1,0 +1,95 @@
+#!/bin/sh
+# fw4 include and service helper; never edits UCI.
+(
+umask 077
+mkdir -p /var/lock /var/etc/mango-ikev2 || exit 1
+exec 8>/var/lock/mango-ikev2-resource.lock
+flock -w 90 8 || { echo '等待 IKEv2 防火墙任务超时' >&2; exit 75; }
+tmp="$(mktemp /var/etc/mango-ikev2/rules.XXXXXX)" || exit 1
+finish() {
+    local rc=$?
+    rm -f "$tmp"
+    exit "$rc"
+}
+trap finish EXIT
+/usr/libexec/mango-ikev2-generate nft > "$tmp" || exit 1
+/usr/sbin/nft -c -f "$tmp" || exit 1
+/usr/sbin/nft -f "$tmp" || exit 1
+enabled=$(uci -q get mango_ikev2.main.enabled)
+mode=$(uci -q get mango_ikev2.main.mode)
+lan_device=$(uci -q get mango_ikev2.main.lan_device)
+lan_device=${lan_device:-br-lan}
+
+# Another base chain cannot override fw4's forward drop. LAN/ZT packets
+# marked onto xfrm-mango are forwarded, then fw4 drops them because the
+# tunnel device is not in a zone. Insert accepts into fw4 itself.
+fw4_rule_handles() {
+    nft -a list chain inet fw4 forward 2>/dev/null | sed -n 's/.*comment "mango-xfrm.*handle \([0-9][0-9]*\).*/\1/p'
+}
+fw4_clear_xfrm() {
+    local h
+    while h=$(fw4_rule_handles | head -n 1); [ -n "$h" ]; do
+        nft delete rule inet fw4 forward handle "$h" 2>/dev/null || return 0
+    done
+}
+fw4_ifset() {
+    local name set=''
+    set -- $lan_device
+    if [ "$#" -eq 1 ]; then
+        printf '"%s"' "$1"
+        return 0
+    fi
+    for name in "$@"; do
+        set="${set}\"${name}\", "
+    done
+    set=${set%, }
+    printf '{ %s }' "$set"
+}
+fw4_allow_xfrm() {
+    local ifs fwtmp
+    fw4_clear_xfrm
+    [ "$enabled" = 1 ] && [ "$mode" != direct ] || return 0
+    ifs=$(fw4_ifset)
+    fwtmp="$(mktemp /var/etc/mango-ikev2/fw4.XXXXXX)" || return 1
+    cat > "$fwtmp" <<EOF
+insert rule inet fw4 forward iifname ${ifs} oifname "xfrm-mango" accept comment "mango-xfrm-out"
+insert rule inet fw4 forward iifname "xfrm-mango" oifname ${ifs} accept comment "mango-xfrm-in"
+insert rule inet fw4 forward oifname "xfrm-mango" tcp flags syn tcp option maxseg size set 1200 comment "mango-xfrm-mss-out"
+insert rule inet fw4 forward iifname "xfrm-mango" tcp flags syn tcp option maxseg size set 1200 comment "mango-xfrm-mss-in"
+EOF
+    nft -f "$fwtmp"
+    local rc=$?
+    rm -f "$fwtmp"
+    return "$rc"
+}
+clear_dns_routes() {
+    for address in 1.1.1.1 8.8.8.8; do
+        ip -4 route del "$address/32" dev xfrm-mango 2>/dev/null || :
+    done
+}
+if [ "$enabled" = 1 ] && [ "$mode" != direct ] && ! ip link show xfrm-mango >/dev/null 2>&1; then
+    # Boot: fw4 (S19) runs this include before mango_ikev2 (S95) creates
+    # xfrm-mango. Keep the nft table and fw4 accepts; the service apply and
+    # failover (ensure_dns_routes) add table 101 and the /32s once it exists.
+    logger -t mango-ikev2-fw -p daemon.info 'xfrm-mango not present yet; tunnel routes deferred'
+elif [ "$enabled" = 1 ] && [ "$mode" != direct ]; then
+    ip -4 route replace default dev xfrm-mango table 101 2>/dev/null || \
+        ip -4 route replace default via 0.0.0.0 dev xfrm-mango table 101 || exit 1
+    ip -4 rule show | grep -q '10001:.*fwmark 0x101.*lookup 101' ||
+        ip -4 rule add priority 10001 fwmark 0x101/0xffffffff table 101 || exit 1
+    # Router dnsmasq uses the main table. These /32s keep tunnel DNS off domestic resolvers.
+    while read -r address; do
+        [ -n "$address" ] || continue
+        ip -4 route replace "$address/32" dev xfrm-mango || exit 1
+    done <<'EOF'
+1.1.1.1
+8.8.8.8
+EOF
+else
+    ip -4 rule del priority 10001 fwmark 0x101/0xffffffff table 101 2>/dev/null || :
+    ip -4 route flush table 101 2>/dev/null || :
+    clear_dns_routes
+fi
+fw4_allow_xfrm || echo '未能把 xfrm 转发放进 fw4' >&2
+exit 0
+)

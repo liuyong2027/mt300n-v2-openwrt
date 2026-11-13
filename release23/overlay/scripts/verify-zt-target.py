@@ -22,7 +22,10 @@ for name in paths:
 actual_init = rootfs / 'etc/init.d/zerotier'
 expected_init = ROOT / 'openwrt/feeds/packages/net/zerotier/files/etc/init.d/zerotier'
 assert actual_init.read_bytes() == expected_init.read_bytes()
-assert actual_init.read_text().count('/usr/libexec/mango-zt-direct') == 3
+init_text = actual_init.read_text()
+guard = '[ ! -x /usr/libexec/mango-zt-direct ] || /usr/libexec/mango-zt-direct'
+assert init_text.count(guard) == 3
+assert init_text.count('/usr/libexec/mango-zt-direct') == 6
 command = [shutil.which('qemu-mipsel-static'), '-L', str(rootfs), str(rootfs / 'usr/bin/lua')]
 subprocess.run(command + ['tests/zt-json.lua'], cwd=ROOT, check=True)
 subprocess.run(command + ['tests/zt-direct.lua'], cwd=ROOT, check=True)

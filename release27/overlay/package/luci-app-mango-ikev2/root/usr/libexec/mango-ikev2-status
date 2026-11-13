@@ -43,11 +43,15 @@ fi
 
 LOG=/var/log/mango-ikev2-events.log
 last_ok=; last_fail=; last_switch=; last_switch_detail=
+# Match the result column exactly. `warn` is a debounced probe miss and must
+# not move 最近失败. Detail text may contain the word "failed" (including
+# "probe recovered after N failed") and must not be treated as a failure.
+# A later `ok` moves 最近成功.
 if [ -s "$LOG" ]; then
-	last_ok=$(awk -F'\t' '$2=="ok"{t=$1} END{print t}' "$LOG")
-	last_fail=$(awk -F'\t' '$2=="fail"{t=$1} END{print t}' "$LOG")
-	last_switch=$(awk -F'\t' '$2=="switch"{t=$1} END{print t}' "$LOG")
-	last_switch_detail=$(awk -F'\t' '$2=="switch"{d=$6} END{print d}' "$LOG")
+	last_ok=$(awk -F'\t' 'BEGIN{t=""} $2=="ok"{t=$1} END{print t}' "$LOG")
+	last_fail=$(awk -F'\t' 'BEGIN{t=""} $2=="fail"{t=$1} END{print t}' "$LOG")
+	last_switch=$(awk -F'\t' 'BEGIN{t=""} $2=="switch"{t=$1} END{print t}' "$LOG")
+	last_switch_detail=$(awk -F'\t' 'BEGIN{d=""} $2=="switch"{d=$6} END{print d}' "$LOG")
 fi
 
 printf 'enabled=%s\n' "$enabled"

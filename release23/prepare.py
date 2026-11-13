@@ -11,7 +11,7 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA256 = '9fe237d2069d4e4789d6dbbda7005fc3921db91e23c0e220aa3edde1d04b4116'
+BASE_SHA256 = '19a914c40c9eece250030290860cfd4799eed8331640215e1610418026a0da5b'
 BASE_COMMIT = 'b58f524d70b1c7ab37a279cdadbddb2685af04ca'
 
 

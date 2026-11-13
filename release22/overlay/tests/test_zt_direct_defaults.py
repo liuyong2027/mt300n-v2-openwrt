@@ -42,14 +42,61 @@ class ZeroTierInitTests(unittest.TestCase):
     def test_pinned_init_only_adds_lifecycle_hooks(self):
         base = (ROOT / 'tests/fixtures/zerotier-5caa62e0.init').read_text()
         out = patcher.patch(base)
-        self.assertEqual(out.count('/usr/libexec/mango-zt-direct'), 3)
-        self.assertIn('mango-zt-direct stop', out)
-        self.assertIn('procd_close_instance\n\t/usr/libexec/mango-zt-direct', out)
+        # Three hooks, each guarded so profiles without the helper skip it silently.
+        guard = '[ ! -x /usr/libexec/mango-zt-direct ] || /usr/libexec/mango-zt-direct'
+        self.assertEqual(out.count(guard), 3)
+        self.assertEqual(out.count('/usr/libexec/mango-zt-direct'), 6)
+        self.assertIn(guard + ' stop', out)
+        self.assertIn('procd_close_instance\n\t' + guard + ' >/dev/null', out)
         # Identity generation, networks and config options retain their exact code.
         for line in base.splitlines():
             self.assertIn(line, out)
         with self.assertRaises(AssertionError):
             patcher.patch(base + '# changed upstream\n')
+
+    def test_guard_skips_missing_helper_and_still_runs_when_present(self):
+        base = (ROOT / 'tests/fixtures/zerotier-5caa62e0.init').read_text()
+        out = patcher.patch(base)
+        lines = [line.strip() for line in out.splitlines() if 'mango-zt-direct' in line and line.strip().startswith('[')]
+        self.assertEqual(len(lines), 3)
+        shells = ['sh']
+        if shutil.which('busybox'):
+            shells.append('busybox ash')
+        for shell in shells:
+            with self.subTest(shell=shell):
+                self._run_guard_lines(shell.split(), lines)
+
+    def _run_guard_lines(self, shell, lines):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        log = root / 'calls'
+        env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'], CALL_LOG=str(log))
+        # A function beats a BusyBox standalone applet, so ash and dash record the same logger calls.
+        prelude = 'logger() { printf "%s\\n" "$*" >> "$CALL_LOG"; }\n'
+        missing = subprocess.run(shell + ['-eu', '-c', prelude + '\n'.join(lines)], env=env, cwd=root,
+                                 text=True, capture_output=True)
+        self.assertEqual(missing.returncode, 0, missing.stderr)
+        self.assertFalse(log.exists())
+        helper = root / 'mango-zt-direct'
+        helper.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALL_LOG"\nexit 0\n')
+        helper.chmod(0o755)
+        # The hooks use an absolute path. Point both the test and the call at this fixture.
+        rewritten = [line.replace('/usr/libexec/mango-zt-direct', str(helper)) for line in lines]
+        log.write_text('')
+        present = subprocess.run(shell + ['-eu', '-c', prelude + '\n'.join(rewritten)], env=env, cwd=root,
+                                 text=True, capture_output=True)
+        self.assertEqual(present.returncode, 0, present.stderr)
+        # stop, successful refresh (no arguments), stop. No failure log.
+        self.assertEqual(log.read_text().splitlines(), ['stop', '', 'stop'])
+        self.assertNotIn('Rule refresh failed', log.read_text())
+        helper.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALL_LOG"\nexit 1\n')
+        helper.chmod(0o755)
+        log.write_text('')
+        failed = subprocess.run(shell + ['-eu', '-c', prelude + rewritten[1]], env=env, cwd=root,
+                                text=True, capture_output=True)
+        self.assertEqual(failed.returncode, 0, failed.stderr)
+        self.assertIn('Rule refresh failed', log.read_text())
 
 
 @unittest.skipIf(os.name == 'nt' or not shutil.which('sh'), 'Linux shell fixtures run in CI')

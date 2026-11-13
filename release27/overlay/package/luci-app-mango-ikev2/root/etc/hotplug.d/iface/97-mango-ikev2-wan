@@ -14,6 +14,25 @@ esac
     flock -w 60 7 || exit 0
     sleep 2
     [ "$(uci -q get mango_ikev2.main.enabled)" = 1 ] || exit 0
+    # At boot this ifup is queued behind fw4 reloads and often runs after
+    # S95 already generated swanctl.conf and dialled from this WAN address.
+    # A reload would terminate that SA and redial. Skip it when the config
+    # was written after this WAN came up and is bound to the same IPv4.
+    # A clock step after the write only makes the file look older (reload).
+    conf=/var/etc/mango-ikev2/swanctl.conf
+    if [ "$ACTION" = ifup ] && [ -s "$conf" ]; then
+        . /lib/functions/network.sh
+        network_flush_cache
+        wan_ip=; network_get_ipaddr wan_ip wan || :
+        wan_up=$(ubus call network.interface.wan status 2>/dev/null | jsonfilter -e '@.uptime' 2>/dev/null)
+        conf_age=$(( $(date +%s) - $(date -r "$conf" +%s) ))
+        case "$wan_up" in ''|*[!0-9]*) wan_up=0 ;; esac
+        if [ -n "$wan_ip" ] && [ "$conf_age" -ge 0 ] && [ "$conf_age" -lt "$wan_up" ] &&
+            awk -v ip="$wan_ip" '$1 == "local_addrs" && $3 != ip { bad = 1 } $1 == "local_addrs" { seen = 1 } END { exit !(seen && !bad) }' "$conf"; then
+            logger -t mango-ikev2 -p daemon.info "WAN ifup: config already bound to $wan_ip; reload skipped"
+            exit 0
+        fi
+    fi
     # Keep the event serialized, but don't pass its lock into the watcher.
     /etc/init.d/mango_ikev2 reload 7>&-
 ) >/dev/null 2>&1 &
