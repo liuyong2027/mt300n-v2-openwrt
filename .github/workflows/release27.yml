@@ -5,7 +5,8 @@
       "branches": [
         "codex/mt300n-v2-release27",
         "cursor/r27-link-nounset-build-4405",
-        "cursor/r27-rekey-child-log-4405"
+        "cursor/r27-rekey-child-log-4405",
+        "cursor/r27-probe-warn-log-59f7"
       ],
       "paths": [
         "release27/**",
