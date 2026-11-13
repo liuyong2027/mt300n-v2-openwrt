@@ -992,5 +992,76 @@ class EventLog(unittest.TestCase):
         subprocess.run(['node', '--check', str(path)], check=True)
 
 
+class FirewallInclude(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.r = Path(self.temp.name)
+        self.bin = self.r / 'bin'
+        self.bin.mkdir()
+        self.state = self.r / 'state'
+        self.lock = self.r / 'lock'
+        self.state.mkdir()
+        self.lock.mkdir()
+        (self.bin / 'uci').write_text(
+            '#!/bin/sh\nkey=${3##*.}\n'
+            'case "$key" in enabled) echo 1;; mode) echo split;; *) exit 1;; esac\n')
+        (self.bin / 'nft').write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_NFT"\n'
+            'prev=\nfor arg in "$@"; do\n'
+            '  if [ "$prev" = -f ]; then cat "$arg" >> "$FAKE_NFT_FILES"; printf "\\n---\\n" >> "$FAKE_NFT_FILES"; fi\n'
+            '  prev=$arg\ndone\nexit 0\n')
+        (self.bin / 'logger').write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_LOGGER"\n')
+        (self.bin / 'ip').write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$FAKE_IP"\n'
+            'if [ "$FAKE_LINK" != present ] && [ "$1 $2 $3" = "link show xfrm-mango" ]; then exit 1; fi\n'
+            'exit 0\n')
+        (self.bin / 'mango-ikev2-generate').write_text('#!/bin/sh\nprintf "%s\\n" "table inet mango_ikev2 {}"\n')
+        for path in self.bin.iterdir():
+            path.chmod(0o755)
+        text = (PACKAGE / 'usr/libexec/mango-ikev2-fw').read_text()
+        text = text.replace('/var/lock', str(self.lock))
+        text = text.replace('/var/etc/mango-ikev2', str(self.state))
+        text = text.replace('/usr/libexec/', str(self.bin) + '/')
+        text = text.replace('/usr/sbin/nft', str(self.bin / 'nft'))
+        self.script = self.r / 'fw'
+        self.script.write_text(text)
+        self.script.chmod(0o755)
+        self.env = dict(os.environ, PATH=str(self.bin) + ':' + os.environ['PATH'],
+                        FAKE_NFT=str(self.r / 'nft.log'),
+                        FAKE_NFT_FILES=str(self.r / 'nft-files'),
+                        FAKE_LOGGER=str(self.r / 'logger.log'),
+                        FAKE_IP=str(self.r / 'ip.log'),
+                        FAKE_LINK='missing')
+
+    def run_fw(self):
+        return subprocess.run(['sh', str(self.script)], env=self.env, text=True,
+                              capture_output=True, timeout=10)
+
+    def test_missing_xfrm_defers_routes_and_still_inserts_accepts(self):
+        result = self.run_fw()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('xfrm-mango not present yet; tunnel routes deferred',
+                      (self.r / 'logger.log').read_text())
+        ip_log = (self.r / 'ip.log').read_text()
+        self.assertNotIn('route replace', ip_log)
+        self.assertNotIn('rule add', ip_log)
+        inserted = (self.r / 'nft-files').read_text()
+        self.assertIn('mango-xfrm-out', inserted)
+        self.assertIn('mango-xfrm-in', inserted)
+        self.assertIn('oifname "xfrm-mango" accept', inserted)
+
+    def test_present_xfrm_still_installs_tunnel_routes(self):
+        self.env['FAKE_LINK'] = 'present'
+        result = self.run_fw()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.r / 'logger.log').exists())
+        ip_log = (self.r / 'ip.log').read_text()
+        self.assertIn('route replace default dev xfrm-mango table 101', ip_log)
+        self.assertIn('route replace 1.1.1.1/32 dev xfrm-mango', ip_log)
+        self.assertIn('route replace 8.8.8.8/32 dev xfrm-mango', ip_log)
+        self.assertIn('rule add priority 10001 fwmark 0x101/0xffffffff table 101', ip_log)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
