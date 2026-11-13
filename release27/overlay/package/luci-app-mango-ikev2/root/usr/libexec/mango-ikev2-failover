@@ -290,6 +290,24 @@ transition_grace() {
     [ $((now - since)) -lt "$limit" ]
 }
 
+# Close a negotiation grace window. Only a healthy SA logs completion, once,
+# so a finished rekey is not left on the BACKOFF row. child/down/expired
+# keep the existing failure path and must not record success.
+finish_transition() {
+    local peer="$1" health="$2" since= kind= now
+    [ -r "$STATE/transition-$peer" ] || return 0
+    read -r since kind < "$STATE/transition-$peer" || true
+    rm -f "$STATE/transition-$peer"
+    [ "$health" = healthy ] || return 0
+    now=$(cut -d. -f1 /proc/uptime)
+    case "$since" in ''|*[!0-9]*) since=$now ;; esac
+    [ "${#since}" -le 9 ] || since=$now
+    [ "$since" -le "$now" ] || since=$now
+    case "$kind" in connecting|transition) ;; *) kind=transition ;; esac
+    log_event ok "$peer" "negotiation completed ($kind, $((now - since))s)"
+    return 0
+}
+
 begin_connecting() {
     printf '%s connecting\n' "$(cut -d. -f1 /proc/uptime)" > "$STATE/transition-$1"
 }
@@ -327,14 +345,14 @@ mark_up() {
             return 1
             ;;
         healthy)
-            rm -f "$STATE/transition-$peer"
+            finish_transition "$peer" healthy
             vip=$(peer_vip "$peer")
             if pin_vip "$vip" && ensure_dns_routes && datapath_ok; then
                 mark_connected "$peer" "$note vip=${vip:-?}"
                 return 0
             fi
             ;;
-        child|down) rm -f "$STATE/transition-$peer" ;;
+        child|down) finish_transition "$peer" "$health" ;;
     esac
     return 1
 }
@@ -441,7 +459,7 @@ expired_transition() {
     read_sas || { log_event fail "$active" 'SA query unavailable during recovery'; return 0; }
     fresh=$(sa_health "$active")
     case "$fresh" in
-        healthy|child|down) rm -f "$STATE/transition-$active"; return 0 ;;
+        healthy|child|down) finish_transition "$active" "$fresh"; return 0 ;;
     esac
     transition_grace "$active" "$fresh" && return 0
     if [ "$phase" != connecting ]; then
@@ -477,7 +495,7 @@ case "$health" in
         expired_transition "$health"
         exit 0
         ;;
-    *) rm -f "$STATE/transition-$active" ;;
+    *) finish_transition "$active" "$health" ;;
 esac
 
 now=$(cut -d. -f1 /proc/uptime)

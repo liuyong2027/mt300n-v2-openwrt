@@ -50,6 +50,7 @@ function resultLabel(r) {
 	return ({
 		ok: '成功',
 		warn: '警告',
+		backoff: '协商中',
 		fail: '失败',
 		switch: '节点切换',
 		down: '断开'
@@ -60,6 +61,7 @@ function resultClass(r) {
 	return ({
 		ok: 'notice',
 		warn: 'warning',
+		backoff: '',
 		fail: 'danger',
 		switch: 'warning',
 		down: 'warning'
@@ -243,7 +245,7 @@ return view.extend({
 
 		return E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, ['连接记录']),
-			E('div', { 'class': 'cbi-section-descr' }, ['记录连通成功、探测警告、失败与节点切换（含时间），不含 strongSwan 明细。']),
+			E('div', { 'class': 'cbi-section-descr' }, ['记录连通成功、协商、探测警告、失败与节点切换（含时间），不含 strongSwan 明细。']),
 			E('div', { 'class': 'table cbi-section-table' }, rows)
 		]);
 	},

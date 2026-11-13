@@ -457,6 +457,7 @@ class Runtime(unittest.TestCase):
         log = self.r / 'events.log'
         log.write_text(
             '2026-11-12 08:00:00\tok\t主服务器\tvpn\tid\tconnected vip=10.0.0.8\n'
+            '2026-11-13 08:30:00\tbackoff\t主服务器\tvpn\tid\tnegotiation grace started (transition)\n'
             '2026-11-13 09:00:00\twarn\t主服务器\tvpn\tid\ttunnel probes failed (1/3)\n'
             '2026-11-13 09:00:30\twarn\t主服务器\tvpn\tid\ttunnel probes failed (2/3)\n')
         status = self.status()
@@ -472,6 +473,81 @@ class Runtime(unittest.TestCase):
         self.assertEqual(status['last_fail'], '2026-11-13 09:01:00')
         self.assertEqual(status['last_switch'], '2026-11-13 09:03:00')
         self.assertIn('节点切换', status['last_switch_detail'])
+
+    def test_grace_completion_logged_once_when_sa_returns_healthy(self):
+        self.sas(sa_rekeyed_only())
+        self.run_cycle(advance=False)
+        self.assertEqual(
+            [(row[1], row[-1]) for row in self.trace('mango-ikev2-log')
+             if 'negotiation grace started' in row[-1]],
+            [('backoff', 'negotiation grace started (transition)')])
+        (self.state / 'logged-up').write_text('mango\n')
+        (self.r / 'trace').write_text('')
+        self.sas(sa())
+        self.d['now'] = 1040
+        self.run_cycle(advance=False)
+        self.assertEqual(
+            [row[-1] for row in self.trace('mango-ikev2-log') if row[1] == 'ok'],
+            ['negotiation completed (transition, 40s)'])
+        self.assertFalse((self.state / 'transition-mango').exists())
+        (self.r / 'trace').write_text('')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+
+    def test_connecting_grace_completion_keeps_kind_and_elapsed_time(self):
+        self.sas('mango: #1, CONNECTING, IKEv2\n')
+        self.run_cycle(advance=False)
+        (self.state / 'logged-up').write_text('mango\n')
+        (self.r / 'trace').write_text('')
+        self.sas(sa())
+        self.d['now'] = 1030
+        self.run_cycle(advance=False)
+        self.assertEqual(
+            [row[-1] for row in self.trace('mango-ikev2-log') if row[1] == 'ok'],
+            ['negotiation completed (connecting, 30s)'])
+
+    def test_healthy_cycle_without_grace_window_does_not_log_completion(self):
+        self.sas(sa())
+        (self.state / 'logged-up').write_text('mango\n')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+
+    def test_grace_closed_as_child_down_or_expired_does_not_log_success(self):
+        (self.state / 'transition-mango').write_text('1000 transition\n')
+        self.sas(sa(installed=False))
+        self.run_cycle(advance=False)
+        self.assertFalse(any(row[1] == 'ok' for row in self.trace('mango-ikev2-log')))
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+        self.assertFalse((self.state / 'transition-mango').exists())
+
+        for name in list(self.state.iterdir()):
+            if name.name != 'failover.lock':
+                name.unlink()
+        (self.r / 'trace').write_text('')
+        (self.state / 'transition-mango').write_text('1000 transition\n')
+        self.sas('')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+        self.assertTrue(any(row[1] == 'fail' for row in self.trace('mango-ikev2-log')))
+
+        for name in list(self.state.iterdir()):
+            if name.name != 'failover.lock':
+                name.unlink()
+        (self.r / 'trace').write_text('')
+        self.d['now'] = 1000
+        self.sas(sa_rekeyed_only())
+        self.run_cycle(advance=False)
+        self.d['now'] = 1120
+        (self.r / 'trace').write_text('')
+        self.run_cycle(advance=False)
+        self.assertFalse(any('negotiation completed' in row[-1]
+                             for row in self.trace('mango-ikev2-log')))
+        self.assertTrue(any('negotiation grace expired' in row[-1]
+                            for row in self.trace('mango-ikev2-log')))
 
     def test_success_breaks_probe_failure_streak(self):
         self.sas(sa())
@@ -909,6 +985,10 @@ class EventLog(unittest.TestCase):
         self.assertIn("warn: 'warning'", text)
         self.assertNotIn("warn: 'danger'", text)
         self.assertNotIn("warn: '失败'", text)
+        self.assertIn("backoff: '协商中'", text)
+        self.assertIn("backoff: ''", text)
+        self.assertNotIn("backoff: 'warning'", text)
+        self.assertNotIn("backoff: 'danger'", text)
         subprocess.run(['node', '--check', str(path)], check=True)
 
 
