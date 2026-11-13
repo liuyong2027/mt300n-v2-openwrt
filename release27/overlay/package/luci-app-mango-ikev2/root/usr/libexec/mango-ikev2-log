@@ -1,0 +1,47 @@
+#!/bin/sh
+# Append one IKEv2 connection event. Keeps the last 20 lines.
+# Requires a non-empty result (ok|warn|fail|switch|backoff|down); bare invocation
+# must not write a blank row into the LuCI event log.
+# warn is a debounced probe miss. It is not a failure.
+set -eu
+
+usage() {
+	echo "usage: $0 <ok|warn|fail|switch|backoff|down> <peer> [detail...]" >&2
+	exit 2
+}
+
+[ "$#" -ge 1 ] || usage
+result=$1
+case "$result" in
+	ok|warn|fail|switch|backoff|down) ;;
+	*) usage ;;
+esac
+peer=${2:-mango}
+shift 2 2>/dev/null || shift 1 2>/dev/null || true
+detail=$(printf '%s' "$*" | tr '\n' ' ' | cut -c1-120)
+
+case "$peer" in
+	mango3|备用服务器2)
+		peer_label='备用服务器2'
+		server=$(uci -q get mango_ikev2.main.server3 || true)
+		remote_id=$(uci -q get mango_ikev2.main.remote_id3 || true)
+		;;
+	mango2|备用服务器1|备用服务器)
+		peer_label='备用服务器1'
+		server=$(uci -q get mango_ikev2.main.server2 || true)
+		remote_id=$(uci -q get mango_ikev2.main.remote_id2 || true)
+		;;
+	*)
+		peer_label='主服务器'
+		server=$(uci -q get mango_ikev2.main.server || true)
+		remote_id=$(uci -q get mango_ikev2.main.remote_id || true)
+		;;
+esac
+[ -n "$remote_id" ] || remote_id=$server
+detail=$(printf '%s' "$detail" | sed 's/mango3/备用服务器2/g; s/mango2/备用服务器1/g; s/mango/主服务器/g')
+
+LOG=${MANGO_IKEV2_EVENT_LOG:-/var/log/mango-ikev2-events.log}
+mkdir -p "$(dirname "$LOG")"
+ts=$(date '+%Y-%m-%d %H:%M:%S')
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ts" "$result" "$peer_label" "${server:-?}" "${remote_id:-?}" "${detail:-}" >> "$LOG"
+tail -n 20 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG" || true

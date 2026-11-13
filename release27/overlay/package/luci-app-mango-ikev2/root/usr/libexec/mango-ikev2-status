@@ -1,0 +1,68 @@
+#!/bin/sh
+set -eu
+enabled=$(uci -q get mango_ikev2.main.enabled || echo 0)
+mode=$(uci -q get mango_ikev2.main.mode || echo direct)
+active=$(cat /var/etc/mango-ikev2/active 2>/dev/null || echo mango)
+server=$(uci -q get mango_ikev2.main.server || true)
+remote_id=$(uci -q get mango_ikev2.main.remote_id || true)
+peer_label='主服务器'
+if [ "$active" = mango2 ]; then
+	server=$(uci -q get mango_ikev2.main.server2 || echo "$server")
+	remote_id=$(uci -q get mango_ikev2.main.remote_id2 || echo "$remote_id")
+	peer_label='备用服务器1'
+elif [ "$active" = mango3 ]; then
+	server=$(uci -q get mango_ikev2.main.server3 || echo "$server")
+	remote_id=$(uci -q get mango_ikev2.main.remote_id3 || echo "$remote_id")
+	peer_label='备用服务器2'
+fi
+[ -n "$remote_id" ] || remote_id=$server
+
+sas=$(swanctl --list-sas 2>/dev/null || true)
+sas=$(printf '%s\n' "$sas" | awk -v p="$active" '
+    /^[^[:space:]]/ { show = (index($0, p ": ") == 1) }
+    show { print }
+')
+health_peer=; health_time=0
+if [ -r /var/etc/mango-ikev2/health-up ]; then
+    read -r health_peer health_time < /var/etc/mango-ikev2/health-up || true
+fi
+case "$health_time" in ''|*[!0-9]*) health_time=0 ;; esac
+now=$(cut -d. -f1 /proc/uptime)
+health_age=$((now - health_time))
+state=down
+vip=
+ago=
+if [ "$enabled" = 1 ] && [ "$mode" != direct ] && [ "$health_peer" = "$active" ] &&
+   [ "$health_age" -ge 0 ] && [ "$health_age" -le 90 ] &&
+   printf '%s\n' "$sas" | grep -q "^$active: .*ESTABLISHED" &&
+   printf '%s\n' "$sas" | grep -q '^  .*INSTALLED'; then
+	state=up
+	vip=$(printf '%s\n' "$sas" | sed -n 's/^  local .*\[\([0-9.]*\)\]$/\1/p' | head -n 1)
+	ago=$(printf '%s\n' "$sas" | sed -n 's/^  established \([0-9]*\)s ago.*/\1/p' | head -n 1)
+fi
+
+LOG=/var/log/mango-ikev2-events.log
+last_ok=; last_fail=; last_switch=; last_switch_detail=
+# Match the result column exactly. `warn` is a debounced probe miss and must
+# not move 最近失败. Detail text may contain the word "failed" (including
+# "probe recovered after N failed") and must not be treated as a failure.
+# A later `ok` moves 最近成功.
+if [ -s "$LOG" ]; then
+	last_ok=$(awk -F'\t' 'BEGIN{t=""} $2=="ok"{t=$1} END{print t}' "$LOG")
+	last_fail=$(awk -F'\t' 'BEGIN{t=""} $2=="fail"{t=$1} END{print t}' "$LOG")
+	last_switch=$(awk -F'\t' 'BEGIN{t=""} $2=="switch"{t=$1} END{print t}' "$LOG")
+	last_switch_detail=$(awk -F'\t' 'BEGIN{d=""} $2=="switch"{d=$6} END{print d}' "$LOG")
+fi
+
+printf 'enabled=%s\n' "$enabled"
+printf 'mode=%s\n' "$mode"
+printf 'state=%s\n' "$state"
+printf 'peer=%s\n' "$peer_label"
+printf 'server=%s\n' "${server:-}"
+printf 'remote_id=%s\n' "${remote_id:-}"
+printf 'vip=%s\n' "${vip:-}"
+printf 'established_s=%s\n' "${ago:-}"
+printf 'last_ok=%s\n' "${last_ok:-}"
+printf 'last_fail=%s\n' "${last_fail:-}"
+printf 'last_switch=%s\n' "${last_switch:-}"
+printf 'last_switch_detail=%s\n' "${last_switch_detail:-}"

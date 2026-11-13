@@ -1,0 +1,16 @@
+#!/bin/sh
+# Use the netifd runtime device: handles DHCP, PPPoE and renamed WAN devices.
+set -e
+. /lib/functions/network.sh
+network_flush_cache
+network_get_device device wan || exit 1
+[ -n "$device" ] || exit 1
+ifid=$(uci -q get mango_ikev2.main.ifid || echo 42)
+mtu=$(uci -q get mango_ikev2.main.xfrm_mtu || echo 1280)
+case "$ifid:$mtu" in *[!0-9:]*|:*|*:) exit 1 ;; esac
+[ "$ifid" -ge 1 ] && [ "$ifid" -le 65535 ] || exit 1
+[ "$mtu" -ge 1280 ] && [ "$mtu" -le 1500 ] || exit 1
+if ! ip link show xfrm-mango >/dev/null 2>&1; then
+    ip link add xfrm-mango type xfrm dev "$device" if_id "$ifid" || exit 1
+fi
+ip link set xfrm-mango mtu "$mtu" up
