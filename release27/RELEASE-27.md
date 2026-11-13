@@ -7,6 +7,7 @@
 - `mango-ikev2-link`：与 `/lib/functions/network.sh` 共用时使用 `set -e`（不用 `-u`）。`network_flush_cache` 会 unset `__NETWORK_CACHE`，在 `set -u` 下会导致 xfrm-mango 创建失败、IKEv2 起不来（2026-11-10 GL2 保留配置刷机实机确认）。
 - **开机 fw4 include**：fw4（S19）早于 `mango_ikev2`（S95）。分流模式下 `xfrm-mango` 尚未创建时，`mango-ikev2-fw` 只跳过 table 101 和隧道 DNS 路由并记一条 info，仍然插入 fw4 的 `mango-xfrm` 接受规则，以 0 退出。接口出现后由服务 apply 和 failover 补上路由。
 - **ZeroTier 启动日志**：IKEv2 镜像没有 `mango-zt-direct`。init 的三处调用都先判断该程序是否可执行；没有它时静默跳过，不再误报 `Rule refresh failed`。装有该程序的代理镜像仍照常刷新规则。Release 22 到 25 的配方校验和已随这次补丁更新。
+- **开机不重复拨号**：S95 已经用当前 WAN 地址拨通后，迟到的 WAN `ifup` 不再无条件 reload。只有配置写于这次 WAN 起来之后、且全部 `local_addrs` 都等于当前 WAN IPv4 时才跳过；`ifupdate`、地址变化、更早的配置或缺少配置仍会重载。
 - 纳入 `a1aebc2` / `67f556a`：健康路径不 flush 正确 VIP；SSR 回退仅显式启用、阈值有效且 helper 可执行并成功时才结束轮换。
 - Issue #9：从 netifd 的 WAN 运行状态取得真实 IPv4，生成 `local_addrs`，关闭 MOBIKE；拨号前清理隧道 VIP 并重新加载 WAN 绑定。WAN 暂未就绪时不使用 VIP 或任意网卡地址拨号。
 - 只从当前节点的 SA 块提取 CHILD_SA/VIP；恢复 table 101、mark 规则和隧道 DNS 路由后再探测 ESP 通路。正确 VIP 原地保留，不打断 NAT 长连接。
