@@ -1,0 +1,35 @@
+libblkid-tiny: clear errno before each filesystem probe
+
+util-linux resets errno before calling a superblock probefunc.
+libblkid-tiny does not. probe_exfat returns -errno when the root
+directory has no 0x83 volume label and errno is already nonzero, so
+block info drops an unlabeled exFAT volume.
+
+Clear errno immediately before each probefunc. A missing label stays
+a successful probe. A real read error during that probe still returns
+-errno.
+
+diff --git a/libblkid-tiny/libblkid-tiny.c b/libblkid-tiny/libblkid-tiny.c
+index 9e67439..9e3ffda 100644
+--- a/libblkid-tiny/libblkid-tiny.c
++++ b/libblkid-tiny/libblkid-tiny.c
+@@ -1,4 +1,5 @@
+ #include <stdio.h>
++#include <errno.h>
+ #include <sys/utsname.h>
+ 
+ #include "libblkid-tiny.h"
+@@ -233,6 +234,13 @@ int probe_block(char *block, struct blkid_struct_probe *pr)
+ 
+ 		if (mag && mag->magic) {
+ 			DEBUG("probing %s\n", idinfos[i]->name);
++			/*
++			 * util-linux superblocks.c clears errno before each
++			 * probe. probe_exfat returns -errno when the root
++			 * directory has no 0x83 volume label, so a stale
++			 * errno hides an otherwise valid exFAT filesystem.
++			 */
++			errno = 0;
+ 			pr->err = idinfos[i]->probefunc(pr, mag);
+ 			pr->id = idinfos[i];
+ 			if (!pr->err)

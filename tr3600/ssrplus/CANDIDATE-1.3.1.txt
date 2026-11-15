@@ -1,0 +1,21 @@
+Cudy TR3600 V1.0 / R126 — 1.3.1 候选 · SSR Plus+ + IKEv2 双栈
+
+在已发布的 tr3600-v1.3.0（OpenWrt 25.12.6，提交 9d37e9374652b9f81a7a2fcb2074eb61ef23c052）上修复无卷标 exFAT 识别。
+服务集合与 1.3.0 相同。版本标识：tr3600-ssrplus-ikev2-1.3.1。
+fstools 仍是 2026.05.23~16718b6e，包修订从 r1 升到 r2。
+
+修复
+- libblkid-tiny 在每次文件系统探测前清零 errno（与 util-linux 一致）
+- 没有 0x83 卷标项的 exFAT 不再被残留 errno 当成读取失败，block info 可以列出它
+- 有卷标的 exFAT，以及 FAT/vfat，探测结果不变
+- 探测过程中真正的读错误仍然返回 -errno
+
+刷机
+- 仅适用于本项目 TR3600 定制 OpenWrt sysupgrade，不是原厂固件
+- 可从 1.3.0 勾选保留配置升级
+- 升级前备份配置与 ZeroTier 身份
+
+验收建议
+1. 保留配置升级后：SSR / IKEv2 / ZT / DDNS / WebFiles / 双频 / LED 与 1.3.0 一致
+2. 插入无卷标 exFAT U 盘：`block info` 能看到分区，Cudy「已授权磁盘」出现该盘
+3. 有卷标的 exFAT、FAT32、ext4、NTFS 仍能识别
