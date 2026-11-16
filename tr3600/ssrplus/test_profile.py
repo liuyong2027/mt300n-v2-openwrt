@@ -450,7 +450,12 @@ class OverlayPatchTests(unittest.TestCase):
         self.makefile.write_text(self.command)
         self.init=self.root/'feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr'
         self.init.parent.mkdir(parents=True)
-        self.init.write_text('start() {\n :\n}\nstop() {\n :\n}\n')
+        self.init.write_text(
+            'start() {\n :\n}\nstop() {\n :\n}\n'
+            '\t\t[ -z "$ip" ] && ip=$(curl -sSL "http://119.29.29.29/d?dn=$host" | awk -F \';\' \'{print $1}\')\n'
+            '\t\t\t\twandns="$(ifstatus wan | jsonfilter -e \'@["dns-server"][0]\' || echo "119.29.29.29")"\n')
+        ssr_makefile=self.root/'feeds/helloworld/luci-app-ssr-plus/Makefile'
+        ssr_makefile.write_text('PKG_RELEASE:=1\n')
         rules=self.root/'feeds/helloworld/luci-app-ssr-plus/root/usr/bin/ssr-rules'
         rules.parent.mkdir(parents=True)
         rules.write_text('gen_include_nft() {\n\tcat <<-EOF >>"$FWI"\n\t\ttrue\n\tEOF\n\tchmod +x "$FWI"\n}\n')
@@ -469,6 +474,9 @@ class OverlayPatchTests(unittest.TestCase):
         start=patched.index('\nstart() {')
         body=patched[start:]
         self.assertLess(body.index('mango-ikev2-peer-engine yield'), body.index('start_without_cudy_gate'))
+        self.assertNotIn('119.29.29.29', patched)
+        self.assertIn('echo "202.106.46.151"', patched)
+        self.assertEqual((self.root/'feeds/helloworld/luci-app-ssr-plus/Makefile').read_text(), 'PKG_RELEASE:=2\n')
 
     def test_changed_or_duplicate_overlay_command_is_rejected(self):
         for command in ('',self.command+self.command):
