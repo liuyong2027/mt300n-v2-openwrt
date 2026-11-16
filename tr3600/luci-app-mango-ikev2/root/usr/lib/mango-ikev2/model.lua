@@ -39,7 +39,21 @@ end
 -- Tunnel resolvers are never domestic. Router-originated queries use /32 routes
 -- via xfrm; LAN queries are redirected to local dnsmasq first.
 M.tunnel_dns = {'1.1.1.1', '8.8.8.8'}
-M.domestic_dns = {'223.5.5.5', '119.29.29.29'}
+M.domestic_dns = (function()
+    -- ISP-provided IPv4 resolvers. Host tests may point MANGO_IKEV2_RESOLV_AUTO
+    -- at a fixture; the router default is netifd's resolv.conf.auto.
+    local path = os.getenv('MANGO_IKEV2_RESOLV_AUTO') or '/tmp/resolv.conf.d/resolv.conf.auto'
+    local list, f = {}, io.open(path, 'r')
+    if f then
+        for line in f:lines() do
+            local ip = line:match('^%s*nameserver%s+(%d+%.%d+%.%d+%.%d+)%s*$')
+            if ip and ip ~= '127.0.0.1' then list[#list + 1] = ip end
+        end
+        f:close()
+    end
+    if #list == 0 then list = {'202.106.46.151', '202.106.195.68'} end
+    return list
+end)()
 
 local function parse_lans(raw)
     local list, seen = {}, {}

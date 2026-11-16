@@ -176,7 +176,18 @@ test "$(cat "$tmp/state/fallback-fail")" = 0
 
 # The SSR service hook yields before the upstream start.
 printf '%s\n' '	python3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay' > "$tmp/patch/feeds/helloworld/xray-core/Makefile"
-printf '%s\n' 'start() {' ':' '}' 'stop() {' ':' '}' > "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr"
+mkdir -p "$tmp/patch/feeds/helloworld/luci-app-ssr-plus"
+printf '%s\n' 'PKG_RELEASE:=1' > "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/Makefile"
+cat > "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr" << 'EOF'
+start() {
+:
+}
+stop() {
+:
+}
+		[ -z "$ip" ] && ip=$(curl -sSL "http://119.29.29.29/d?dn=$host" | awk -F ';' '{print $1}')
+				wandns="$(ifstatus wan | jsonfilter -e '@["dns-server"][0]' || echo "119.29.29.29")"
+EOF
 printf '%s\n' 'gen_include_nft() {' '	cat <<-EOF >>"$FWI"' '		true' '	EOF' '	chmod +x "$FWI"' '}' > "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/usr/bin/ssr-rules"
 python3 "$patch" "$tmp/patch" >/dev/null
 python3 - "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr" << 'PY'
@@ -185,6 +196,10 @@ from pathlib import Path
 text = Path(sys.argv[1]).read_text()
 body = text[text.index("\nstart() {"):]
 assert body.index("mango-ikev2-peer-engine yield") < body.index("start_without_cudy_gate")
+assert '119.29.29.29' not in text
+assert 'echo "202.106.46.151"' in text
+makefile = Path(sys.argv[1]).parents[3] / 'Makefile'
+assert makefile.read_text() == 'PKG_RELEASE:=2\n'
 PY
 
 echo "SSR start yields IKEv2; claim, release, and fallback stay exclusive"

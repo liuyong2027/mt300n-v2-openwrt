@@ -11,6 +11,12 @@ s=s.replace(anchor,'\t$(GO_BIN_PATH) python3 $(PKG_BUILD_DIR)/tools/eip93/overla
 p.write_text(s,newline='\n')
 p=root/'feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr'
 s=p.read_text()
+httpd = '\t\t[ -z "$ip" ] && ip=$(curl -sSL "http://119.29.29.29/d?dn=$host" | awk -F \';\' \'{print $1}\')\n'
+assert s.count(httpd) == 1, 'Tencent HTTPDNS fallback changed'
+s = s.replace(httpd, '')
+wan = '|| echo "119.29.29.29")'
+assert s.count(wan) == 1, 'WAN DNS fallback changed'
+s = s.replace(wan, '|| echo "202.106.46.151")', 1)
 for name in ('start','stop'):
     pattern=r'^'+name+r'\(\) \{'
     assert len(re.findall(pattern,s,re.M))==1,name
@@ -47,4 +53,8 @@ anchor='\tEOF\n\tchmod +x "$FWI"\n}'
 assert s.count(anchor)==1,'Pinned nft include generator changed'
 s=s.replace(anchor,'\t\t/usr/libexec/cudy-ss-ssr-interfaces\n'+anchor)
 rules.write_text(s,newline='\n')
+makefile = root/'feeds/helloworld/luci-app-ssr-plus/Makefile'
+text = makefile.read_text()
+assert text.count('PKG_RELEASE:=1\n') == 1, 'luci-app-ssr-plus release changed'
+makefile.write_text(text.replace('PKG_RELEASE:=1\n', 'PKG_RELEASE:=2\n', 1), newline='\n')
 

@@ -210,7 +210,7 @@ mango_ikev2_install_swanctl() {
     dir=${MANGO_IKEV2_SWANCTL_DIR:-/etc/swanctl/conf.d}
     mv "$tmp" "$CONF_DIR/swanctl.conf" || return 1
     ln -sfn "$CONF_DIR/swanctl.conf" "$dir/mango.conf" || return 1
-    swanctl --load-conns --noprompt >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1
+    swanctl --load-conns >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1
 }
 
 mango_ikev2_flush_vip_if_clear() {

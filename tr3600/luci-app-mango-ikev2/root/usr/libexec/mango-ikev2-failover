@@ -4,6 +4,10 @@
 # A CHILD_SA rekey keeps the previous child for a few seconds. Any INSTALLED
 # child is healthy; REKEYING/REKEYED/DELETING skips the tick. The tunnel VIP
 # is flushed only when no IKE SA exists.
+# CONNECTING is not an indefinite skip: after CONNECTING_GRACE seconds the
+# leftover SA is terminated and counted as a dial failure. A failed
+# swanctl --initiate also terminates a leftover CONNECTING SA so the next
+# watchdog tick can redial.
 # INTERNAL_ADDRESS_FAILURE switches to the next server immediately and does
 # not count toward the SSR fallback threshold. After every configured server
 # has returned that notify in the current round, back off and retry the primary.
@@ -12,6 +16,11 @@
 set -eu
 STATE="${MANGO_IKEV2_STATE:-/var/etc/mango-ikev2}"
 XFRM_IF=xfrm-mango
+# Bounded wait for IKE_SA_INIT with no reply. REKEYING stays skip.
+CONNECTING_GRACE="${MANGO_IKEV2_CONNECTING_GRACE:-60}"
+case "$CONNECTING_GRACE" in
+	''|*[!0-9]*) CONNECTING_GRACE=60 ;;
+esac
 MANGO_IKEV2_LIFECYCLE=${MANGO_IKEV2_LIFECYCLE:-/usr/lib/mango-ikev2/lifecycle.sh}
 # shellcheck disable=SC1090
 . "$MANGO_IKEV2_LIFECYCLE"
@@ -140,7 +149,7 @@ refresh_wan_bind() {
 	fi
 	mv "$tmp" "$STATE/swanctl.conf" || return 1
 	ln -sfn "$STATE/swanctl.conf" "$dir/mango.conf" || return 1
-	swanctl --load-conns --noprompt >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1 || return 1
+	swanctl --load-conns >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1 || return 1
 }
 
 # Boot can start the watchdog before WAN exists, so apply never created the
@@ -202,13 +211,18 @@ prepare_dial() {
 # healthy: an INSTALLED child is up (even if another child is still REKEYED).
 # skip: IKE is up and a child is REKEYING, REKEYED, DELETING, or otherwise
 #       mid-transition, with no INSTALLED child yet. Do nothing this tick.
+# connecting: IKE_SA is CONNECTING (IKE_SA_INIT in progress). Bounded grace.
 # child: IKE is ESTABLISHED and no child is installed or in transition.
 # down: no usable IKE SA.
 sa_health() {
 	local peer="$1" block
 	block=$(peer_block "$peer")
 	if ! printf '%s\n' "$block" | grep -E -q "^${peer}: .*ESTABLISHED"; then
-		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*(CONNECTING|REKEYING),"; then
+		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*CONNECTING,"; then
+			printf '%s\n' connecting
+			return 0
+		fi
+		if printf '%s\n' "$block" | grep -E -q "^${peer}: .*REKEYING,"; then
 			printf '%s\n' skip
 			return 0
 		fi
@@ -225,6 +239,42 @@ sa_health() {
 	fi
 	printf '%s\n' child
 	return 0
+}
+
+clear_connecting() {
+	rm -f "$STATE/connecting-$1"
+}
+
+# 0 = still inside the grace window (watchdog should wait).
+# 1 = grace expired; caller should terminate the leftover SA and count a failure.
+connecting_grace_ok() {
+	local peer="$1" now since
+	now=$(cut -d. -f1 /proc/uptime)
+	if [ ! -r "$STATE/connecting-$peer" ]; then
+		echo "$now" > "$STATE/connecting-$peer"
+		return 0
+	fi
+	since=$(cat "$STATE/connecting-$peer" 2>/dev/null || true)
+	case "$since" in
+		''|*[!0-9]*)
+			echo "$now" > "$STATE/connecting-$peer"
+			return 0
+			;;
+	esac
+	[ $((now - since)) -lt "$CONNECTING_GRACE" ]
+}
+
+terminate_connecting() {
+	local peer="$1" i=0
+	swanctl --terminate --ike "$peer" --timeout 3 >/dev/null 2>&1 || true
+	while [ "$i" -lt 5 ]; do
+		if ! peer_block "$peer" | grep -E -q "^${peer}: .*CONNECTING,"; then
+			break
+		fi
+		i=$((i + 1))
+		sleep 1
+	done
+	clear_connecting "$peer"
 }
 
 state_num() {
@@ -512,6 +562,12 @@ initiate() {
 	if [ "$rc" -ne 0 ] && [ "${after:-0}" -gt "${before:-0}" ]; then
 		return 2
 	fi
+	# A timed-out initiate leaves charon in CONNECTING (default retransmit
+	# budget ~165s). Clear it so the next watchdog tick sees down and can
+	# count a second failure instead of skipping indefinitely.
+	if [ "$rc" -ne 0 ]; then
+		terminate_connecting "$peer"
+	fi
 	return "$rc"
 }
 
@@ -647,12 +703,22 @@ finish_redial_failure() {
 }
 
 health=$(sa_health "$active")
+[ "$health" = connecting ] || clear_connecting "$active"
 case "$health" in
+connecting)
+	if connecting_grace_ok "$active"; then
+		exit 0
+	fi
+	log_event fail "$active" "CONNECTING grace expired (${CONNECTING_GRACE}s); leftover SA terminated"
+	save_charon_snip
+	terminate_connecting "$active"
+	finish_redial_failure "$active"
+	;;
 healthy)
 	for p in $PEERS; do
 		[ "$p" = "$active" ] && continue
 		case "$(sa_health "$p")" in
-			healthy|skip|child)
+			healthy|skip|child|connecting)
 				swanctl --terminate --ike "$p" --timeout 5 >/dev/null 2>&1 || true
 				;;
 		esac
