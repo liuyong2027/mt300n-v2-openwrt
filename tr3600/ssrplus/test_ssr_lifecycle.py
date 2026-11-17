@@ -58,6 +58,12 @@ class SSRLifecycleTest(unittest.TestCase):
             text = (self.root / page).read_text(encoding='utf-8')
             self.assertNotRegex(text, r'(?s)\bon_(?:after_)?apply\b.{0,200}/etc/init.d/shadowsocksr\s+(?:reload|restart)')
 
+    def test_pinned_start_keeps_cudy_gate_and_isp_dns(self):
+        start = function(self.init, 'start_with_cudy_gate() {')
+        self.assertIn('/usr/libexec/cudy-ss-gate started', start)
+        self.assertIn('echo "202.106.46.151"', self.init)
+        self.assertNotIn('119.29.29.29', self.init)
+
     def test_concurrent_restarts_serialize_stop_and_start(self):
         with tempfile.TemporaryDirectory(prefix='ssr-restarts-') as directory:
             work = Path(directory)

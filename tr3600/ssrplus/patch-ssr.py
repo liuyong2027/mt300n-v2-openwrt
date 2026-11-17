@@ -339,14 +339,21 @@ s:tab("esc", translate("Bypass Domain List"))''')
     return text
 
 
+def patch_xray(text):
+    command = ('\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py '
+               '--go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay')
+    if text.count(command) != 1:
+        raise ValueError('Pinned Xray overlay command changed')
+    return text.replace(command, '\t$(GO_BIN_PATH) python3 '
+                        '$(PKG_BUILD_DIR)/tools/eip93/overlay.py --go go '
+                        '--out $(PKG_BUILD_DIR)/.eip93-overlay', 1)
+
+
 def patch(root):
     feed = root / 'feeds/helloworld'
     package = feed / 'luci-app-ssr-plus'
     changes = {
-        feed / 'xray-core/Makefile': lambda text: once(
-            text,
-            '\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay',
-            '\t$(GO_BIN_PATH) python3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go go --out $(PKG_BUILD_DIR)/.eip93-overlay'),
+        feed / 'xray-core/Makefile': patch_xray,
         package / 'root/etc/init.d/shadowsocksr': patch_init,
         package / 'root/usr/bin/ssr-rules': patch_rules,
         package / 'luasrc/model/cbi/shadowsocksr/control.lua': patch_control,

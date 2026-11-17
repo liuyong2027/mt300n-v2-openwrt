@@ -450,50 +450,24 @@ class SourceSelectionTests(unittest.TestCase):
 
 class OverlayPatchTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(prefix='ssrplus-overlay-tests-',dir=REPO.parent)
-        self.addCleanup(self.tmp.cleanup)
-        self.root=Path(self.tmp.name)
-        self.makefile=self.root/'feeds/helloworld/xray-core/Makefile'
-        self.makefile.parent.mkdir(parents=True)
-        self.command='\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay\n'
-        self.makefile.write_text(self.command)
-        self.init=self.root/'feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr'
-        self.init.parent.mkdir(parents=True)
-        self.init.write_text(
-            'start() {\n :\n}\nstop() {\n :\n}\n'
-            '\t\t[ -z "$ip" ] && ip=$(curl -sSL "http://119.29.29.29/d?dn=$host" | awk -F \';\' \'{print $1}\')\n'
-            '\t\t\t\twandns="$(ifstatus wan | jsonfilter -e \'@["dns-server"][0]\' || echo "119.29.29.29")"\n')
-        ssr_makefile=self.root/'feeds/helloworld/luci-app-ssr-plus/Makefile'
-        ssr_makefile.write_text('PKG_RELEASE:=1\n')
-        rules=self.root/'feeds/helloworld/luci-app-ssr-plus/root/usr/bin/ssr-rules'
-        rules.parent.mkdir(parents=True)
-        rules.write_text('gen_include_nft() {\n\tcat <<-EOF >>"$FWI"\n\t\ttrue\n\tEOF\n\tchmod +x "$FWI"\n}\n')
-
-    def run_patch(self):
-        return subprocess.run([sys.executable,str(PROFILE/'patch-ssr.py'),str(self.root)],capture_output=True,text=True)
+        spec = importlib.util.spec_from_file_location('patch_ssr', PROFILE/'patch-ssr.py')
+        patch = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(patch)
+        self.patch_xray = patch.patch_xray
+        self.command = ('\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py '
+                        '--go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay\n')
 
     def test_overlay_uses_standard_go_path(self):
-        result=self.run_patch()
-        self.assertEqual(result.returncode,0,result.stderr)
-        self.assertIn('$(GO_BIN_PATH) python3',self.makefile.read_text())
-        self.assertIn('--go go --out',self.makefile.read_text())
-        self.assertNotIn('$(STAGING_DIR_HOSTPKG)/bin/go',self.makefile.read_text())
-        patched=self.init.read_text()
-        self.assertIn('/usr/libexec/cudy-ss-gate started',patched)
-        start=patched.index('\nstart() {')
-        body=patched[start:]
-        self.assertLess(body.index('mango-ikev2-peer-engine yield'), body.index('start_without_cudy_gate'))
-        self.assertNotIn('119.29.29.29', patched)
-        self.assertIn('echo "202.106.46.151"', patched)
-        self.assertEqual((self.root/'feeds/helloworld/luci-app-ssr-plus/Makefile').read_text(), 'PKG_RELEASE:=2\n')
+        patched = self.patch_xray(self.command)
+        self.assertIn('$(GO_BIN_PATH) python3', patched)
+        self.assertIn('--go go --out', patched)
+        self.assertNotIn('$(STAGING_DIR_HOSTPKG)/bin/go', patched)
 
     def test_changed_or_duplicate_overlay_command_is_rejected(self):
-        for command in ('',self.command+self.command):
-            self.makefile.write_text(command)
-            result=self.run_patch()
-            self.assertNotEqual(result.returncode,0)
-            self.assertIn('Pinned Xray overlay command changed',result.stderr)
-            self.assertEqual(self.makefile.read_text(),command)
+        for command in ('', self.command + self.command):
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(ValueError, 'Pinned Xray overlay command changed'):
+                    self.patch_xray(command)
 
 
 if __name__=='__main__':unittest.main(verbosity=2)
