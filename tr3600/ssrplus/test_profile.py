@@ -63,10 +63,10 @@ net.ipv4.tcp_congestion_control = bbr
         self.assertNotIn('ss-integration.py',prepare)
         self.assertIn('patch-ssr.py',prepare)
         release=(self.tree/'files/etc/cudy-release').read_text().strip()
-        self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.2')
+        self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.3')
         source=json.loads((self.tree/'reports/ssrplus-source.json').read_text())
-        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns']
-        self.assertEqual(source['firmware_version'],'1.3.2')
+        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock']
+        self.assertEqual(source['firmware_version'],'1.3.3')
         self.assertEqual(source['candidate_revision'],1)
         self.assertEqual(source['integrated_field_fixes'],field_fixes)
         self.assertIn('PKG_RELEASE 2', source['fstools'])
@@ -84,6 +84,15 @@ net.ipv4.tcp_congestion_control = bbr
         self.assertIn('ipsec disable',defaults)
         peer=(self.tree/'tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-peer-engine').read_text()
         self.assertIn('shadowsocksr',peer)
+        self.assertIn('"$SSR_INIT" restart 9>&-', peer)
+        failover=(self.tree/'tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-failover').read_text()
+        init=(self.tree/'tr3600/luci-app-mango-ikev2/root/etc/init.d/mango_ikev2').read_text()
+        for text in (failover, init):
+            creds=text.index('swanctl --load-creds --noprompt --file')
+            self.assertLess(creds, text.index('swanctl --load-conns', creds))
+        fallback=(self.tree/'tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-fallback-ssr').read_text()
+        self.assertIn('uci set mango_ikev2.main.enabled=0', fallback)
+        self.assertLess(fallback.index('exec 9>&-'), fallback.index('"$MANGO_IKEV2_PEER_ENGINE" restore'))
         # The unified patch reads both feed sources and the copied runtime/files.
         # Feed installation alone is too early, as the full build demonstrated.
         unified=prepare.index('python3 "$kit/tr3600/ssrplus/unify-ss.py"')

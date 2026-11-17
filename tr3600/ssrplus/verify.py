@@ -13,8 +13,8 @@ import tempfile
 repo=Path(__file__).resolve().parents[2]
 source=json.loads((repo/'reports/ssrplus-source.json').read_text())
 assert source['xray_version']=='26.10.21',source
-field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns']
-assert source['firmware_version']=='1.3.2' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes,source
+field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock']
+assert source['firmware_version']=='1.3.3' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes,source
 assert source.get('openwrt_release')=='25.12.6',source
 assert 'PKG_RELEASE 2' in source.get('fstools',''),source
 fstools_makefile=(repo/'openwrt/package/system/fstools/Makefile').read_text()
@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-ikev2-1.3.2'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-ikev2-1.3.3'
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw',
         'usr/share/luci/menu.d/luci-app-mango-proxy.json',
         'usr/share/luci/menu.d/luci-app-cudy-ss.json','usr/libexec/rpcd/cudy.ss',
@@ -275,11 +275,11 @@ net.ipv4.tcp_congestion_control = bbr
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-ikev2-1.3.2-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-ikev2-1.3.3-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
-    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.3.1',
+    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-v1.3.2',
         'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
         'candidate_revision':1,'ikev2_dual_stack':True,'openwrt_release':'25.12.6','integrated_field_fixes_verified':field_fixes,
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
@@ -306,7 +306,7 @@ net.ipv4.tcp_congestion_control = bbr
         'hardware_flash_or_boot_tested':False}
     (out/'BUILD-VERIFICATION.json').write_text(json.dumps(proof,indent=2)+'\n')
     (out/'README.txt').write_text((repo/'tr3600/ssrplus/README.txt').read_text())
-    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.3.2.txt',out/'刷机与验收说明.txt')
+    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.3.3.txt',out/'刷机与验收说明.txt')
     shutil.copyfile(repo/'reports/resolved.config',out/'resolved.config')
     shutil.copyfile(repo/'reports/ssrplus-source.json',out/'SOURCE.json')
     print(json.dumps(proof,indent=2))

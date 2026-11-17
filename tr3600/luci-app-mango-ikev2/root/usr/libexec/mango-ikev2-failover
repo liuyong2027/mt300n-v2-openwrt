@@ -149,6 +149,11 @@ refresh_wan_bind() {
 	fi
 	mv "$tmp" "$STATE/swanctl.conf" || return 1
 	ln -sfn "$STATE/swanctl.conf" "$dir/mango.conf" || return 1
+	# --load-conns does not load secrets. --noprompt used to make that
+	# command fail and fall through to --load-all, which loaded the EAP
+	# secret as a side effect. Creds in this file are not picked up without
+	# --file; the conf.d symlink is not enough.
+	swanctl --load-creds --noprompt --file "$STATE/swanctl.conf" >/dev/null 2>&1 || return 1
 	swanctl --load-conns >/dev/null 2>&1 || swanctl --load-all --noprompt >/dev/null 2>&1 || return 1
 }
 

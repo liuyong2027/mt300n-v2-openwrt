@@ -26,7 +26,13 @@ MANGO_IKEV2_INIT=${MANGO_IKEV2_INIT:-/etc/init.d/mango_ikev2}
 MANGO_IKEV2_PEER_ENGINE=${MANGO_IKEV2_PEER_ENGINE:-/usr/libexec/mango-ikev2-peer-engine}
 "$MANGO_IKEV2_INIT" stop >/dev/null 2>&1 || true
 
-if "$MANGO_IKEV2_PEER_ENGINE" restore; then
+# Drop the lock inherited from failover before SSR is started. Stop above
+# still sees LOCK_HELD, so it does not deadlock on the same flock.
+if (
+	unset MANGO_IKEV2_LOCK_HELD || true
+	exec 9>&- 2>/dev/null || true
+	"$MANGO_IKEV2_PEER_ENGINE" restore
+); then
 	mkdir -p "$STATE"
 	echo 0 > "$STATE/fallback-fail"
 	"$MANGO_IKEV2_LOG" ok mango "已回退到 SSR" || true
