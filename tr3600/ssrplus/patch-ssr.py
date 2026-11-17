@@ -25,6 +25,10 @@ with_ssr_lock() (
         exec 8>&-
         "$@"
     )
+    # Keep the lock owner alive even if ash/dash optimize a final subshell.
+    result=$?
+    exec 8>&-
+    exit "$result"
 )
 
 _exit() {
