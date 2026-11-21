@@ -1,0 +1,14 @@
+Cudy TR3600 V1.0 / R126 — 1.3.3 候选 · SSR Plus+ + IKEv2 双栈
+
+在 1.3.2 上修复两次实机问题。版本标识：tr3600-ssrplus-ikev2-1.3.3。
+OpenWrt 基线仍是 25.12.6。本版只构建 sysupgrade。
+
+修复
+- 加载 swanctl 时先用 `--file` 装入 EAP 密钥，再装连接。重启后不再出现 no EAP key found。
+- IKEv2 回退到 SSR 时关掉生命周期锁的 fd 9，之后在 LuCI 里重新打开 IKEv2 不会卡在 flock。
+- 回退仍把 mango_ikev2.main.enabled 设为 0，不会自动切回。
+
+刷机
+- 仅适用于本项目 TR3600 定制 OpenWrt sysupgrade
+- 可从 1.3.2 勾选保留配置升级
+- 升级前备份配置与 ZeroTier 身份

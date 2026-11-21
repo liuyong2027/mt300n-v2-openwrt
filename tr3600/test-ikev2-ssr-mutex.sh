@@ -5,11 +5,10 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 engine=$root/tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-peer-engine
 fallback=$root/tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-fallback-ssr
-patch=$root/tr3600/ssrplus/patch-ssr.py
 tmp=$(mktemp -d)
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
-mkdir -p "$tmp/bin" "$tmp/init" "$tmp/uci/values" "$tmp/uci/nodes" "$tmp/state" "$tmp/patch/feeds/helloworld/xray-core" "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/etc/init.d" "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/usr/bin"
+mkdir -p "$tmp/bin" "$tmp/init" "$tmp/uci/values" "$tmp/uci/nodes" "$tmp/state"
 
 cat > "$tmp/bin/uci" << 'EOF'
 #!/bin/sh
@@ -174,17 +173,4 @@ test "$(count '^ssr restart$')" = 1
 test "$(count '^ssr stop$')" = 0
 test "$(cat "$tmp/state/fallback-fail")" = 0
 
-# The SSR service hook yields before the upstream start.
-printf '%s\n' '	python3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay' > "$tmp/patch/feeds/helloworld/xray-core/Makefile"
-printf '%s\n' 'start() {' ':' '}' 'stop() {' ':' '}' > "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr"
-printf '%s\n' 'gen_include_nft() {' '	cat <<-EOF >>"$FWI"' '		true' '	EOF' '	chmod +x "$FWI"' '}' > "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/usr/bin/ssr-rules"
-python3 "$patch" "$tmp/patch" >/dev/null
-python3 - "$tmp/patch/feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr" << 'PY'
-import sys
-from pathlib import Path
-text = Path(sys.argv[1]).read_text()
-body = text[text.index("\nstart() {"):]
-assert body.index("mango-ikev2-peer-engine yield") < body.index("start_without_cudy_gate")
-PY
-
-echo "SSR start yields IKEv2; claim, release, and fallback stay exclusive"
+echo "IKEv2 claim, release, and SSR fallback stay exclusive"

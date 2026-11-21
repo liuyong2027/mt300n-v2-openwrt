@@ -1,0 +1,28 @@
+From: TR3600 firmware maintainers
+Subject: [PATCH] s3: derive the directory bit from stat when returning DOS mode
+
+The xattr_tdb VFS stores DOS attributes by device and inode. A stale entry
+on FAT can carry FILE_ATTRIBUTE_DIRECTORY for a current regular file.
+Both synchronous opens and asynchronous directory listings pass through
+dos_mode_post. Clear the directory bit there for non-directories, keeping
+the other DOS attributes and the existing real-directory handling.
+
+--- a/source3/smbd/dosmode.c
++++ b/source3/smbd/dosmode.c
+@@ -690,8 +690,14 @@ static uint32_t dos_mode_post(uint32_t dosmode,
+ 		if (!(dosmode & FILE_ATTRIBUTE_REPARSE_POINT)) {
+ 			dosmode |= FILE_ATTRIBUTE_DIRECTORY;
+ 		}
+-	} else if (dosmode == 0) {
+-		dosmode = FILE_ATTRIBUTE_NORMAL;
++	} else {
++		/* Persistent DOS metadata may belong to an earlier inode owner.
++		 * Only the current stat result can identify a directory.
++		 */
++		dosmode &= ~FILE_ATTRIBUTE_DIRECTORY;
++		if (dosmode == 0) {
++			dosmode = FILE_ATTRIBUTE_NORMAL;
++		}
+ 	}
+ 
+ 	dosmode = filter_mode_by_protocol(conn_protocol(fsp->conn->sconn),

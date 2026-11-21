@@ -1,0 +1,35 @@
+#!/bin/sh
+# When WAN comes up or its DNS changes, regenerate the IKEv2 dnsmasq snippet
+# if the ISP-provided IPv4 resolvers differ from the snippet's default servers.
+# Unset variables keep the router paths. Host tests set the MANGO_IKEV2_* ones.
+[ "$ACTION" = "ifup" ] || [ "$ACTION" = "ifupdate" ] || exit 0
+[ "$INTERFACE" = "wan" ] || exit 0
+[ "$(uci -q get mango_ikev2.main.enabled 2>/dev/null)" = "1" ] || exit 0
+
+(
+	lock=${MANGO_IKEV2_DNS_LOCK:-/var/lock/mango-ikev2-dns-refresh.lock}
+	mkdir -p "$(dirname "$lock")" || exit 0
+	exec 9>"$lock"
+	flock -n 9 || exit 0
+	# Let netifd write resolv.conf.auto first.
+	sleep "${MANGO_IKEV2_DNS_REFRESH_DELAY:-5}"
+	IKE_ETC=${MANGO_IKEV2_ETC:-/etc/mango-ikev2}
+	conf=$IKE_ETC/dnsmasq.d/ikev2.conf
+	resolv=${MANGO_IKEV2_RESOLV_AUTO:-/tmp/resolv.conf.d/resolv.conf.auto}
+	[ -s "$conf" ] || exit 0
+	want=$(sed -n 's/^[[:space:]]*nameserver[[:space:]]\{1,\}\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\)[[:space:]]*$/\1/p' \
+		"$resolv" 2>/dev/null | grep -vx '127.0.0.1' | tr '\n' ' ')
+	[ -n "$want" ] || exit 0
+	have=$(sed -n 's/^server=\([0-9.]*\)$/\1/p' "$conf" | tr '\n' ' ')
+	[ "$want" = "$have" ] && exit 0
+	DNSMASQ_INIT=${MANGO_IKEV2_DNSMASQ_INIT:-/etc/init.d/dnsmasq}
+	# shellcheck disable=SC1090
+	. "${MANGO_IKEV2_DNS_SH:-/usr/lib/mango-ikev2/dns.sh}"
+	if mango_ikev2_dns_on >/dev/null 2>&1; then
+		logger -t mango-ikev2-dns "ISP DNS changed: ${have:-none} -> ${want}; rules regenerated"
+	else
+		logger -t mango-ikev2-dns "ISP DNS changed: ${have:-none} -> ${want}; regenerate failed, kept old rules"
+	fi
+) >/dev/null 2>&1 &
+
+exit 0

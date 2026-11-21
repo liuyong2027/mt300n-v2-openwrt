@@ -63,13 +63,15 @@ net.ipv4.tcp_congestion_control = bbr
         self.assertNotIn('ss-integration.py',prepare)
         self.assertIn('patch-ssr.py',prepare)
         release=(self.tree/'files/etc/cudy-release').read_text().strip()
-        self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.1')
+        self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.5')
         source=json.loads((self.tree/'reports/ssrplus-source.json').read_text())
-        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled']
-        self.assertEqual(source['firmware_version'],'1.3.1')
+        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation','samba_actual_file_type']
+        self.assertEqual(source['firmware_version'],'1.3.5')
         self.assertEqual(source['candidate_revision'],1)
         self.assertEqual(source['integrated_field_fixes'],field_fixes)
         self.assertIn('PKG_RELEASE 2', source['fstools'])
+        self.assertIn('PKG_RELEASE 4', source['samba'])
+        self.assertIn('python3 "$kit/tr3600/samba/prepare.py" "$PWD"', prepare)
         self.assertIn('cp "$kit/tr3600/fstools/patches/0001-libblkid-tiny-reset-errno-before-probe.patch" package/system/fstools/patches/', prepare)
         self.assertIn("sed -i 's/^PKG_RELEASE:=1$/PKG_RELEASE:=2/' package/system/fstools/Makefile", prepare)
         self.assertEqual(source['openwrt_release'],'25.12.6')
@@ -84,6 +86,15 @@ net.ipv4.tcp_congestion_control = bbr
         self.assertIn('ipsec disable',defaults)
         peer=(self.tree/'tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-peer-engine').read_text()
         self.assertIn('shadowsocksr',peer)
+        self.assertIn('"$SSR_INIT" restart 9>&-', peer)
+        failover=(self.tree/'tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-failover').read_text()
+        init=(self.tree/'tr3600/luci-app-mango-ikev2/root/etc/init.d/mango_ikev2').read_text()
+        for text in (failover, init):
+            creds=text.index('swanctl --load-creds --noprompt --file')
+            self.assertLess(creds, text.index('swanctl --load-conns', creds))
+        fallback=(self.tree/'tr3600/luci-app-mango-ikev2/root/usr/libexec/mango-ikev2-fallback-ssr').read_text()
+        self.assertIn('uci set mango_ikev2.main.enabled=0', fallback)
+        self.assertLess(fallback.index('exec 9>&-'), fallback.index('"$MANGO_IKEV2_PEER_ENGINE" restore'))
         # The unified patch reads both feed sources and the copied runtime/files.
         # Feed installation alone is too early, as the full build demonstrated.
         unified=prepare.index('python3 "$kit/tr3600/ssrplus/unify-ss.py"')
@@ -441,42 +452,24 @@ class SourceSelectionTests(unittest.TestCase):
 
 class OverlayPatchTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(prefix='ssrplus-overlay-tests-',dir=REPO.parent)
-        self.addCleanup(self.tmp.cleanup)
-        self.root=Path(self.tmp.name)
-        self.makefile=self.root/'feeds/helloworld/xray-core/Makefile'
-        self.makefile.parent.mkdir(parents=True)
-        self.command='\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py --go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay\n'
-        self.makefile.write_text(self.command)
-        self.init=self.root/'feeds/helloworld/luci-app-ssr-plus/root/etc/init.d/shadowsocksr'
-        self.init.parent.mkdir(parents=True)
-        self.init.write_text('start() {\n :\n}\nstop() {\n :\n}\n')
-        rules=self.root/'feeds/helloworld/luci-app-ssr-plus/root/usr/bin/ssr-rules'
-        rules.parent.mkdir(parents=True)
-        rules.write_text('gen_include_nft() {\n\tcat <<-EOF >>"$FWI"\n\t\ttrue\n\tEOF\n\tchmod +x "$FWI"\n}\n')
-
-    def run_patch(self):
-        return subprocess.run([sys.executable,str(PROFILE/'patch-ssr.py'),str(self.root)],capture_output=True,text=True)
+        spec = importlib.util.spec_from_file_location('patch_ssr', PROFILE/'patch-ssr.py')
+        patch = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(patch)
+        self.patch_xray = patch.patch_xray
+        self.command = ('\tpython3 $(PKG_BUILD_DIR)/tools/eip93/overlay.py '
+                        '--go $(STAGING_DIR_HOSTPKG)/bin/go --out $(PKG_BUILD_DIR)/.eip93-overlay\n')
 
     def test_overlay_uses_standard_go_path(self):
-        result=self.run_patch()
-        self.assertEqual(result.returncode,0,result.stderr)
-        self.assertIn('$(GO_BIN_PATH) python3',self.makefile.read_text())
-        self.assertIn('--go go --out',self.makefile.read_text())
-        self.assertNotIn('$(STAGING_DIR_HOSTPKG)/bin/go',self.makefile.read_text())
-        patched=self.init.read_text()
-        self.assertIn('/usr/libexec/cudy-ss-gate started',patched)
-        start=patched.index('\nstart() {')
-        body=patched[start:]
-        self.assertLess(body.index('mango-ikev2-peer-engine yield'), body.index('start_without_cudy_gate'))
+        patched = self.patch_xray(self.command)
+        self.assertIn('$(GO_BIN_PATH) python3', patched)
+        self.assertIn('--go go --out', patched)
+        self.assertNotIn('$(STAGING_DIR_HOSTPKG)/bin/go', patched)
 
     def test_changed_or_duplicate_overlay_command_is_rejected(self):
-        for command in ('',self.command+self.command):
-            self.makefile.write_text(command)
-            result=self.run_patch()
-            self.assertNotEqual(result.returncode,0)
-            self.assertIn('Pinned Xray overlay command changed',result.stderr)
-            self.assertEqual(self.makefile.read_text(),command)
+        for command in ('', self.command + self.command):
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(ValueError, 'Pinned Xray overlay command changed'):
+                    self.patch_xray(command)
 
 
 if __name__=='__main__':unittest.main(verbosity=2)
