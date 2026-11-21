@@ -63,13 +63,15 @@ net.ipv4.tcp_congestion_control = bbr
         self.assertNotIn('ss-integration.py',prepare)
         self.assertIn('patch-ssr.py',prepare)
         release=(self.tree/'files/etc/cudy-release').read_text().strip()
-        self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.4')
+        self.assertEqual(release,'tr3600-ssrplus-ikev2-1.3.5')
         source=json.loads((self.tree/'reports/ssrplus-source.json').read_text())
-        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation']
-        self.assertEqual(source['firmware_version'],'1.3.4')
+        field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation','samba_actual_file_type']
+        self.assertEqual(source['firmware_version'],'1.3.5')
         self.assertEqual(source['candidate_revision'],1)
         self.assertEqual(source['integrated_field_fixes'],field_fixes)
         self.assertIn('PKG_RELEASE 2', source['fstools'])
+        self.assertIn('PKG_RELEASE 4', source['samba'])
+        self.assertIn('python3 "$kit/tr3600/samba/prepare.py" "$PWD"', prepare)
         self.assertIn('cp "$kit/tr3600/fstools/patches/0001-libblkid-tiny-reset-errno-before-probe.patch" package/system/fstools/patches/', prepare)
         self.assertIn("sed -i 's/^PKG_RELEASE:=1$/PKG_RELEASE:=2/' package/system/fstools/Makefile", prepare)
         self.assertEqual(source['openwrt_release'],'25.12.6')

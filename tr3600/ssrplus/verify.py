@@ -13,8 +13,8 @@ import tempfile
 repo=Path(__file__).resolve().parents[2]
 source=json.loads((repo/'reports/ssrplus-source.json').read_text())
 assert source['xray_version']=='26.10.21',source
-field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation']
-assert source['firmware_version']=='1.3.4' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes,source
+field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation','samba_actual_file_type']
+assert source['firmware_version']=='1.3.5' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes,source
 assert source.get('openwrt_release')=='25.12.6',source
 assert 'PKG_RELEASE 2' in source.get('fstools',''),source
 fstools_makefile=(repo/'openwrt/package/system/fstools/Makefile').read_text()
@@ -24,6 +24,20 @@ assert 'errno = 0;' in fstools_patch.read_text()
 images=list((repo/'openwrt/bin/targets/mediatek/filogic').glob('*cudy_tr3600-v1*squashfs-sysupgrade.bin'))
 assert len(images)==1,images
 image=images[0]
+samba_package=repo/'openwrt/feeds/packages/net/samba4'
+assert 'PKG_VERSION:=4.22.7\n' in (samba_package/'Makefile').read_text()
+assert 'PKG_RELEASE:=4\n' in (samba_package/'Makefile').read_text()
+samba_patch=repo/'tr3600/samba/patches/200-dos-mode-use-actual-file-type.patch'
+assert (samba_package/'patches'/samba_patch.name).read_bytes()==samba_patch.read_bytes()
+samba_sources=list((repo/'openwrt/build_dir').glob('target-*/samba-4.22.7/source3/smbd/dosmode.c'))
+assert len(samba_sources)==1,samba_sources
+samba_source=samba_sources[0].read_text()
+samba_post=samba_source[samba_source.index('static uint32_t dos_mode_post('):]
+samba_post=samba_post[:samba_post.index('\n}\n')]
+assert 'dosmode &= ~FILE_ATTRIBUTE_DIRECTORY;' in samba_post
+assert 'Only the current stat result can identify a directory.' in samba_post
+samba_manifest='\n'.join(p.read_text() for p in images[0].parent.glob('*.manifest'))
+assert re.search(r'^samba4-server - 4\.22\.7-r4$',samba_manifest,re.M),samba_manifest
 assert image.stat().st_size < 237824*1024
 with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as temp:
     temp=Path(temp)
@@ -44,7 +58,10 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-ikev2-1.3.4'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-ikev2-1.3.5'
+    staged_smbd=list((repo/'openwrt/staging_dir').glob('target-*/root-*/usr/sbin/smbd'))
+    assert len(staged_smbd)==1,staged_smbd
+    assert (root/'usr/sbin/smbd').read_bytes()==staged_smbd[0].read_bytes()
     for absent in ['etc/init.d/mango_proxy','etc/init.d/mango_watchdog','usr/libexec/mango-fw',
         'usr/share/luci/menu.d/luci-app-mango-proxy.json',
         'usr/share/luci/menu.d/luci-app-cudy-ss.json','usr/libexec/rpcd/cudy.ss',
@@ -280,11 +297,11 @@ net.ipv4.tcp_congestion_control = bbr
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-ikev2-1.3.4-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-ikev2-1.3.5-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
-    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-ssrplus-ikev2-1.3.3',
+    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-ssrplus-ikev2-1.3.4',
         'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
         'candidate_revision':1,'ikev2_dual_stack':True,'openwrt_release':'25.12.6','integrated_field_fixes_verified':field_fixes,
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
@@ -302,6 +319,9 @@ net.ipv4.tcp_congestion_control = bbr
         'wifi_unification':'retained; automatic band steering defaults off; saved settings retained',
         'build_recipe_commit':os.environ.get('GITHUB_SHA'),
         'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
+        'samba_version':'4.22.7-r4',
+        'samba_smbd_sha256':hashlib.sha256((root/'usr/sbin/smbd').read_bytes()).hexdigest(),
+        'samba_file_type_patch_sha256':hashlib.sha256(samba_patch.read_bytes()).hexdigest(),
         'private_ss':'removed without credential migration; dedicated firewall sections removed',
         'ordinary_ss':'shared namespace; TCP REDIRECT and UDP TPROXY follow SSR client policy',
         'ss_server_end_to_end_checks':server_checks,
@@ -311,7 +331,7 @@ net.ipv4.tcp_congestion_control = bbr
         'hardware_flash_or_boot_tested':False}
     (out/'BUILD-VERIFICATION.json').write_text(json.dumps(proof,indent=2)+'\n')
     (out/'README.txt').write_text((repo/'tr3600/ssrplus/README.txt').read_text())
-    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.3.4.txt',out/'刷机与验收说明.txt')
+    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.3.5.txt',out/'刷机与验收说明.txt')
     shutil.copyfile(repo/'reports/resolved.config',out/'resolved.config')
     shutil.copyfile(repo/'reports/ssrplus-source.json',out/'SOURCE.json')
     print(json.dumps(proof,indent=2))
