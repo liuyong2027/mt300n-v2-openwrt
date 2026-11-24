@@ -217,7 +217,10 @@ function M.swanctl(p)
         lines[#lines + 1] = '        dpd_action = clear'
         lines[#lines + 1] = '        if_id_in = ' .. tostring(q.ifid)
         lines[#lines + 1] = '        if_id_out = ' .. tostring(q.ifid)
-        lines[#lines + 1] = '        esp_proposals = aes128-sha1,aes256-sha1'
+        -- Prefer ChaCha20-Poly1305 (software AEAD on MT7628). Keep the
+        -- existing AES-CBC/SHA1 proposals so current peers still match.
+        -- AEAD and classic algorithms must stay in separate proposals.
+        lines[#lines + 1] = '        esp_proposals = chacha20poly1305,aes128-sha1,aes256-sha1'
         lines[#lines + 1] = '      }'
         lines[#lines + 1] = '    }'
         lines[#lines + 1] = '  }'
