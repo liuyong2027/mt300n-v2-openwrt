@@ -46,4 +46,12 @@ uci -q get mango_ikev2.main >/dev/null 2>&1 && {
 /etc/init.d/mango_ikev2 enable
 # Keep the config.change hook running even after IKEv2 itself is stopped.
 /etc/init.d/mango-ikev2-track enable
+
+# Rename a preserved nordvpn-root-ca.pem so the generic filename is used
+# after upgrade, without requiring a re-upload.
+if [ -f /usr/lib/mango-ikev2/ca-paths.sh ]; then
+	# shellcheck disable=SC1091
+	. /usr/lib/mango-ikev2/ca-paths.sh
+	mango_ikev2_ca_migrate
+fi
 exit 0

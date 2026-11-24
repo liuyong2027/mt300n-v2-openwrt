@@ -118,8 +118,8 @@ return view.extend({
 		var formatInfo = function(n) {
 			n = n || {};
 			var lines = [
-				'安装路径：' + (n.path || '/etc/swanctl/x509ca/nordvpn-root-ca.pem'),
-				'兼容路径：' + (n.path_legacy || '/etc/ipsec.d/cacerts/nordvpn-root-ca.pem'),
+				'安装路径：' + (n.path || '/etc/swanctl/x509ca/ikev2-root-ca.pem'),
+				'兼容路径：' + (n.path_legacy || '/etc/ipsec.d/cacerts/ikev2-root-ca.pem'),
 				'文件：' + (n.present === '1'
 					? ('已安装，' + (n.size || '?') + ' 字节' +
 						(n.mtime && n.mtime !== '-' ? '，更新于 ' + n.mtime : ''))
@@ -194,7 +194,7 @@ return view.extend({
 		return E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, ['根证书']),
 			E('div', { 'class': 'cbi-section-descr' }, [
-				'NordVPN IKEv2 需要根 CA。支持 PEM 文本，或 NordVPN 常见的 DER/CRT 二进制；安装后写入 swanctl，并同步到 ipsec.d，随后尝试 reload strongSwan 凭据。'
+				'IKEv2 需要根 CA。支持 PEM 文本或 DER/CRT 二进制；安装后写入 /etc/swanctl/x509ca/ikev2-root-ca.pem，并同步到 /etc/ipsec.d/cacerts/ikev2-root-ca.pem，随后尝试 reload strongSwan 凭据。升级后会自动把旧的 nordvpn-root-ca.pem 改成这个文件名，不用重新上传。页面会显示证书的实际主题，以及 strongSwan 是否已加载该证书。'
 			]),
 			info,
 			E('div', { 'style': 'margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, [
