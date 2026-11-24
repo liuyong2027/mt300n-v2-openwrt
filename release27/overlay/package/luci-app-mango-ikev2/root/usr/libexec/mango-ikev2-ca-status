@@ -1,0 +1,99 @@
+#!/bin/sh
+# Print CA install status for LuCI (key=value lines).
+# Reports the installed file's real subject, not a hard-coded vendor name.
+set -eu
+
+LIBDIR=${MANGO_IKEV2_LIBDIR:-/usr/lib/mango-ikev2}
+# shellcheck disable=SC1091
+. "$LIBDIR/ca-paths.sh"
+
+mango_ikev2_ca_migrate
+
+printf 'path=%s\n' "$CA_SWAN"
+printf 'path_legacy=%s\n' "$CA_IPSEC"
+
+if [ -s "$CA_SWAN" ]; then
+	printf 'present=1\n'
+	printf 'size=%s\n' "$(wc -c < "$CA_SWAN" | tr -d ' \n')"
+	printf 'mtime=%s\n' "$(date -r "$CA_SWAN" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo -)"
+else
+	printf 'present=0\n'
+	printf 'size=0\n'
+	printf 'mtime=-\n'
+fi
+
+if [ -s "$CA_IPSEC" ]; then
+	printf 'legacy_present=1\n'
+else
+	printf 'legacy_present=0\n'
+fi
+
+subject='-'
+not_after='-'
+loaded=0
+file_text=
+if [ -s "$CA_SWAN" ]; then
+	file_text=$(mango_ikev2_file_subject_text "$CA_SWAN" || true)
+	file_subject=$(printf '%s\n' "$file_text" | mango_ikev2_parse_subject_line)
+	file_not_after=$(printf '%s\n' "$file_text" | mango_ikev2_parse_not_after_line)
+	[ -n "$file_subject" ] && subject=$file_subject
+	[ -n "$file_not_after" ] && not_after=$file_not_after
+fi
+
+certs=$(swanctl --list-certs 2>/dev/null || true)
+ca_block=$(printf '%s\n' "$certs" | awk '
+	/List of X.509 CA Certificates/ { in_ca=1; next }
+	/^List of / { in_ca=0 }
+	in_ca { print }
+')
+
+match_subject=
+if [ "$subject" != '-' ] && [ -n "$ca_block" ]; then
+	cn=$(mango_ikev2_subject_cn "$subject")
+	match_subject=$(printf '%s\n' "$ca_block" | awk -v want="$subject" -v cn="$cn" '
+		function norm(s) {
+			sub(/^[[:space:]]*subject:[[:space:]]*/, "", s)
+			gsub(/^"|"$/, "", s)
+			gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+			return s
+		}
+		tolower($0) ~ /subject:/ {
+			got = norm($0)
+			if (got == want || (cn != "" && index(got, "CN=" cn) > 0) || (cn != "" && index(got, cn) > 0)) {
+				print got
+				exit
+			}
+		}
+	')
+	if [ -n "$match_subject" ]; then
+		loaded=1
+		subject=$match_subject
+		ca_not_after=$(printf '%s\n' "$ca_block" | awk -v want="$match_subject" '
+			function norm(s) {
+				sub(/^[[:space:]]*subject:[[:space:]]*/, "", s)
+				gsub(/^"|"$/, "", s)
+				gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+				return s
+			}
+			tolower($0) ~ /subject:/ {
+				wanting = (norm($0) == want)
+				next
+			}
+			wanting && /not after/ {
+				line = $0
+				sub(/^.*not after[[:space:]]+/, "", line)
+				sub(/,.*/, "", line)
+				gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+				print line
+				exit
+			}
+		')
+		[ -n "$ca_not_after" ] && not_after=$ca_not_after
+	fi
+fi
+
+[ -n "$subject" ] || subject='-'
+[ -n "$not_after" ] || not_after='-'
+printf 'loaded=%s\n' "$loaded"
+printf 'subject=%s\n' "$subject"
+printf 'not_after=%s\n' "$not_after"

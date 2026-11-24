@@ -1,0 +1,66 @@
+#!/bin/sh
+# Install IKEv2 root CA (PEM or DER) into swanctl + legacy ipsec.d paths.
+# usage: mango-ikev2-ca-install [cert-file]
+#        mango-ikev2-ca-install   # read cert from stdin
+set -eu
+
+LIBDIR=${MANGO_IKEV2_LIBDIR:-/usr/lib/mango-ikev2}
+# shellcheck disable=SC1091
+. "$LIBDIR/ca-paths.sh"
+
+TMP=/tmp/mango-ikev2-ca-$$.pem
+TMP2=/tmp/mango-ikev2-ca-$$.conv
+
+cleanup() { rm -f "$TMP" "$TMP2"; }
+trap cleanup EXIT INT TERM
+
+mkdir -p "$CA_SWAN_DIR" "$CA_IPSEC_DIR"
+
+if [ "${1:-}" != '' ]; then
+	src=$1
+	[ -s "$src" ] || { echo "证书文件不存在或为空：$src" >&2; exit 1; }
+	cp "$src" "$TMP"
+else
+	cat > "$TMP"
+fi
+
+# Accept PEM text, or DER binary (some CAs ship RootCA.der / .crt as DER).
+if grep -q 'BEGIN CERTIFICATE' "$TMP"; then
+	:
+elif command -v openssl >/dev/null 2>&1 && \
+	openssl x509 -inform DER -in "$TMP" -out "$TMP2" 2>/dev/null; then
+	mv "$TMP2" "$TMP"
+else
+	# No openssl/od on many OpenWrt images; treat non-PEM as DER and wrap.
+	{
+		echo '-----BEGIN CERTIFICATE-----'
+		base64 "$TMP"
+		echo '-----END CERTIFICATE-----'
+	} > "$TMP2"
+	mv "$TMP2" "$TMP"
+fi
+
+grep -q 'BEGIN CERTIFICATE' "$TMP" || {
+	echo '证书转换后仍不是有效 PEM' >&2
+	exit 1
+}
+
+umask 022
+cp "$TMP" "$CA_SWAN"
+cp "$TMP" "$CA_IPSEC"
+chmod 644 "$CA_SWAN" "$CA_IPSEC"
+
+# Drop the legacy filename so swanctl does not load the same CA twice.
+rm -f "$CA_SWAN_DIR/$CA_NAME_OLD" "$CA_IPSEC_DIR/$CA_NAME_OLD"
+
+# Reload credentials so charon picks up the new CA without full reconnect when possible.
+if command -v swanctl >/dev/null 2>&1; then
+	swanctl --load-creds >/dev/null 2>&1 || swanctl --load-all >/dev/null 2>&1 || true
+fi
+
+echo "已安装到 $CA_SWAN"
+echo "已同步到 $CA_IPSEC"
+# Re-enter status with the same override paths used for this install.
+export CA_SWAN_DIR CA_IPSEC_DIR MANGO_IKEV2_LIBDIR
+STATUS=${MANGO_IKEV2_CA_STATUS:-/usr/libexec/mango-ikev2-ca-status}
+"$STATUS"
