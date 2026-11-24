@@ -4,11 +4,10 @@
 #        mango-ikev2-ca-install   # read cert from stdin
 set -eu
 
-CA_SWAN_DIR=/etc/swanctl/x509ca
-CA_IPSEC_DIR=/etc/ipsec.d/cacerts
-CA_NAME=nordvpn-root-ca.pem
-CA_SWAN=$CA_SWAN_DIR/$CA_NAME
-CA_IPSEC=$CA_IPSEC_DIR/$CA_NAME
+LIBDIR=${MANGO_IKEV2_LIBDIR:-/usr/lib/mango-ikev2}
+# shellcheck disable=SC1091
+. "$LIBDIR/ca-paths.sh"
+
 TMP=/tmp/mango-ikev2-ca-$$.pem
 TMP2=/tmp/mango-ikev2-ca-$$.conv
 
@@ -25,7 +24,7 @@ else
 	cat > "$TMP"
 fi
 
-# Accept PEM text, or DER binary (NordVPN often ships RootCA.der / .crt as DER).
+# Accept PEM text, or DER binary (some CAs ship RootCA.der / .crt as DER).
 if grep -q 'BEGIN CERTIFICATE' "$TMP"; then
 	:
 elif command -v openssl >/dev/null 2>&1 && \
@@ -51,6 +50,9 @@ cp "$TMP" "$CA_SWAN"
 cp "$TMP" "$CA_IPSEC"
 chmod 644 "$CA_SWAN" "$CA_IPSEC"
 
+# Drop the legacy filename so swanctl does not load the same CA twice.
+rm -f "$CA_SWAN_DIR/$CA_NAME_OLD" "$CA_IPSEC_DIR/$CA_NAME_OLD"
+
 # Reload credentials so charon picks up the new CA without full reconnect when possible.
 if command -v swanctl >/dev/null 2>&1; then
 	swanctl --load-creds >/dev/null 2>&1 || swanctl --load-all >/dev/null 2>&1 || true
@@ -58,4 +60,7 @@ fi
 
 echo "已安装到 $CA_SWAN"
 echo "已同步到 $CA_IPSEC"
-/usr/libexec/mango-ikev2-ca-status
+# Re-enter status with the same override paths used for this install.
+export CA_SWAN_DIR CA_IPSEC_DIR MANGO_IKEV2_LIBDIR
+STATUS=${MANGO_IKEV2_CA_STATUS:-/usr/libexec/mango-ikev2-ca-status}
+"$STATUS"
