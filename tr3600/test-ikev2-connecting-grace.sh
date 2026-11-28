@@ -11,7 +11,18 @@ tmp=$(mktemp -d)
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
 mkdir -p "$tmp/bin" "$tmp/state" "$tmp/swanctl"
-now=$(cut -d. -f1 /proc/uptime)
+# Use the same monotonic clock in the fixture and the watchdog. A fresh CI
+# runner may have less than 120 seconds of uptime, making now - 120 negative.
+now=600
+export TEST_IKEV2_UPTIME=$now TEST_IKEV2_CUT="$(command -v cut)"
+cat > "$tmp/bin/cut" << 'EOF'
+#!/bin/sh
+if [ "$*" = '-d. -f1 /proc/uptime' ]; then
+	printf '%s\n' "$TEST_IKEV2_UPTIME"
+else
+	exec "$TEST_IKEV2_CUT" "$@"
+fi
+EOF
 
 cat > "$tmp/bin/uci" << 'EOF'
 #!/bin/sh
@@ -90,7 +101,7 @@ mango: #2, CONNECTING, IKEv2, aaaa_i bbbb_r
   local  'vpn-user' @ 192.0.2.10[500]
   remote 'vpn.example' @ 203.0.113.9[500]
 EOF
-chmod 755 "$tmp/bin/uci" "$tmp/bin/swanctl" "$tmp/bin/ip" "$tmp/bin/generate" "$tmp/bin/fw" "$tmp/bin/event-log"
+chmod 755 "$tmp/bin/cut" "$tmp/bin/uci" "$tmp/bin/swanctl" "$tmp/bin/ip" "$tmp/bin/generate" "$tmp/bin/fw" "$tmp/bin/event-log"
 printf '%s\n' mango > "$tmp/state/active"
 printf '%s\n' 0 > "$tmp/state/fail-count"
 printf '%s\n' 0 > "$tmp/state/fallback-fail"

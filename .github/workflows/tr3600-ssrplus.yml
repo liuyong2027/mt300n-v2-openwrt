@@ -60,7 +60,7 @@
         },
         {
           "name": "Test new runtime before full firmware compilation",
-          "run": "bash tr3600/fstools/host-test/test-unlabeled-exfat.sh 2>&1 | tee reports/exfat-unlabeled-probe.log\nsh tr3600/test-ikev2-connecting-grace.sh\nsh tr3600/test-ikev2-wan-dns.sh\nsh tr3600/test-ikev2-load-creds.sh\nsh tr3600/test-ikev2-ssr-lock.sh\nsh tr3600/test-ikev2-ssr-mutex.sh\nlua5.1 tr3600/test-ikev2-remote-ports.lua\nsh tr3600/test-ikev2-ca.sh tr3600/luci-app-mango-ikev2\nnode tr3600/test-ikev2-ui.cjs\npython3 tr3600/ssrplus/test_ssr_lifecycle.py\npython3 tr3600/ssrplus/preflight-unified.py 2>&1 | tee reports/unified-preflight.log"
+          "run": "run_test() { printf \"Running %s\\n\" \"$*\"; \"$@\"; }\nrun_test bash tr3600/fstools/host-test/test-unlabeled-exfat.sh 2>&1 | tee reports/exfat-unlabeled-probe.log\nrun_test sh tr3600/test-ikev2-connecting-grace.sh\nrun_test sh tr3600/test-ikev2-wan-dns.sh\nrun_test sh tr3600/test-ikev2-load-creds.sh\nrun_test sh tr3600/test-ikev2-ssr-lock.sh\nrun_test sh tr3600/test-ikev2-ssr-mutex.sh\nrun_test lua5.1 tr3600/test-ikev2-remote-ports.lua\nrun_test sh tr3600/test-ikev2-ca.sh tr3600/luci-app-mango-ikev2\nrun_test node tr3600/test-ikev2-ui.cjs\nrun_test python3 tr3600/ssrplus/test_ssr_lifecycle.py\nrun_test python3 tr3600/ssrplus/preflight-unified.py 2>&1 | tee reports/unified-preflight.log"
         },
         {
           "name": "Upload runtime preflight diagnostics",
