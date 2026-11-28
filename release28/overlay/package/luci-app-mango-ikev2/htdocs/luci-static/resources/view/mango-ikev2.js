@@ -194,7 +194,7 @@ return view.extend({
 		return E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, ['根证书']),
 			E('div', { 'class': 'cbi-section-descr' }, [
-				'IKEv2 需要根 CA。支持 PEM 文本或 DER/CRT 二进制；安装后写入 /etc/swanctl/x509ca/ikev2-root-ca.pem，并同步到 /etc/ipsec.d/cacerts/ikev2-root-ca.pem，随后尝试 reload strongSwan 凭据。升级后会自动把旧的 nordvpn-root-ca.pem 改成这个文件名，不用重新上传。页面会显示证书的实际主题，以及 strongSwan 是否已加载该证书。'
+				'支持 PEM 和 DER 格式的根证书。更换时，点击「上传并安装」选择新证书，即可覆盖当前证书。安装后点击「刷新状态」，核对证书主题、有效期和 strongSwan 加载状态。'
 			]),
 			info,
 			E('div', { 'style': 'margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, [
