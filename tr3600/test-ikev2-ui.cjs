@@ -8,6 +8,11 @@ const source = fs.readFileSync(path.join(
 
 async function main() {
 	assert.equal(source.includes('ui.changes.apply'), false);
+	assert.doesNotMatch(source, /NordVPN/i);
+	for (const key of ['remote_port', 'remote_port2', 'remote_port3']) {
+		assert.match(source, new RegExp("s\\.option\\(form\\.Value, '" + key + "', [^\\n]+\\n\\s*o\\.datatype = 'range\\(1,65535\\)';\\n\\s*o\\.rmempty = true;"));
+	}
+	assert.match(source, /\/etc\/swanctl\/x509ca\/ikev2-root-ca\.pem/);
 	const calls = [];
 	const messages = [];
 	let enabled = '0';

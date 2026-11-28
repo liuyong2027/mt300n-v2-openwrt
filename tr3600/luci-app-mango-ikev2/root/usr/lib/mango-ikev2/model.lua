@@ -185,11 +185,24 @@ end
 function M.swanctl(p)
     local q = M.policy(p)
     local peers = M.peers(p)
+    local remote_ports = {mango = p.remote_port, mango2 = p.remote_port2, mango3 = p.remote_port3}
     local lines = {'connections {'}
     for _, peer in ipairs(peers) do
         lines[#lines + 1] = '  ' .. peer.name .. ' {'
         lines[#lines + 1] = '    version = 2'
         lines[#lines + 1] = '    remote_addrs = ' .. escape(peer.server)
+        local remote_port = remote_ports[peer.name]
+        if remote_port ~= nil and remote_port ~= '' then
+            local raw = tostring(remote_port)
+            local port = tonumber(raw)
+            assert(raw:match('^%d+$') and port and port >= 1 and port <= 65535, 'Invalid remote UDP port')
+            if port ~= 500 then
+                -- Start with the NAT-T socket when the peer expects non-ESP markers.
+                lines[#lines + 1] = '    local_port = 4500'
+                lines[#lines + 1] = '    mobike = no'
+            end
+            lines[#lines + 1] = '    remote_port = ' .. tostring(port)
+        end
         -- Bind IKE to WAN only. A leftover VIP on xfrm-mango otherwise becomes
         -- the source address and NordVPN returns INTERNAL_ADDRESS_FAILURE.
         if nonempty(p.local_addrs) then

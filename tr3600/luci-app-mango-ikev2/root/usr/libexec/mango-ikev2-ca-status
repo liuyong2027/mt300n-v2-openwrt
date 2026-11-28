@@ -1,9 +1,13 @@
 #!/bin/sh
 # Print CA install status for LuCI (key=value lines).
+# Reports the installed file's real subject, not a hard-coded vendor name.
 set -eu
 
-CA_SWAN=/etc/swanctl/x509ca/nordvpn-root-ca.pem
-CA_IPSEC=/etc/ipsec.d/cacerts/nordvpn-root-ca.pem
+LIBDIR=${MANGO_IKEV2_LIBDIR:-/usr/lib/mango-ikev2}
+# shellcheck disable=SC1091
+. "$LIBDIR/ca-paths.sh"
+
+mango_ikev2_ca_migrate
 
 printf 'path=%s\n' "$CA_SWAN"
 printf 'path_legacy=%s\n' "$CA_IPSEC"
@@ -27,32 +31,24 @@ fi
 subject='-'
 not_after='-'
 loaded=0
-certs=$(swanctl --list-certs 2>/dev/null || true)
-if printf '%s\n' "$certs" | grep -q 'NordVPN Root CA'; then
-	loaded=1
-	# Prefer the self-signed root block.
-	subject=$(printf '%s\n' "$certs" | awk '
-		/List of X.509 CA Certificates/ { in_ca=1; next }
-		in_ca && /subject:.*NordVPN Root CA/ {
-			sub(/^[[:space:]]*subject:[[:space:]]*/, "")
-			gsub(/^"|"$/, "")
-			print
-			exit
-		}
-	')
-	not_after=$(printf '%s\n' "$certs" | awk '
-		/List of X.509 CA Certificates/ { in_ca=1; next }
-		in_ca && /subject:.*NordVPN Root CA/ { want=1; next }
-		want && /not after/ {
-			line=$0
-			sub(/^.*not after[[:space:]]+/, "", line)
-			sub(/,.*/, "", line)
-			print line
-			exit
-		}
-	')
-	[ -n "$subject" ] || subject='NordVPN Root CA (loaded)'
-	[ -n "$not_after" ] || not_after='-'
+file_text=
+if [ -s "$CA_SWAN" ]; then
+	file_text=$(mango_ikev2_file_subject_text "$CA_SWAN" || true)
+	file_subject=$(printf '%s\n' "$file_text" | mango_ikev2_parse_subject_line)
+	file_not_after=$(printf '%s\n' "$file_text" | mango_ikev2_parse_not_after_line)
+	[ -n "$file_subject" ] && subject=$file_subject
+	[ -n "$file_not_after" ] && not_after=$file_not_after
+fi
+
+if [ -s "$CA_SWAN" ]; then
+	body=$(mango_ikev2_pem_bodies < "$CA_SWAN" | head -n 1)
+	if [ -z "$body" ]; then
+		body=$(base64 "$CA_SWAN" | tr -d '[:space:]')
+	fi
+	if [ -n "$body" ] && swanctl --list-certs --type x509 --flag ca --pem 2>/dev/null | \
+		mango_ikev2_pem_bodies | grep -Fqx -- "$body"; then
+		loaded=1
+	fi
 fi
 
 [ -n "$subject" ] || subject='-'

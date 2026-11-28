@@ -13,8 +13,8 @@ import tempfile
 repo=Path(__file__).resolve().parents[2]
 source=json.loads((repo/'reports/ssrplus-source.json').read_text())
 assert source['xray_version']=='26.10.21',source
-field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation','samba_actual_file_type']
-assert source['firmware_version']=='1.3.5' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes,source
+field_fixes=['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation','samba_actual_file_type','hy2_per_node_udp_buffers','ikev2_per_peer_udp_ports','ikev2_generic_root_ca']
+assert source['firmware_version']=='1.3.6' and source['candidate_revision']==1 and source['integrated_field_fixes']==field_fixes,source
 assert source.get('openwrt_release')=='25.12.6',source
 assert 'PKG_RELEASE 2' in source.get('fstools',''),source
 fstools_makefile=(repo/'openwrt/package/system/fstools/Makefile').read_text()
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     root=temp/'rootfs'
     subprocess.run(['sudo','unsquashfs','-no-progress','-d',str(root),str(payload)],check=True)
     subprocess.run(['sudo','chown','-hR',str(os.getuid())+':'+str(os.getgid()),str(root)],check=True)
-    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-ikev2-1.3.5'
+    assert (root/'etc/cudy-release').read_text().strip()=='tr3600-ssrplus-ikev2-1.3.6'
     staged_smbd=list((repo/'openwrt/staging_dir').glob('target-*/root-*/usr/sbin/smbd'))
     assert len(staged_smbd)==1,staged_smbd
     assert (root/'usr/sbin/smbd').read_bytes()==staged_smbd[0].read_bytes()
@@ -108,11 +108,14 @@ with tempfile.TemporaryDirectory(prefix='cudy-ssrplus-verify-',dir='/tmp') as te
     assert (root/'lib/upgrade/cudy-tr3600.sh').read_bytes()==(repo/'tr3600/cudy-upgrade.sh').read_bytes()
     assert (root/'lib/upgrade/keep.d/cudy-dynu-ddns').read_text()=='/etc/config/ddns\n'
     subscription_package=repo/'openwrt/feeds/helloworld/luci-app-ssr-plus'
-    assert 'PKG_RELEASE:=3\n' in (subscription_package/'Makefile').read_text()
+    assert 'PKG_RELEASE:=4\n' in (subscription_package/'Makefile').read_text()
     for relative in ('etc/init.d/shadowsocksr','usr/bin/ssr-rules'):
         assert (root/relative).read_bytes()==(subscription_package/'root'/relative).read_bytes(),relative
     control=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/control.lua').read_text()
     assert 'on_apply' not in control and 'domain_lists_revision' in control
+    client_editor=(root/'usr/lib/lua/luci/model/cbi/shadowsocksr/client-config.lua').read_text()
+    for field in ('hy2_udp_rcvbuf_mib','hy2_udp_sndbuf_mib'):
+        assert f's:option(Value, "{field}",' in client_editor,field
     for relative in ('usr/share/shadowsocksr/subscribe.lua','usr/share/shadowsocksr/yaml_nodes.lua',
         'usr/share/shadowsocksr/shadowsocksr.config','etc/uci-defaults/luci-ssr-plus'):
         assert (root/relative).read_bytes()==(subscription_package/'root'/relative).read_bytes(),relative
@@ -187,6 +190,13 @@ net.ipv4.tcp_congestion_control = bbr
     assert 'net.ipv4.tcp_congestion_control=bbr' in (root/'etc/sysctl.d/12-tcp-bbr.conf').read_text()
     assert 'CONFIG_PACKAGE_luci-app-mango-proxy=y' not in config
     assert (root/'usr/libexec/mango-ikev2-peer-engine').is_file()
+    ike_pkg=repo/'tr3600/luci-app-mango-ikev2'
+    for relative in ('usr/lib/mango-ikev2/model.lua','usr/lib/mango-ikev2/ca-paths.sh',
+        'usr/lib/mango-ikev2/ca-print.lua','usr/libexec/mango-ikev2-ca-install','usr/libexec/mango-ikev2-ca-status'):
+        assert (root/relative).read_bytes()==(ike_pkg/'root'/relative).read_bytes(),relative
+    ike_view='luci-static/resources/view/mango-ikev2.js'
+    assert (root/'www'/ike_view).read_bytes()==subprocess.check_output(
+        [str(jsmin)],input=(ike_pkg/'htdocs'/ike_view).read_bytes())
     assert (root/'etc/init.d/mango_ikev2').is_file()
     ike_defaults=root/'etc/uci-defaults/95-mango-ikev2'
     assert ike_defaults.is_file()
@@ -227,11 +237,11 @@ net.ipv4.tcp_congestion_control = bbr
     yaml_sandbox=temp/'yaml-connections'
     yaml_result=subprocess.run(['qemu-aarch64-static','-L',str(root),str(root/'usr/bin/lua'),
         str(repo/'tr3600/ssrplus/test-yaml-packed.lua'),str(root),str(yaml_sandbox),
-        str(repo/'tr3600/ssrplus/yaml-nodes-fixture.yaml'),xray_version],
+        str(repo/'tr3600/ssrplus/yaml-nodes-fixture.yaml'),xray_version,'hy2-buffers'],
         env=native_environment,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
     (repo/'reports/yaml-nodes-packed-verification.log').write_text(yaml_result.stdout)
     print(yaml_result.stdout,end='');yaml_result.check_returncode()
-    yaml_protocols=['anytls','vmess','hysteria2']
+    yaml_protocols=['anytls','vmess','hysteria2','hysteria2-buffers']
     for protocol in yaml_protocols:
         subprocess.run(xray_command+['run','-test','-config',str(yaml_sandbox/(protocol+'.json'))],check=True)
     native_sandbox=temp/'native-uci'
@@ -297,11 +307,11 @@ net.ipv4.tcp_congestion_control = bbr
         path.write_text(json.dumps({'log':{'loglevel':'warning'},'outbounds':[outbound]}))
         subprocess.run(xray_command+['run','-test','-config',str(path)],check=True)
     out=repo/'ssrplus-assets';out.mkdir(exist_ok=True)
-    name='cudy-tr3600-v1-ssrplus-ikev2-1.3.5-sysupgrade.bin'
+    name='cudy-tr3600-v1-ssrplus-ikev2-1.3.6-sysupgrade.bin'
     shutil.copyfile(image,out/name)
     digest=hashlib.sha256(image.read_bytes()).hexdigest()
     (out/'SHA256SUMS').write_text(digest+'  '+name+'\n')
-    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-ssrplus-ikev2-1.3.4',
+    proof={'image':name,'sha256':digest,'bytes':image.stat().st_size,'base':'tr3600-ssrplus-ikev2-1.3.5',
         'release_stage':'candidate; hardware acceptance pending','github_release_published':False,
         'candidate_revision':1,'ikev2_dual_stack':True,'openwrt_release':'25.12.6','integrated_field_fixes_verified':field_fixes,
         'mango_proxy_installed':False,'ssrplus_commit':source['ssrplus_commit'],
@@ -331,7 +341,7 @@ net.ipv4.tcp_congestion_control = bbr
         'hardware_flash_or_boot_tested':False}
     (out/'BUILD-VERIFICATION.json').write_text(json.dumps(proof,indent=2)+'\n')
     (out/'README.txt').write_text((repo/'tr3600/ssrplus/README.txt').read_text())
-    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.3.5.txt',out/'刷机与验收说明.txt')
+    shutil.copyfile(repo/'tr3600/ssrplus/CANDIDATE-1.3.6.txt',out/'刷机与验收说明.txt')
     shutil.copyfile(repo/'reports/resolved.config',out/'resolved.config')
     shutil.copyfile(repo/'reports/ssrplus-source.json',out/'SOURCE.json')
     print(json.dumps(proof,indent=2))

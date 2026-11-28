@@ -118,8 +118,8 @@ return view.extend({
 		var formatInfo = function(n) {
 			n = n || {};
 			var lines = [
-				'安装路径：' + (n.path || '/etc/swanctl/x509ca/nordvpn-root-ca.pem'),
-				'兼容路径：' + (n.path_legacy || '/etc/ipsec.d/cacerts/nordvpn-root-ca.pem'),
+				'安装路径：' + (n.path || '/etc/swanctl/x509ca/ikev2-root-ca.pem'),
+				'兼容路径：' + (n.path_legacy || '/etc/ipsec.d/cacerts/ikev2-root-ca.pem'),
 				'文件：' + (n.present === '1'
 					? ('已安装，' + (n.size || '?') + ' 字节' +
 						(n.mtime && n.mtime !== '-' ? '，更新于 ' + n.mtime : ''))
@@ -170,7 +170,7 @@ return view.extend({
 				var btn = ev.currentTarget;
 				btn.disabled = true;
 				result.style.display = 'block';
-				result.textContent = '请选择 PEM/CRT 文件…';
+				result.textContent = '请选择 PEM 或 DER 格式的根证书…';
 				// ui.uploadFile always shows LuCI's own picker; do not add a second page-level file input.
 				return ui.uploadFile('/tmp/mango-ikev2-upload-ca.pem').then(function() {
 					return runInstall(btn, '/tmp/mango-ikev2-upload-ca.pem');
@@ -194,7 +194,7 @@ return view.extend({
 		return E('div', { 'class': 'cbi-section' }, [
 			E('h3', {}, ['根证书']),
 			E('div', { 'class': 'cbi-section-descr' }, [
-				'NordVPN IKEv2 需要根 CA。支持 PEM 文本，或 NordVPN 常见的 DER/CRT 二进制；安装后写入 swanctl，并同步到 ipsec.d，随后尝试 reload strongSwan 凭据。'
+				'支持 PEM 和 DER 格式。点击「上传并安装」选择新证书，即可替换当前根证书。安装后可核对证书主题、有效期和 strongSwan 加载状态。'
 			]),
 			info,
 			E('div', { 'style': 'margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, [
@@ -276,11 +276,18 @@ return view.extend({
 		o = s.option(form.Value, 'server', '服务器地址');
 		o.datatype = 'host';
 		o.rmempty = false;
-		o = s.option(form.Value, 'remote_id', '远端 ID', '可留空，默认与服务器地址相同；NordVPN 建议填主机名');
+		var remotePortHelp = '填写对应服务器的 UDP 端口（1–65535）。留空使用标准 IKEv2 端口。';
+		o = s.option(form.Value, 'remote_port', '主服务器远端 UDP 端口', remotePortHelp);
+		o.datatype = 'range(1,65535)';
+		o.rmempty = true;
+		o = s.option(form.Value, 'remote_id', '远端 ID', '可留空，默认与服务器地址相同');
 		o.placeholder = 'vpn.example.com';
 
 		o = s.option(form.Value, 'server2', '备用服务器1', '留空则跳过。主用连续两次失败后按 备用1 → 备用2 → 主用 轮换。');
 		o.datatype = 'host';
+		o.rmempty = true;
+		o = s.option(form.Value, 'remote_port2', '备用服务器 1 远端 UDP 端口', remotePortHelp);
+		o.datatype = 'range(1,65535)';
 		o.rmempty = true;
 		o = s.option(form.Value, 'remote_id2', '备用1 远端 ID', '可留空，默认与备用服务器1地址相同');
 		o.rmempty = true;
@@ -304,6 +311,9 @@ return view.extend({
 
 		o = s.option(form.Value, 'server3', '备用服务器2', '第二备用，留空则只有主用/备用1参与轮换。');
 		o.datatype = 'host';
+		o.rmempty = true;
+		o = s.option(form.Value, 'remote_port3', '备用服务器 2 远端 UDP 端口', remotePortHelp);
+		o.datatype = 'range(1,65535)';
 		o.rmempty = true;
 		o = s.option(form.Value, 'remote_id3', '备用2 远端 ID', '可留空，默认与备用服务器2地址相同');
 		o.rmempty = true;
@@ -336,7 +346,7 @@ return view.extend({
 		o = s.option(form.Value, 'psk', '预共享密钥');
 		o.password = true;
 		o.depends('auth', 'psk');
-		o = s.option(form.Value, 'local_id', '本端 ID', 'NordVPN IKEv2 请留空；PSK 可填 %any');
+		o = s.option(form.Value, 'local_id', '本端 ID', '可留空，使用认证方式的默认值。PSK 可填 %any。');
 
 		o = s.option(form.Value, 'lan_device', 'LAN 设备', '可填多个，空格分隔，例如：br-lan ztc3q2tbgr。这些接口的流量会参与分流/代理。');
 		o.default = 'br-lan';

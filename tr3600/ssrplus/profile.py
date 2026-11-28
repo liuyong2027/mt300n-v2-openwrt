@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare TR3600 1.3.5 dual-stack (SSR Plus+ + IKEv2) from the pinned 1.1.1 recipe."""
+"""Prepare TR3600 1.3.6 dual-stack (SSR Plus+ + IKEv2) from the pinned 1.1.1 recipe."""
 import importlib.util
 import json
 from pathlib import Path
@@ -260,7 +260,7 @@ return M
     for path in files.rglob('*'):
         if path.is_file() and path.name.startswith('mango-') and path.parent.name=='etc':
             path.unlink()
-    (files/'etc/cudy-release').write_text('tr3600-ssrplus-ikev2-1.3.5\n')
+    (files/'etc/cudy-release').write_text('tr3600-ssrplus-ikev2-1.3.6\n')
     shutil.copy2(PROFILE/'migration.sh',files/'etc/uci-defaults/90-cudy-ssrplus-migrate')
     # Keep the same LED state machine, replace its proxy-specific adapter.
     led=ROOT/'tr3600/luci-app-cudy-led/root/usr/lib/lua/cudy/led-runtime.lua'
@@ -280,15 +280,15 @@ return M
     replace(p,'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"',
         'python3 "$kit/tr3600/upgrade-integration.py" "$PWD"\npython3 "$kit/tr3600/ssrplus/upgrade-led.py" "$PWD"')
     (ROOT/'reports/ssrplus-source.json').write_text(json.dumps({
-        'firmware_version':'1.3.5','release_stage':'candidate; hardware acceptance pending',
+        'firmware_version':'1.3.6','release_stage':'candidate; hardware acceptance pending',
         'candidate_revision':1,
         'openwrt_commit':OPENWRT_COMMIT_25_12_6,
         'openwrt_release':'25.12.6',
         'fstools':'2026.05.23~16718b6e PKG_RELEASE 2; clear errno before each libblkid-tiny probe so unlabeled exFAT is detected',
         'samba':'4.22.7 PKG_RELEASE 4; derive the directory flag from actual file type',
-        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation','samba_actual_file_type'],
-        'base':'tr3600-ssrplus-ikev2-1.3.4','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
-        'ikev2':'luci-app-mango-ikev2 from Release 26 hotfixes; runtime exclusive with SSR Plus+; IKE VIP re-pinned before the datapath probe; rekey overlap does not flush; INTERNAL_ADDRESS_FAILURE rotates to the next server',
+        'integrated_field_fixes':['wifi_apply','usb_selection','server_table_alignment','bulk_delete_no_reload','probe_mobile_toolbar','ikev2_dual_stack','ikev2_vip_probe_before_ok','ikev2_rekey_watchdog','exfat_unlabeled','ikev2_connecting_grace','isp_dns','ikev2_eap_creds','ikev2_ssr_lock','ssr_lifecycle_serialization','ssr_ucitrack_single_apply','ssr_nft_snapshot_validation','samba_actual_file_type','hy2_per_node_udp_buffers','ikev2_per_peer_udp_ports','ikev2_generic_root_ca'],
+        'base':'tr3600-ssrplus-ikev2-1.3.5','ssrplus_commit':SSR_COMMIT,'mango_installed':False,
+        'ikev2':'luci-app-mango-ikev2 with per-peer UDP ports and generic root CA; runtime exclusive with SSR Plus+; IKE VIP re-pinned before the datapath probe; rekey overlap does not flush; INTERNAL_ADDRESS_FAILURE rotates to the next server',
         'xray_version':'26.10.21','xray_source_tag':'v26.10.21',
         'xray_source_sha256':'44ef4874529a03848c90f1fdcfb763350fbc5f1de741ec90e0024d651df25650',
         'golang_feed_commit':'2a5d2301904f84ff61615dd4e4d1db6d4f1fbf67',
@@ -307,7 +307,7 @@ return M
         'wifi_unification':'retained; automatic band steering defaults off in UCI and LuCI; saved settings retained',
         'private_ss_ipv6':False,
         'hardware_validation':'pending'},indent=2)+'\n')
-    print('Prepared SSR Plus+ + IKEv2 dual-stack 1.3.5 build; no router was modified.')
+    print('Prepared SSR Plus+ + IKEv2 dual-stack 1.3.6 build; no router was modified.')
 
 if __name__=='__main__':prepare()
 

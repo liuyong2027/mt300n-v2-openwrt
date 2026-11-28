@@ -1,19 +1,23 @@
-Cudy TR3600 V1.0 / R126 - SSR Plus+ 1.2.0 candidate
-Based on the tr3600-v1.1.1 device and application recipe.
+Cudy TR3600 V1.0 / R126 - SSR Plus+ and IKEv2 1.3.6 candidate
+Based on the tr3600-v1.3.5 device and application recipe.
 
-This is a candidate awaiting hardware acceptance, not a published stable Release.
-The firmware uses version 1.2.0 so the identical checked SHA256 can be promoted
-after acceptance. Compilation and packed checks do not prove a hardware boot.
+The candidate is awaiting hardware acceptance. Its internal version is
+tr3600-ssrplus-ikev2-1.3.6. Use SHA256SUMS to identify the exact checked image.
 
-Candidate revision 2 incorporates four field-validated corrections: applying
-unified Wi-Fi with no staged changes and steering disabled, selectable USB
-partition controls, aligned node table headings, and bulk deletion without a
-proxy reload. The internal version remains 1.2.0; distinguish candidates by
-build commit and SHA256. The previous f95ed187... image lacks these corrections.
-The newly rebuilt image and keep-settings upgrade still need hardware acceptance.
+To tune an Xray Hysteria2 node, open SSR Plus+ > Node List and edit the node.
+UDP Receive Buffer and UDP Send Buffer each accept a request from 1 to 16 MiB.
+A blank field lets Xray manage that buffer. Linux normally reports twice the
+requested value. Each setting belongs to the node where it is entered.
 
-SSR Plus+ is the sole transparent proxy (nftables, Xray). SOURCE.json records
-pinned sources. Wi-Fi, USB/Samba, WebFiles, DDNS, ZeroTier and LED remain.
+The IKEv2 primary, backup 1 and backup 2 each accept their own remote UDP port.
+A blank port uses standard IKEv2 ports. The certificate uploader accepts PEM
+and DER and replaces the installed root CA. Keep-settings upgrades migrate the
+legacy file to ikev2-root-ca.pem. The status shows the certificate subject,
+expiration and whether strongSwan has loaded that exact certificate.
+
+SSR Plus+ (nftables, Xray) and IKEv2 run as mutually exclusive proxy modes.
+SOURCE.json records pinned sources. Wi-Fi, USB/Samba, WebFiles, DDNS,
+ZeroTier and LED remain available.
 
 Dual-band Wi-Fi unification remains available. Automatic band steering defaults
 off in both the UCI configuration and LuCI checkbox; enabling a shared SSID does

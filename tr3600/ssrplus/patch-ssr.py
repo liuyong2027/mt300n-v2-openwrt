@@ -349,6 +349,66 @@ def patch_xray(text):
                         '--out $(PKG_BUILD_DIR)/.eip93-overlay', 1)
 
 
+HY2_BUFFER_FIELDS = (
+    ('hy2_udp_rcvbuf_mib', 'UDP Receive Buffer (MiB)', 'UDP 接收缓冲（MiB）'),
+    ('hy2_udp_sndbuf_mib', 'UDP Send Buffer (MiB)', 'UDP 发送缓冲（MiB）'),
+)
+HY2_BUFFER_HELP = 'Enter 1 to 16 MiB for this node. Leave empty to let Xray manage the buffer. Linux typically reports twice the requested value.'
+HY2_BUFFER_HELP_ZH = '填写 1 到 16 MiB，仅对当前节点生效。留空时由 Xray 管理。Linux 通常会显示请求值的两倍。'
+
+
+def patch_hy2_node_editor(text):
+    anchor = 'o = s:option(Flag, "flag_port_hopping", translate("Enable Port Hopping"))\n'
+    options = ''.join(f'''o = s:option(Value, "{key}", translate("{label}"))
+o.description = translate("{HY2_BUFFER_HELP}")
+o:depends({{type = "v2ray", v2ray_protocol = "hysteria2"}})
+o.datatype = "and(uinteger,range(1,16))"
+o.rmempty = true
+
+''' for key, label, _ in HY2_BUFFER_FIELDS)
+    return once(text, anchor, options + anchor)
+
+
+def patch_hy2_buffer_translation(text):
+    translations = [(label, chinese) for _, label, chinese in HY2_BUFFER_FIELDS]
+    translations.append((HY2_BUFFER_HELP, HY2_BUFFER_HELP_ZH))
+    for label, _ in translations:
+        if f'msgid "{label}"' in text:
+            raise ValueError(f'Pinned SSR translation already contains {label}')
+    return text.rstrip() + ''.join(f'\n\nmsgid "{label}"\nmsgstr "{chinese}"'
+                                   for label, chinese in translations) + '\n'
+
+
+def patch_hy2_generator(text):
+    anchor = '-- 传出连接\nXray.outbounds = {\n'
+    text = once(text, anchor, '''local function hy2_udp_sockopts(node)
+	if node.type ~= "v2ray" or node.v2ray_protocol ~= "hysteria2" then
+		return nil
+	end
+	local options = {}
+	local function add_buffer(input, opt)
+		local mib = tonumber(input)
+		if mib and mib >= 1 and mib <= 16 and mib == math.floor(mib) then
+			options[#options + 1] = {
+				system = "linux",
+				network = "udp",
+				level = "1", -- SOL_SOCKET
+				opt = opt,
+				value = tostring(mib * 1024 * 1024),
+				type = "int"
+			}
+		end
+	end
+	add_buffer(node.hy2_udp_rcvbuf_mib, "8") -- SO_RCVBUF
+	add_buffer(node.hy2_udp_sndbuf_mib, "7") -- SO_SNDBUF
+	return #options > 0 and options or nil
+end
+
+''' + anchor)
+    anchor = '\t\t\tend)(),\n\t\t\tsockopt = {\n\t\t\t\tmark = 255,\n'
+    return once(text, anchor, anchor + '\t\t\t\tcustomSockopt = hy2_udp_sockopts(server),\n')
+
+
 def patch(root):
     feed = root / 'feeds/helloworld'
     package = feed / 'luci-app-ssr-plus'
@@ -357,7 +417,10 @@ def patch(root):
         package / 'root/etc/init.d/shadowsocksr': patch_init,
         package / 'root/usr/bin/ssr-rules': patch_rules,
         package / 'luasrc/model/cbi/shadowsocksr/control.lua': patch_control,
-        package / 'Makefile': lambda text: once(text, 'PKG_RELEASE:=1\n', 'PKG_RELEASE:=3\n'),
+        package / 'luasrc/model/cbi/shadowsocksr/client-config.lua': patch_hy2_node_editor,
+        package / 'po/zh_Hans/ssr-plus.po': patch_hy2_buffer_translation,
+        package / 'root/usr/share/shadowsocksr/gen_config.lua': patch_hy2_generator,
+        package / 'Makefile': lambda text: once(text, 'PKG_RELEASE:=1\n', 'PKG_RELEASE:=4\n'),
     }
     patched = {path: change(path.read_text(encoding='utf-8')) for path, change in changes.items()}
     for path, text in patched.items():

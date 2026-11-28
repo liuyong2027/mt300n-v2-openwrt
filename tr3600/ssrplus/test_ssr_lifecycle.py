@@ -15,6 +15,8 @@ BUILD_FILES = (
     SSR / 'root/etc/init.d/shadowsocksr',
     SSR / 'root/usr/bin/ssr-rules',
     Path('feeds/helloworld/xray-core/Makefile'),
+    SSR / 'root/usr/share/shadowsocksr/gen_config.lua',
+    SSR / 'po/zh_Hans/ssr-plus.po',
 )
 
 
@@ -53,7 +55,7 @@ class SSRLifecycleTest(unittest.TestCase):
         self.assertNotIn('/etc/init.d/shadowsocksr reload', control)
         self.assertIn('m.apply_on_parse = true', control)
         self.assertIn('m:set(section, "domain_lists_revision"', control)
-        self.assertEqual((self.root / SSR / 'Makefile').read_text().count('PKG_RELEASE:=3\n'), 1)
+        self.assertEqual((self.root / SSR / 'Makefile').read_text().count('PKG_RELEASE:=4\n'), 1)
         for page in self.pages:
             text = (self.root / page).read_text(encoding='utf-8')
             self.assertNotRegex(text, r'(?s)\bon_(?:after_)?apply\b.{0,200}/etc/init.d/shadowsocksr\s+(?:reload|restart)')
